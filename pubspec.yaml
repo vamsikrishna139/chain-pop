@@ -1,0 +1,28 @@
+name: chain_pop
+description: "A minimalist logic puzzle extraction game."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flame: ^1.16.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  haptic_feedback: ^0.5.1
+  # Mocked logic for later integrations
+  # applovin_max: ^...
+  # firebase_remote_config: ^...
+  # gameanalytics: ^...
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
