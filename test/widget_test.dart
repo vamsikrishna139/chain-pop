@@ -1,30 +1,8 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
-import 'package:chain_pop/main.dart';
-
-void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
-  });
-}
+// Widget tests for Chain Pop.
+// The auto-generated test referenced 'MyApp' which doesn't exist in this project
+// (we use ChainPopApp). This file is intentionally left with no tests since
+// all meaningful game logic is covered by:
+//   - test/deadlock_test.dart   (1000-level solvability)
+//   - test/regression_test.dart (levels 1-5 full playthroughs)
+//   - test/chain_pop_game_test.dart (core extraction mechanics)
+void main() {}
