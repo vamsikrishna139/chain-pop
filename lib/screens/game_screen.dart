@@ -6,15 +6,12 @@ import '../game/levels/generation/difficulty_mode.dart';
 import '../game/levels/level_manager.dart';
 import '../models/difficulty.dart';
 import '../services/storage_service.dart';
-import 'win_overlay.dart';
 
 /// Full-screen game view for a single level.
 ///
-/// Features:
-///  • Progress bar — thin top bar showing nodes cleared/total
-///  • Countdown timer — Medium: 6 s/node [60–240 s], Hard: 4 s/node [45–180 s]
-///  • Ghost hints — Easy only: auto-highlights next free node after 4 s of inactivity
-///  • Jam counter, Hint button, Restart button in bottom HUD
+/// Win overlay is rendered **inside this screen's own Stack** (not as a
+/// modal route), which eliminates all Navigator-pop race conditions.
+/// Auto-advances to the next level after a 5-second countdown.
 class GameScreen extends StatefulWidget {
   final int level;
   final DifficultyMode difficulty;
@@ -36,15 +33,20 @@ class _GameScreenState extends State<GameScreen> {
   int _totalNodes = 0;
   int _removedNodes = 0;
 
-  // ── Jam tracking (for star calculation) ─────────────────────────────────
+  // ── Jam tracking ─────────────────────────────────────────────────────────
   int _jamCount = 0;
   bool _hasWon = false;
   late final Stopwatch _stopwatch;
+  int _earnedStars = 0;
 
   // ── Countdown timer (Medium / Hard only) ─────────────────────────────────
-  int? _timeLeftSec;       // null → Easy (no timer)
-  int? _timeLimitSec;      // the original limit, kept for progress bar
+  int? _timeLeftSec;
+  int? _timeLimitSec;
   Timer? _countdownTimer;
+
+  // ── Auto-advance after win (5 seconds) ───────────────────────────────────
+  int _autoAdvanceSec = 5;
+  Timer? _autoAdvanceTimer;
 
   // ── Ghost hint timer (Easy only) ─────────────────────────────────────────
   Timer? _ghostHintTimer;
@@ -56,12 +58,10 @@ class _GameScreenState extends State<GameScreen> {
     super.initState();
     _stopwatch = Stopwatch()..start();
 
-    // Pre-compute total nodes deterministically (same seed = same level).
     _totalNodes = LevelManager.getLevel(widget.level, mode: widget.difficulty)
         .nodes
         .length;
 
-    // Compute time limit if applicable.
     _timeLimitSec = _computeTimeLimit(widget.difficulty, _totalNodes);
     _timeLeftSec = _timeLimitSec;
 
@@ -73,16 +73,13 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _autoAdvanceTimer?.cancel();
     _ghostHintTimer?.cancel();
     super.dispose();
   }
 
-  // ── Time limit computation ────────────────────────────────────────────────
+  // ── Time limit ────────────────────────────────────────────────────────────
 
-  /// Returns the time limit in seconds for [mode], or null for Easy.
-  ///
-  /// - Medium: 6 s × nodeCount, clamped to [60, 240]
-  /// - Hard:   4 s × nodeCount, clamped to [45, 180]
   static int? _computeTimeLimit(DifficultyMode mode, int nodeCount) {
     switch (mode) {
       case DifficultyMode.easy:   return null;
@@ -108,7 +105,7 @@ class _GameScreenState extends State<GameScreen> {
   void _handleJam() {
     if (_hasWon) return;
     setState(() => _jamCount++);
-    _resetGhostHintTimer(); // any interaction resets the ghost hint delay
+    _resetGhostHintTimer();
   }
 
   void _handleNodeRemoved(int removed, int total) {
@@ -117,48 +114,35 @@ class _GameScreenState extends State<GameScreen> {
       _removedNodes = removed;
       _totalNodes = total;
     });
-    _resetGhostHintTimer(); // successful tap resets the ghost hint delay
+    _resetGhostHintTimer();
   }
 
   Future<void> _handleWin() async {
     _stopwatch.stop();
     _countdownTimer?.cancel();
     _ghostHintTimer?.cancel();
-    _hasWon = true;
-    setState(() {}); // update UI to show 100% progress
 
     final earned = widget.difficulty.starsForJams(_jamCount);
     await StorageService.saveStars(widget.difficulty, widget.level, earned);
     await StorageService.unlockLevel(widget.difficulty, widget.level + 1);
 
     if (!mounted) return;
+    setState(() {
+      _hasWon = true;
+      _earnedStars = earned;
+      _autoAdvanceSec = 5;
+    });
 
-    showModalBottomSheet(
-      context: context,
-      isDismissible: false,
-      enableDrag: false,
-      backgroundColor: Colors.transparent,
-      builder: (_) => WinOverlay(
-        levelId: widget.level,
-        difficulty: widget.difficulty,
-        stars: earned,
-        jamCount: _jamCount,
-        timeTaken: _stopwatch.elapsed,
-        onMainMenu: () => Navigator.of(context).popUntil((r) => r.isFirst),
-        onRetry: _startRetry,
-        onNextLevel: () {
-          Navigator.of(context).pop();
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => GameScreen(
-                level: widget.level + 1,
-                difficulty: widget.difficulty,
-              ),
-            ),
-          );
-        },
-      ),
-    );
+    // Start 5-second auto-advance countdown.
+    _autoAdvanceTimer?.cancel();
+    _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() => _autoAdvanceSec--);
+      if (_autoAdvanceSec <= 0) {
+        t.cancel();
+        _goNextLevel();
+      }
+    });
   }
 
   void _handleTimeUp() {
@@ -171,38 +155,58 @@ class _GameScreenState extends State<GameScreen> {
       barrierDismissible: false,
       builder: (_) => _TimeUpDialog(
         difficulty: widget.difficulty,
-        onRetry: () {
-          Navigator.of(context).pop();
-          _startRetry();
-        },
+        onRetry: () { Navigator.of(context).pop(); _resetForRetry(); },
         onMenu: () => Navigator.of(context).popUntil((r) => r.isFirst),
       ),
     );
   }
 
-  void _startRetry() {
-    Navigator.of(context, rootNavigator: true).pop(); // close sheet, if open
+  // ── Navigation (all in one place, no race conditions) ─────────────────────
+
+  void _resetForRetry() {
+    _autoAdvanceTimer?.cancel();
+    _countdownTimer?.cancel();
+    _ghostHintTimer?.cancel();
     setState(() {
       _jamCount = 0;
       _hasWon = false;
       _removedNodes = 0;
+      _earnedStars = 0;
       _timeLeftSec = _timeLimitSec;
-      _stopwatch
-        ..reset()
-        ..start();
+      _autoAdvanceSec = 5;
+      _stopwatch..reset()..start();
     });
-    _countdownTimer?.cancel();
-    _ghostHintTimer?.cancel();
     _game.restart();
     _startCountdown();
     _resetGhostHintTimer();
   }
 
+  void _goNextLevel() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => GameScreen(
+          level: widget.level + 1,
+          difficulty: widget.difficulty,
+        ),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(
+          opacity: anim,
+          child: child,
+        ),
+        transitionDuration: const Duration(milliseconds: 350),
+      ),
+    );
+  }
+
+  void _goMenu() {
+    _autoAdvanceTimer?.cancel();
+    Navigator.of(context).popUntil((r) => r.isFirst);
+  }
+
   // ── Countdown (Medium / Hard) ─────────────────────────────────────────────
 
   void _startCountdown() {
-    if (_timeLimitSec == null) return; // Easy: no timer
-
+    if (_timeLimitSec == null) return;
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _hasWon) return;
@@ -237,7 +241,7 @@ class _GameScreenState extends State<GameScreen> {
       backgroundColor: const Color(0xFF0F0F13),
       body: Stack(
         children: [
-          // Ambient board tint
+          // Ambient tint
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -253,11 +257,9 @@ class _GameScreenState extends State<GameScreen> {
           // Flame canvas
           GameWidget(game: _game),
 
-          // ── Progress bar (full width, top) ────────────────────────────────
+          // ── Progress bar (top edge) ───────────────────────────────────────
           Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
+            top: 0, left: 0, right: 0,
             child: _ProgressBar(progress: progress, color: accent),
           ),
 
@@ -272,12 +274,10 @@ class _GameScreenState extends State<GameScreen> {
                     children: [
                       _HudButton(
                         icon: Icons.arrow_back_ios_rounded,
-                        onPressed: () => Navigator.of(context).pop(),
+                        onPressed: _goMenu,
                       ),
                       const Spacer(),
-                      // Level + difficulty
                       Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
                             'LEVEL ${widget.level}',
@@ -293,7 +293,6 @@ class _GameScreenState extends State<GameScreen> {
                         ],
                       ),
                       const Spacer(),
-                      // Timer badge (Medium/Hard) or hint button (Easy)
                       if (_timeLimitSec != null && _timeLeftSec != null)
                         _TimerBadge(
                           timeLeftSec: _timeLeftSec!,
@@ -304,7 +303,6 @@ class _GameScreenState extends State<GameScreen> {
                         const SizedBox(width: 56),
                     ],
                   ),
-                  // Node progress indicator text
                   const SizedBox(height: 4),
                   Text(
                     '$_removedNodes / $_totalNodes nodes',
@@ -321,32 +319,56 @@ class _GameScreenState extends State<GameScreen> {
           ),
 
           // ── Bottom controls ───────────────────────────────────────────────
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _JamCounter(count: _jamCount),
-                    _HudButton(
-                      icon: Icons.lightbulb_outline_rounded,
-                      label: 'HINT',
-                      accent: accent,
-                      onPressed: () {
-                        _game.showHint();
-                        _resetGhostHintTimer();
-                      },
-                    ),
-                    _HudButton(
-                      icon: Icons.refresh_rounded,
-                      label: 'RESET',
-                      onPressed: _startRetry,
-                    ),
-                  ],
+          if (!_hasWon)
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _JamCounter(count: _jamCount),
+                      _HudButton(
+                        icon: Icons.lightbulb_outline_rounded,
+                        label: 'HINT',
+                        accent: accent,
+                        onPressed: () {
+                          _game.showHint();
+                          _resetGhostHintTimer();
+                        },
+                      ),
+                      _HudButton(
+                        icon: Icons.refresh_rounded,
+                        label: 'RESET',
+                        onPressed: _resetForRetry,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // ── Win overlay (inline, no modal) ────────────────────────────────
+          AnimatedSlide(
+            offset: _hasWon ? Offset.zero : const Offset(0, 1),
+            duration: const Duration(milliseconds: 450),
+            curve: Curves.easeOutQuart,
+            child: AnimatedOpacity(
+              opacity: _hasWon ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 300),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: _WinPanel(
+                  levelId: widget.level,
+                  difficulty: widget.difficulty,
+                  stars: _earnedStars,
+                  jamCount: _jamCount,
+                  timeTaken: _stopwatch.elapsed,
+                  autoAdvanceSec: _autoAdvanceSec,
+                  onMenu: _goMenu,
+                  onRetry: _resetForRetry,
+                  onNext: _goNextLevel,
                 ),
               ),
             ),
@@ -357,168 +379,338 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
-// ── Progress bar ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Win Panel (inline, not a bottom sheet)
+// ══════════════════════════════════════════════════════════════════════════════
 
-class _ProgressBar extends StatelessWidget {
-  final double progress; // 0.0 – 1.0
-  final Color color;
+class _WinPanel extends StatefulWidget {
+  final int levelId;
+  final DifficultyMode difficulty;
+  final int stars;
+  final int jamCount;
+  final Duration timeTaken;
+  final int autoAdvanceSec;
+  final VoidCallback onMenu;
+  final VoidCallback onRetry;
+  final VoidCallback onNext;
 
-  const _ProgressBar({required this.progress, required this.color});
+  const _WinPanel({
+    required this.levelId,
+    required this.difficulty,
+    required this.stars,
+    required this.jamCount,
+    required this.timeTaken,
+    required this.autoAdvanceSec,
+    required this.onMenu,
+    required this.onRetry,
+    required this.onNext,
+  });
+
+  @override
+  State<_WinPanel> createState() => _WinPanelState();
+}
+
+class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
+  late final List<AnimationController> _starCtrl;
+  late final List<Animation<double>> _starScale;
+
+  @override
+  void initState() {
+    super.initState();
+    _starCtrl = List.generate(3, (i) {
+      final c = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 450),
+      );
+      Future.delayed(Duration(milliseconds: 200 + i * 150), c.forward);
+      return c;
+    });
+    _starScale = _starCtrl.map((c) => Tween<double>(begin: 0.0, end: 1.0)
+        .animate(CurvedAnimation(parent: c, curve: Curves.elasticOut))).toList();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _starCtrl) c.dispose();
+    super.dispose();
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (_, constraints) {
-        return Stack(
-          children: [
-            // Track
-            Container(height: 4, color: Colors.white.withOpacity(0.06)),
-            // Fill
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOut,
-              height: 4,
-              width: constraints.maxWidth * progress.clamp(0.0, 1.0),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [color.withOpacity(0.7), color],
-                ),
-                boxShadow: [
-                  BoxShadow(color: color.withOpacity(0.5), blurRadius: 6),
-                ],
-              ),
+    final accent = widget.difficulty.color;
+    final frac = widget.autoAdvanceSec / 5.0;
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFF14141C),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: accent.withOpacity(0.3), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: accent.withOpacity(0.2),
+              blurRadius: 40,
+              spreadRadius: 4,
             ),
           ],
-        );
-      },
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag bar / label
+            Text(
+              'LEVEL ${widget.levelId} · ${widget.difficulty.label}',
+              style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 2),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Complete!',
+              style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 20),
+
+            // Stars
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(3, (i) {
+                final earned = i < widget.stars;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: ScaleTransition(
+                    scale: _starScale[i],
+                    child: Icon(
+                      earned ? Icons.star_rounded : Icons.star_outline_rounded,
+                      size: 50,
+                      color: earned ? const Color(0xFFFFC371) : Colors.white24,
+                      shadows: earned
+                          ? [Shadow(color: const Color(0xFFFFC371).withOpacity(0.7), blurRadius: 16)]
+                          : [],
+                    ),
+                  ),
+                );
+              }),
+            ),
+            const SizedBox(height: 18),
+
+            // Stats
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _Stat(label: 'TIME', value: _fmt(widget.timeTaken)),
+                const SizedBox(width: 16),
+                _Stat(label: 'JAMS', value: '${widget.jamCount}'),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Auto-advance progress bar + label
+            Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.skip_next_rounded, size: 14, color: Colors.white38),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Next level in ${widget.autoAdvanceSec}s',
+                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: frac.clamp(0.0, 1.0),
+                    backgroundColor: Colors.white12,
+                    valueColor: AlwaysStoppedAnimation<Color>(accent.withOpacity(0.6)),
+                    minHeight: 3,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: _OutBtn(label: 'MENU', icon: Icons.home_rounded, onPressed: widget.onMenu),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _OutBtn(label: 'RETRY', icon: Icons.refresh_rounded, onPressed: widget.onRetry),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: _FillBtn(label: 'NEXT', icon: Icons.arrow_forward_rounded, color: accent, onPressed: widget.onNext),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-// ── Timer badge ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Small widgets
+// ══════════════════════════════════════════════════════════════════════════════
 
-class _TimerBadge extends StatelessWidget {
-  final int timeLeftSec;
-  final int timeLimitSec;
-  final Color color;
-
-  const _TimerBadge({
-    required this.timeLeftSec,
-    required this.timeLimitSec,
-    required this.color,
-  });
-
+class _Stat extends StatelessWidget {
+  final String label, value;
+  const _Stat({required this.label, required this.value});
   @override
   Widget build(BuildContext context) {
-    // Turn amber at 40%, red at 20%
-    final fraction = timeLimitSec > 0 ? timeLeftSec / timeLimitSec : 0.0;
-    final displayColor = fraction < 0.20
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(12)),
+      child: Column(children: [
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.2)),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+      ]),
+    );
+  }
+}
+
+class _OutBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+  const _OutBtn({required this.label, required this.icon, required this.onPressed});
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 15, color: Colors.white38),
+      label: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: Colors.white12)),
+      ),
+    );
+  }
+}
+
+class _FillBtn extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onPressed;
+  const _FillBtn({required this.label, required this.icon, required this.color, required this.onPressed});
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.black,
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        elevation: 8,
+        shadowColor: color.withOpacity(0.5),
+      ),
+    );
+  }
+}
+
+class _ProgressBar extends StatelessWidget {
+  final double progress;
+  final Color color;
+  const _ProgressBar({required this.progress, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (_, c) => Stack(children: [
+      Container(height: 4, color: Colors.white.withOpacity(0.06)),
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        height: 4,
+        width: c.maxWidth * progress.clamp(0.0, 1.0),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [color.withOpacity(0.7), color]),
+          boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 6)],
+        ),
+      ),
+    ]));
+  }
+}
+
+class _TimerBadge extends StatelessWidget {
+  final int timeLeftSec, timeLimitSec;
+  final Color color;
+  const _TimerBadge({required this.timeLeftSec, required this.timeLimitSec, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    final frac = timeLimitSec > 0 ? timeLeftSec / timeLimitSec : 0.0;
+    final c = frac < 0.20
         ? const Color(0xFFFF5F6D)
-        : fraction < 0.40
+        : frac < 0.40
             ? const Color(0xFFFFC371)
             : color;
-
-    final mins = (timeLeftSec ~/ 60).toString();
-    final secs = (timeLeftSec % 60).toString().padLeft(2, '0');
-
+    final m = (timeLeftSec ~/ 60).toString();
+    final s = (timeLeftSec % 60).toString().padLeft(2, '0');
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: displayColor.withOpacity(0.15),
+        color: c.withOpacity(0.15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: displayColor.withOpacity(0.5)),
-        boxShadow: fraction < 0.20
-            ? [BoxShadow(color: displayColor.withOpacity(0.4), blurRadius: 10)]
-            : [],
+        border: Border.all(color: c.withOpacity(0.5)),
+        boxShadow: frac < 0.20 ? [BoxShadow(color: c.withOpacity(0.4), blurRadius: 10)] : [],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.timer_outlined, size: 14, color: displayColor),
-          const SizedBox(width: 5),
-          Text(
-            '$mins:$secs',
-            style: TextStyle(
-              color: displayColor,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
-            ),
-          ),
-        ],
-      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.timer_outlined, size: 14, color: c),
+        const SizedBox(width: 5),
+        Text('$m:$s', style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 1)),
+      ]),
     );
   }
 }
 
-// ── Time-up dialog ──────────────────────────────────────────────────────────
-
 class _TimeUpDialog extends StatelessWidget {
   final DifficultyMode difficulty;
-  final VoidCallback onRetry;
-  final VoidCallback onMenu;
-
-  const _TimeUpDialog({
-    required this.difficulty,
-    required this.onRetry,
-    required this.onMenu,
-  });
-
+  final VoidCallback onRetry, onMenu;
+  const _TimeUpDialog({required this.difficulty, required this.onRetry, required this.onMenu});
   @override
   Widget build(BuildContext context) {
     final accent = difficulty.color;
-
     return AlertDialog(
       backgroundColor: const Color(0xFF1A1A22),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
         side: BorderSide(color: accent.withOpacity(0.3)),
       ),
-      title: Column(
-        children: [
-          Icon(Icons.timer_off_rounded, color: accent, size: 48),
-          const SizedBox(height: 12),
-          const Text(
-            "TIME'S UP!",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
-            ),
-          ),
-        ],
-      ),
-      content: Text(
-        "The clock ran out. Try again?",
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.white.withOpacity(0.6)),
-      ),
+      title: Column(children: [
+        Icon(Icons.timer_off_rounded, color: accent, size: 48),
+        const SizedBox(height: 12),
+        const Text("TIME'S UP!", textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 2)),
+      ]),
+      content: Text('The clock ran out. Try again?', textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.6))),
       actionsAlignment: MainAxisAlignment.center,
       actions: [
-        TextButton(
-          onPressed: onMenu,
-          child: const Text(
-            'MENU',
-            style: TextStyle(color: Colors.white38),
-          ),
-        ),
+        TextButton(onPressed: onMenu, child: const Text('MENU', style: TextStyle(color: Colors.white38))),
         const SizedBox(width: 8),
         ElevatedButton.icon(
           onPressed: onRetry,
           icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text(
-            'RETRY',
-            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-          ),
+          label: const Text('RETRY', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
           style: ElevatedButton.styleFrom(
-            backgroundColor: accent,
-            foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            backgroundColor: accent, foregroundColor: Colors.black,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ],
@@ -526,61 +718,9 @@ class _TimeUpDialog extends StatelessWidget {
   }
 }
 
-// ── Shared HUD widgets ────────────────────────────────────────────────────────
-
-class _HudButton extends StatelessWidget {
-  final IconData icon;
-  final String? label;
-  final Color? accent;
-  final VoidCallback onPressed;
-
-  const _HudButton({
-    required this.icon,
-    required this.onPressed,
-    this.label,
-    this.accent,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: (accent ?? Colors.white).withOpacity(0.15),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: accent ?? Colors.white70, size: 18),
-            if (label != null) ...[
-              const SizedBox(width: 6),
-              Text(
-                label!,
-                style: TextStyle(
-                  color: accent ?? Colors.white70,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _DifficultyPill extends StatelessWidget {
   final DifficultyMode difficulty;
   const _DifficultyPill({required this.difficulty});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -590,21 +730,39 @@ class _DifficultyPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: difficulty.color.withOpacity(0.4)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(difficulty.icon, size: 12, color: difficulty.color),
-          const SizedBox(width: 5),
-          Text(
-            difficulty.label,
-            style: TextStyle(
-              color: difficulty.color,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ],
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(difficulty.icon, size: 12, color: difficulty.color),
+        const SizedBox(width: 5),
+        Text(difficulty.label, style: TextStyle(color: difficulty.color, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+      ]),
+    );
+  }
+}
+
+class _HudButton extends StatelessWidget {
+  final IconData icon;
+  final String? label;
+  final Color? accent;
+  final VoidCallback onPressed;
+  const _HudButton({required this.icon, required this.onPressed, this.label, this.accent});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: (accent ?? Colors.white).withOpacity(0.15)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: accent ?? Colors.white70, size: 18),
+          if (label != null) ...[
+            const SizedBox(width: 6),
+            Text(label!, style: TextStyle(color: accent ?? Colors.white70, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          ],
+        ]),
       ),
     );
   }
@@ -613,7 +771,6 @@ class _DifficultyPill extends StatelessWidget {
 class _JamCounter extends StatelessWidget {
   final int count;
   const _JamCounter({required this.count});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -623,21 +780,11 @@ class _JamCounter extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white12),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.block_rounded, color: Colors.redAccent, size: 16),
-          const SizedBox(width: 6),
-          Text(
-            '$count',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.block_rounded, color: Colors.redAccent, size: 16),
+        const SizedBox(width: 6),
+        Text('$count', style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
+      ]),
     );
   }
 }
