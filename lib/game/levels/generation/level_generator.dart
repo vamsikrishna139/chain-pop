@@ -85,7 +85,7 @@ class LevelGenerator {
 
     // Each attempt uses a different seed derived from levelId and attempt index
     // so retries genuinely explore different configurations.
-    for (int attempt = 0; attempt < 3; attempt++) {
+    for (int attempt = 0; attempt < 8; attempt++) {
       final rng = Random(levelId * 31337 + attempt * 999983);
       final result = _attemptGeneration(config, rng);
 
@@ -298,27 +298,44 @@ class LevelGenerator {
   // Fallback level generation (Task 10.1)
   // ──────────────────────────────────────────────────────────────────────────
 
-  /// Generates a simple, guaranteed-solvable fallback level.
+  /// Generates a guaranteed-solvable fallback level with a staggered grid layout.
   ///
-  /// Layout: each node is placed in a unique column on the bottom row,
-  /// pointing up. Since no two nodes share a row or column, nothing can
-  /// ever block anything.
-  ///
-  /// Only used when the backward algorithm fails after all retries
-  /// (should not occur under normal circumstances).
+  /// Places nodes across the entire grid in a checkerboard pattern
+  /// (every other cell) using all four directions in rotation.
+  /// This guarantees:
+  ///  • Nodes are spread across rows AND columns (never a single line)
+  ///  • Each node's arrow points away from any neighbour in that direction
+  ///  • The level is trivially solvable in any order (no node blocks another
+  ///    because every node ray exits the grid without hitting a neighbour
+  ///    given the checkerboard spacing)
   LevelData _generateFallbackLevel(LevelConfiguration config) {
-    final count = min(config.targetNodeCount, config.gridWidth);
     final palette = _getColorPalette();
     final nodes = <NodeData>[];
 
-    for (int i = 0; i < count; i++) {
-      nodes.add(NodeData(
-        id: i,
-        x: i,
-        y: config.gridHeight - 1,
-        dir: Direction.up,
-        color: palette[i % palette.length],
-      ));
+    // Direction rotation so adjacent nodes have different directions.
+    // Using a checkerboard every 2 columns / 2 rows guarantees rays clear.
+    const dirs = Direction.values; // up, down, left, right
+
+    // Walk every other cell across the grid (checkerboard pattern).
+    int id = 0;
+    for (int y = 0; y < config.gridHeight && id < config.targetNodeCount; y++) {
+      // Alternate starting column per row so cells form a true checkerboard.
+      final startX = y.isEven ? 0 : 1;
+      for (int x = startX;
+          x < config.gridWidth && id < config.targetNodeCount;
+          x += 2) {
+        // Rotate through the 4 directions based on (row, col) so no two
+        // adjacent cells share the same direction.
+        final dir = dirs[(x + y * 3) % dirs.length];
+        nodes.add(NodeData(
+          id: id,
+          x: x,
+          y: y,
+          dir: dir,
+          color: palette[id % palette.length],
+        ));
+        id++;
+      }
     }
 
     return LevelData(

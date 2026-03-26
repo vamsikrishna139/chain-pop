@@ -33,9 +33,9 @@ void main() {
         expect(params.mode, equals(DifficultyMode.hard));
         expect(params.minChainLength, equals(5));
         expect(params.maxChainLength, equals(10));
-        expect(params.densityFactor, equals(0.65));
-        expect(params.minNodes, equals(25));
-        expect(params.maxNodes, equals(100));
+        expect(params.densityFactor, equals(0.40)); // tuned down from 0.65 to prevent single-row fallback
+        expect(params.minNodes, equals(15));
+        expect(params.maxNodes, equals(60));
       });
     });
 
@@ -95,11 +95,15 @@ void main() {
         expect(medium.maxNodes, lessThan(hard.maxNodes));
       });
 
-      test('medium mode has lower density than hard', () {
+      // Note: Hard difficulty comes from larger grid size and more nodes (absolute count),
+      // not from density alone. Hard density (0.40) is intentionally lower than Medium (0.45)
+      // so the backward-generation algorithm has room to find valid directions.
+      test('hard mode has higher absolute node counts than medium', () {
         final medium = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
         final hard = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.hard);
 
-        expect(medium.densityFactor, lessThan(hard.densityFactor));
+        expect(hard.maxNodes, greaterThan(medium.maxNodes),
+            reason: 'Hard allows more nodes than medium overall');
       });
     });
 

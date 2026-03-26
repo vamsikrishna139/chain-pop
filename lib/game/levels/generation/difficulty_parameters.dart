@@ -63,9 +63,9 @@ class DifficultyParameters {
           mode: DifficultyMode.hard,
           minChainLength: 5,
           maxChainLength: 10,
-          densityFactor: 0.65,
-          minNodes: 25,
-          maxNodes: 100,
+          densityFactor: 0.40, // was 0.65 — high density caused all 4 dirs blocked → fallback
+          minNodes: 15,
+          maxNodes: 60,
         );
     }
   }
