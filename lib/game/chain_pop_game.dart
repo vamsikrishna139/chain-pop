@@ -25,11 +25,16 @@ class ChainPopGame extends FlameGame {
   bool hasWon = false;
   late PositionComponent board;
 
+  /// Called whenever a node is successfully extracted.
+  /// Reports (removedCount, totalCount) for the progress bar.
+  final void Function(int removed, int total)? onNodeRemoved;
+
   ChainPopGame({
     required this.levelId,
     required this.difficulty,
     required this.onWin,
     this.onJam,
+    this.onNodeRemoved,
   });
 
   @override
@@ -86,6 +91,16 @@ class ChainPopGame extends FlameGame {
 
   void registerExtraction(NodeData data) {
     activeNodes.removeWhere((node) => node.id == data.id);
+
+    // Notify UI: how many removed vs total.
+    // Guard against tests that skip onLoad() and never initialise levelData.
+    try {
+      final total = levelData.nodes.length;
+      final removed = total - activeNodes.length;
+      onNodeRemoved?.call(removed, total);
+    } catch (_) {
+      // levelData not yet initialised (unit-test scenario) — skip callback.
+    }
   }
 
   /// Called by [NodeComponent] when a tap hits a blocked node.
@@ -118,5 +133,7 @@ class ChainPopGame extends FlameGame {
     }
     board.removeFromParent();
     _setupBoard();
+    // Reset progress to 0
+    onNodeRemoved?.call(0, levelData.nodes.length);
   }
 }
