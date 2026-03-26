@@ -1,0 +1,7 @@
+00:00 +0: loading /Users/bvamsi139/Documents/AI projects/game/chain_pop/test/regression_test.dart
+00:00 +0: Regression Tests - Levels 1 to 5 Playthroughs Level 1 Playthrough
+00:00 +1: Regression Tests - Levels 1 to 5 Playthroughs Level 2 Playthrough
+00:00 +2: Regression Tests - Levels 1 to 5 Playthroughs Level 3 Playthrough
+00:00 +3: Regression Tests - Levels 1 to 5 Playthroughs Level 4 Playthrough
+00:00 +4: Regression Tests - Levels 1 to 5 Playthroughs Level 5 Playthrough
+00:00 +5: All tests passed!
