@@ -322,15 +322,6 @@ void main() {
     });
 
     group('constructor with dependencies', () {
-      test('accepts custom random generator', () {
-        final customRandom = Random(12345);
-        final customGenerator = LevelGenerator(random: customRandom);
-
-        final result = customGenerator.generate(10);
-
-        expect(result.isSuccess, isTrue);
-      });
-
       test('accepts custom validator', () {
         final customValidator = LevelValidator();
         final customGenerator = LevelGenerator(validator: customValidator);

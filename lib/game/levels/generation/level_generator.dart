@@ -7,122 +7,115 @@ import 'level_configuration.dart';
 import 'level_validator.dart';
 import 'result.dart';
 
-/// Core generation class implementing the backward generation algorithm.
+/// Generates deterministic, deadlock-free puzzle levels using the **backward
+/// generation algorithm**.
 ///
-/// The LevelGenerator produces deterministic, solvable puzzle levels using a
-/// backward generation approach. It constructs levels by first defining a valid
-/// solution path, then assigning node directions that respect this solution order.
+/// ## Algorithm Overview
 ///
-/// Example usage:
+/// The backward generation algorithm guarantees solvability by construction:
+///
+/// 1. **Select positions** — Pick N unique random positions on the grid.
+/// 2. **Define solution order** — Shuffle positions to create a removal sequence.
+///    Index 0 = first node the player removes, index N-1 = last.
+/// 3. **Assign directions** — For each node at index `i`, only nodes at indices
+///    `i+1..N-1` are still on the board. Assign a direction whose ray does **not**
+///    pass through any of those "future" nodes.
+/// 4. **Validate** — Run [LevelValidator] as a safety net before returning.
+/// 5. **Fallback** — If all retries fail, return a guaranteed-solvable diagonal layout.
+///
+/// Because each direction is chosen to avoid future nodes, it is mathematically
+/// impossible to create a deadlock.
+///
+/// ## Usage
+///
 /// ```dart
 /// final generator = LevelGenerator();
 ///
-/// // Auto-derive difficulty from level ID
+/// // Auto-derive difficulty (level 15 → medium)
 /// final result = generator.generate(15);
 ///
 /// // Explicit difficulty mode
-/// final hardResult = generator.generate(5, mode: DifficultyMode.hard);
+/// final hard = generator.generate(5, mode: DifficultyMode.hard);
 ///
 /// if (result.isSuccess) {
 ///   final level = result.value;
-///   print('Generated level with ${level.nodes.length} nodes');
 /// } else {
-///   print('Generation failed: ${result.error}');
+///   print('Failed: ${result.error}');
 /// }
 /// ```
 class LevelGenerator {
-  final Random _random;
   final LevelValidator _validator;
 
-  /// Creates a new LevelGenerator with optional dependencies.
-  ///
-  /// [random] - Random number generator for non-deterministic operations.
-  ///            Defaults to a new Random() instance.
-  /// [validator] - Level validator for verifying generated levels.
-  ///               Defaults to a new LevelValidator() instance.
-  LevelGenerator({
-    Random? random,
-    LevelValidator? validator,
-  })  : _random = random ?? Random(),
-        _validator = validator ?? LevelValidator();
+  /// Creates a [LevelGenerator] with an optional custom [validator].
+  LevelGenerator({LevelValidator? validator})
+      : _validator = validator ?? LevelValidator();
 
-  /// Generates a deterministic level from a level identifier.
+  // ──────────────────────────────────────────────────────────────────────────
+  // Public API
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /// Generates a deterministic [LevelData] for the given [levelId].
   ///
-  /// The level ID is used as a seed for random generation, ensuring that
-  /// the same ID always produces the same level. The difficulty mode can be
-  /// explicitly specified or auto-derived from the level ID.
+  /// The level ID is used as the primary random seed so the same ID always
+  /// produces the same puzzle.  Difficulty mode can be auto-derived or
+  /// explicitly specified.
+  ///
+  /// Attempts generation up to 3 times. On persistent failure returns a
+  /// simple, guaranteed-solvable fallback level.
   ///
   /// Parameters:
-  /// - [levelId] - Unique identifier for the level (used as random seed)
-  /// - [mode] - Optional difficulty mode (easy/medium/hard). If not specified,
-  ///            mode is auto-derived: 0-9=easy, 10-29=medium, 30+=hard
+  /// - [levelId] — Unique level identifier, used as random seed.
+  /// - [mode] — Optional difficulty override. Auto-derived if omitted:
+  ///   levels 0-9 = easy, 10-29 = medium, 30+ = hard.
   ///
-  /// Returns a [Result] containing either:
-  /// - Success: A valid, solvable [LevelData]
-  /// - Error: A [GenerationError] describing what went wrong
-  ///
-  /// The generator attempts generation up to 3 times. If all attempts fail,
-  /// it returns a simple fallback level that is guaranteed to be solvable.
-  ///
-  /// Example:
-  /// ```dart
-  /// // Auto-derive difficulty (level 15 will be medium)
-  /// final result1 = generator.generate(15);
-  ///
-  /// // Force easy mode for level 50
-  /// final result2 = generator.generate(50, mode: DifficultyMode.easy);
-  /// ```
+  /// Returns a [Result] containing either a valid [LevelData] or a
+  /// [GenerationError] describing what went wrong.
   Result<LevelData, GenerationError> generate(
     int levelId, {
     DifficultyMode? mode,
   }) {
-    // Create configuration from level ID with optional mode
     final config = LevelConfiguration.fromLevelId(levelId, mode: mode);
 
-    // Validate configuration
-    final validationResult = config.validate();
-    if (!validationResult.isValid) {
+    final validation = config.validate();
+    if (!validation.isValid) {
       return Result.error(
-        GenerationError.invalidConfiguration(validationResult.message),
+        GenerationError.invalidConfiguration(validation.message),
       );
     }
 
-    // Seed random generator for deterministic generation
-    final seededRandom = Random(levelId);
-
-    // Attempt generation with retries (3 attempts)
+    // Each attempt uses a different seed derived from levelId and attempt index
+    // so retries genuinely explore different configurations.
     for (int attempt = 0; attempt < 3; attempt++) {
-      final result = _attemptGeneration(config, seededRandom);
+      final rng = Random(levelId * 31337 + attempt * 999983);
+      final result = _attemptGeneration(config, rng);
 
       if (result.isSuccess) {
-        final level = result.value;
-        final validation = _validator.validate(level);
-
-        if (validation.isValid) {
-          return Result.success(level);
+        final validationResult = _validator.validate(result.value);
+        if (validationResult.isValid) {
+          return Result.success(result.value);
         }
       }
     }
 
-    // Fallback to simple level after max retries
+    // All attempts failed — return a guaranteed-solvable fallback.
     return Result.success(_generateFallbackLevel(config));
   }
 
-  /// Single generation attempt using backward algorithm.
+  // ──────────────────────────────────────────────────────────────────────────
+  // Core backward-generation (Tasks 9.1 – 9.3)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /// Single generation attempt implementing the backward algorithm.
   ///
-  /// This method implements the core backward generation algorithm:
-  /// 1. Select unique random positions for all nodes
-  /// 2. Shuffle positions to create a random solution path order
-  /// 3. Assign valid directions to each node in solution order
-  ///
-  /// Returns a [Result] containing either a generated [LevelData] or a
-  /// [GenerationError] if the attempt failed.
+  /// Steps:
+  /// 1. Select unique random positions.
+  /// 2. Shuffle to define solution order.
+  /// 3. Assign directions respecting solution order.
   Result<LevelData, GenerationError> _attemptGeneration(
     LevelConfiguration config,
     Random random,
   ) {
     try {
-      // Step 1: Select unique random positions
       final positions = _selectUniquePositions(
         config.targetNodeCount,
         config.gridWidth,
@@ -130,10 +123,14 @@ class LevelGenerator {
         random,
       );
 
-      // Step 2: Shuffle to create solution path order
+      if (positions.length < config.targetNodeCount) {
+        return Result.error(
+          GenerationError.noValidDirections('Grid too small for requested nodes'),
+        );
+      }
+
       final solutionPath = List<Point<int>>.from(positions)..shuffle(random);
 
-      // Step 3: Assign directions respecting solution order
       final nodes = _assignDirections(
         solutionPath,
         config.gridWidth,
@@ -143,7 +140,9 @@ class LevelGenerator {
 
       if (nodes == null) {
         return Result.error(
-          GenerationError.noValidDirections('Could not assign valid directions'),
+          GenerationError.noValidDirections(
+            'Could not assign valid directions to all nodes',
+          ),
         );
       }
 
@@ -154,27 +153,14 @@ class LevelGenerator {
         nodes: nodes,
       ));
     } catch (e) {
-      return Result.error(
-        GenerationError.unexpected('Generation failed: $e'),
-      );
+      return Result.error(GenerationError.unexpected('Generation failed: $e'));
     }
   }
 
-  /// Selects unique random positions on the grid.
+  /// Selects [count] unique random positions within [gridWidth] × [gridHeight].
   ///
-  /// Generates [count] random unique positions within the grid bounds.
-  /// Uses a Set for O(1) lookup to efficiently track used positions.
-  ///
-  /// Parameters:
-  /// - [count] - Number of unique positions to generate
-  /// - [gridWidth] - Width of the grid
-  /// - [gridHeight] - Height of the grid
-  /// - [random] - Random number generator for position selection
-  ///
-  /// Returns a list of [count] unique Point<int> positions.
-  ///
-  /// Complexity: O(n) expected time where n = count
-  /// Worst case: O(n²) if grid is nearly full
+  /// Uses a [Set] for O(1) membership checks. Expected O(n) time; O(n²) in
+  /// worst case on a nearly-full grid.
   List<Point<int>> _selectUniquePositions(
     int count,
     int gridWidth,
@@ -182,45 +168,60 @@ class LevelGenerator {
     Random random,
   ) {
     final positions = <Point<int>>[];
-    final Set<String> used = {};
+    final used = <String>{};
 
-    while (positions.length < count) {
+    int safety = 0;
+    while (positions.length < count && safety++ < count * 100) {
       final x = random.nextInt(gridWidth);
       final y = random.nextInt(gridHeight);
       final key = '$x,$y';
-
-      if (!used.contains(key)) {
+      if (used.add(key)) {
         positions.add(Point(x, y));
-        used.add(key);
       }
     }
 
     return positions;
   }
 
-  /// Assigns directions to nodes respecting solution path order.
+  /// Assigns directions to nodes respecting the backward-generation guarantee.
   ///
-  /// TODO: Implement in task 9.1
-  /// This is a stub implementation that assigns placeholder directions.
+  /// For the node at index `i` in [solutionPath], only nodes at indices
+  /// `i+1..N-1` are still on the board. The assigned direction must not
+  /// ray-cast into any of those "future" positions.
   ///
-  /// Returns null if no valid assignment exists.
+  /// Returns null if any node has no valid direction (triggers a retry).
+  ///
+  /// Complexity: O(n²) where n = solutionPath.length (each node scans future nodes).
   List<NodeData>? _assignDirections(
     List<Point<int>> solutionPath,
     int gridWidth,
     int gridHeight,
     Random random,
   ) {
-    // Stub: Assign all nodes pointing up for now
     final nodes = <NodeData>[];
     final palette = _getColorPalette();
 
     for (int i = 0; i < solutionPath.length; i++) {
       final position = solutionPath[i];
+
+      // Nodes that are still on the board when the player taps node [i].
+      final futureNodes = solutionPath.sublist(i + 1);
+
+      final direction = _findValidDirection(
+        position,
+        futureNodes,
+        gridWidth,
+        gridHeight,
+        random,
+      );
+
+      if (direction == null) return null; // Retry
+
       nodes.add(NodeData(
         id: i,
         x: position.x,
         y: position.y,
-        dir: Direction.up,
+        dir: direction,
         color: palette[random.nextInt(palette.length)],
       ));
     }
@@ -228,10 +229,11 @@ class LevelGenerator {
     return nodes;
   }
 
-  /// Finds a valid direction that doesn't hit future nodes.
+  /// Finds a direction from [position] whose ray does not hit any [futureNodes].
   ///
-  /// TODO: Implement in task 9.2
-  /// This is a stub implementation.
+  /// Shuffles directions for randomness (Requirement 7.3), then returns the
+  /// first clear direction. Returns null only if all four directions are blocked
+  /// (extremely rare on a grid with ≤70% density).
   Direction? _findValidDirection(
     Point<int> position,
     List<Point<int>> futureNodes,
@@ -239,44 +241,83 @@ class LevelGenerator {
     int gridHeight,
     Random random,
   ) {
-    // Stub: Always return up for now
-    return Direction.up;
+    // Early exit: no future nodes means all directions are valid.
+    if (futureNodes.isEmpty) {
+      final dirs = Direction.values.toList()..shuffle(random);
+      return dirs.first;
+    }
+
+    // Build a O(1) lookup set for future positions.
+    final futureSet = <String>{
+      for (final p in futureNodes) '${p.x},${p.y}',
+    };
+
+    final shuffled = Direction.values.toList()..shuffle(random);
+    for (final dir in shuffled) {
+      if (!_directionHitsNodes(position, dir, futureSet, gridWidth, gridHeight)) {
+        return dir;
+      }
+    }
+
+    return null; // All 4 directions blocked
   }
 
-  /// Checks if a direction from a position hits any of the given nodes.
+  /// Ray-casts from [position] in [dir] until the grid edge.
   ///
-  /// TODO: Implement in task 9.3
-  /// This is a stub implementation.
+  /// Returns `true` if the ray passes through any position in [futureSet],
+  /// `false` if the ray clears the grid without hitting any future node.
+  ///
+  /// Complexity: O(max(gridWidth, gridHeight)) per call.
   bool _directionHitsNodes(
     Point<int> position,
-    Direction direction,
-    List<Point<int>> nodes,
+    Direction dir,
+    Set<String> futureSet,
     int gridWidth,
     int gridHeight,
   ) {
-    // Stub: Always return false (no collision) for now
-    return false;
+    int x = position.x;
+    int y = position.y;
+
+    while (true) {
+      switch (dir) {
+        case Direction.up:    y--; break;
+        case Direction.down:  y++; break;
+        case Direction.left:  x--; break;
+        case Direction.right: x++; break;
+      }
+
+      // Ray left the grid — path is clear.
+      if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return false;
+
+      // Ray hit a future node — direction is blocked.
+      if (futureSet.contains('$x,$y')) return true;
+    }
   }
 
-  /// Generates a simple fallback level when generation fails.
+  // ──────────────────────────────────────────────────────────────────────────
+  // Fallback level generation (Task 10.1)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /// Generates a simple, guaranteed-solvable fallback level.
   ///
-  /// TODO: Implement in task 10.1
-  /// This is a stub implementation that creates a minimal valid level.
+  /// Layout: each node is placed in a unique column on the bottom row,
+  /// pointing up. Since no two nodes share a row or column, nothing can
+  /// ever block anything.
+  ///
+  /// Only used when the backward algorithm fails after all retries
+  /// (should not occur under normal circumstances).
   LevelData _generateFallbackLevel(LevelConfiguration config) {
-    // Stub: Create a simple diagonal pattern
+    final count = min(config.targetNodeCount, config.gridWidth);
+    final palette = _getColorPalette();
     final nodes = <NodeData>[];
-    final count = min(
-      config.targetNodeCount,
-      min(config.gridWidth, config.gridHeight),
-    );
 
     for (int i = 0; i < count; i++) {
       nodes.add(NodeData(
         id: i,
         x: i,
-        y: i,
+        y: config.gridHeight - 1,
         dir: Direction.up,
-        color: const Color(0xFF4FACFE),
+        color: palette[i % palette.length],
       ));
     }
 
@@ -288,19 +329,38 @@ class LevelGenerator {
     );
   }
 
-  /// Returns the color palette for node colors.
+  // ──────────────────────────────────────────────────────────────────────────
+  // Helper methods (Task 11)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  /// Returns the 6-colour palette used for node colouring (Requirement 7.4).
+  List<Color> _getColorPalette() => const [
+    Color(0xFF60EFFF),
+    Color(0xFF00FF87),
+    Color(0xFFFF5F6D),
+    Color(0xFFFFC371),
+    Color(0xFFA18CD1),
+    Color(0xFF4FACFE),
+  ];
+
+  /// Calculates the grid size for a given [levelId] and [mode].
   ///
-  /// TODO: Implement in task 11.1
-  /// This is a stub implementation.
-  List<Color> _getColorPalette() {
-    // Stub: Return basic palette
-    return const [
-      Color(0xFF60EFFF),
-      Color(0xFF00FF87),
-      Color(0xFFFF5F6D),
-      Color(0xFFFFC371),
-      Color(0xFFA18CD1),
-      Color(0xFF4FACFE),
-    ];
+  /// Delegates to [LevelConfiguration._calculateGridSize] via a
+  /// [LevelConfiguration.fromLevelId] call. Exposed as a static helper
+  /// for callers that need the grid size without full configuration.
+  ///
+  /// - Easy:   4×4 → 6×6
+  /// - Medium: 6×6 → 10×10
+  /// - Hard:   10×10 → 20×20
+  static int calculateGridSize(int levelId, DifficultyMode mode) {
+    return LevelConfiguration.fromLevelId(levelId, mode: mode).gridWidth;
+  }
+
+  /// Calculates the target node count for a given [levelId] and [mode].
+  ///
+  /// Delegates to [LevelConfiguration.fromLevelId]. Exposed as a static
+  /// helper for external callers (e.g. performance tests).
+  static int calculateNodeCount(int levelId, DifficultyMode mode) {
+    return LevelConfiguration.fromLevelId(levelId, mode: mode).targetNodeCount;
   }
 }
