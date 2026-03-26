@@ -1,11 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/chain_pop_game.dart';
+import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 
 void main() {
   group('Chain Pop Mechanics Logic Tests', () {
     test('Level 2 Mechanic Checks', () {
-      final game = ChainPopGame(levelId: 2, onWin: () {});
+      final game = ChainPopGame(levelId: 2, difficulty: DifficultyMode.easy, onWin: () {});
       // Manually trigger board setup ignoring flame components loading constraints
       final nodes = [
         NodeData(id: 1, x: 2, y: 2, dir: Direction.left),
@@ -27,7 +28,7 @@ void main() {
     });
 
     test('Level 3 Mechanics Checks', () {
-      final game = ChainPopGame(levelId: 3, onWin: () {});
+      final game = ChainPopGame(levelId: 3, difficulty: DifficultyMode.easy, onWin: () {});
       final nodes = [
         NodeData(id: 1, x: 2, y: 1, dir: Direction.down),
         NodeData(id: 2, x: 2, y: 2, dir: Direction.right),

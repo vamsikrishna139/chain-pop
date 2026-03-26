@@ -160,6 +160,7 @@ class NodeComponent extends PositionComponent with TapCallbacks, HasGameRef<Chai
       isJamming = true;
       _shakeTimer = 0.0;
       Haptics.vibrate(HapticsType.heavy);
+      gameRef.reportJam(); // ← notify screen for star tracking
     }
   }
 
