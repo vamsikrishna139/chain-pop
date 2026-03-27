@@ -61,15 +61,20 @@ void main() {
       // Informational — always passes; shows timings in test output.
       final rows = <String>[];
       for (final entry in {
-        'Easy  (level 5)':  5,
+        'Easy   (level 5)':  5,
         'Medium (level 20)': 20,
-        'Hard  (level 50)': 50,
+        'Hard   (level 50)': 50,
+        'Hard   (level 100)': 100,
+        'Hard   (level 500)': 500,
+        'Hard   (level 1000)': 1000,
       }.entries) {
         final sw = Stopwatch()..start();
         final result = generator.generate(entry.value);
         sw.stop();
-        final nodes = result.isSuccess ? result.value.nodes.length : 0;
-        rows.add('${entry.key}: ${nodes} nodes in ${sw.elapsedMilliseconds}ms');
+        final level = result.isSuccess ? result.value : null;
+        rows.add('${entry.key}: ${level?.nodes.length ?? 0} nodes on '
+            '${level?.gridWidth ?? 0}x${level?.gridHeight ?? 0} '
+            'in ${sw.elapsedMilliseconds}ms');
       }
       // ignore: avoid_print
       print('\n--- Generation Performance ---\n${rows.join('\n')}\n');
