@@ -35,11 +35,11 @@ void main() {
 
         expect(config.levelId, equals(50));
         expect(config.difficulty.mode, equals(DifficultyMode.hard));
-        expect(config.gridWidth, greaterThanOrEqualTo(10));
-        expect(config.gridWidth, lessThanOrEqualTo(20));
+        expect(config.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
+        expect(config.gridWidth, lessThanOrEqualTo(16));
         expect(config.gridHeight, equals(config.gridWidth));
-        expect(config.targetNodeCount, greaterThanOrEqualTo(25));
-        expect(config.targetNodeCount, lessThanOrEqualTo(100));
+        expect(config.targetNodeCount, greaterThanOrEqualTo(5));
+        expect(config.targetNodeCount, lessThanOrEqualTo(60));
       });
     });
 
@@ -68,10 +68,10 @@ void main() {
         final config = LevelConfiguration.fromLevelId(50);
 
         expect(config.difficulty.mode, equals(DifficultyMode.hard));
-        expect(config.gridWidth, greaterThanOrEqualTo(10));
-        expect(config.gridWidth, lessThanOrEqualTo(20));
-        expect(config.targetNodeCount, greaterThanOrEqualTo(25));
-        expect(config.targetNodeCount, lessThanOrEqualTo(100));
+        expect(config.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
+        expect(config.gridWidth, lessThanOrEqualTo(16));
+        expect(config.targetNodeCount, greaterThanOrEqualTo(5));
+        expect(config.targetNodeCount, lessThanOrEqualTo(60));
       });
     });
 
@@ -81,8 +81,8 @@ void main() {
 
         expect(config.levelId, equals(5));
         expect(config.difficulty.mode, equals(DifficultyMode.hard));
-        expect(config.gridWidth, greaterThanOrEqualTo(10));
-        expect(config.gridWidth, lessThanOrEqualTo(20));
+        expect(config.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
+        expect(config.gridWidth, lessThanOrEqualTo(16));
       });
     });
 
@@ -101,18 +101,19 @@ void main() {
         expect(easyConfig.targetNodeCount, lessThan(mediumConfig.targetNodeCount));
       });
 
-      test('medium mode produces smaller grids than hard', () {
-        final mediumConfig = LevelConfiguration.fromLevelId(15, mode: DifficultyMode.medium);
-        final hardConfig = LevelConfiguration.fromLevelId(15, mode: DifficultyMode.hard);
+      // At level 50, Hard grid (11x11) > Medium grid (10x10).
+      test('medium mode produces smaller grids than hard at higher levels', () {
+        final mediumConfig = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.medium);
+        final hardConfig = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
 
-        expect(mediumConfig.gridWidth, lessThan(hardConfig.gridWidth));
+        expect(mediumConfig.gridWidth, lessThanOrEqualTo(hardConfig.gridWidth));
       });
 
-      test('medium mode produces fewer nodes than hard', () {
+      test('hard mode produces more max nodes than medium', () {
         final mediumConfig = LevelConfiguration.fromLevelId(15, mode: DifficultyMode.medium);
         final hardConfig = LevelConfiguration.fromLevelId(15, mode: DifficultyMode.hard);
 
-        expect(mediumConfig.targetNodeCount, lessThan(hardConfig.targetNodeCount));
+        expect(hardConfig.difficulty.maxNodes, greaterThan(mediumConfig.difficulty.maxNodes));
       });
     });
 

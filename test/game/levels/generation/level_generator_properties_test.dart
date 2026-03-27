@@ -122,11 +122,11 @@ void main() {
     });
 
     test('Grid dimensions respect difficulty constraints', () {
-      // Easy: 4-6, Medium: 6-10, Hard: 10-20
+      // Easy: 4–6, Medium: 6–10, Hard: 6–16 (scales up gradually from lvl 30)
       final bounds = {
         DifficultyMode.easy:   (4, 6),
         DifficultyMode.medium: (6, 10),
-        DifficultyMode.hard:   (10, 20),
+        DifficultyMode.hard:   (6, 16),
       };
       for (final entry in bounds.entries) {
         final level = generator.generate(1, mode: entry.key).value;

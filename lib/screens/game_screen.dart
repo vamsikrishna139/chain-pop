@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flame/game.dart';
 import '../game/chain_pop_game.dart';
 import '../game/levels/generation/difficulty_mode.dart';
+import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
 import '../models/difficulty.dart';
 import '../services/storage_service.dart';
@@ -51,6 +52,9 @@ class _GameScreenState extends State<GameScreen> {
   // ── Ghost hint timer (Easy only) ─────────────────────────────────────────
   Timer? _ghostHintTimer;
 
+  // ── Pre-generated level (single generation) ───────────────────────────────
+  late LevelData _levelData;
+
   // ─────────────────────────────────────────────────────────────────────────
 
   @override
@@ -58,9 +62,10 @@ class _GameScreenState extends State<GameScreen> {
     super.initState();
     _stopwatch = Stopwatch()..start();
 
-    _totalNodes = LevelManager.getLevel(widget.level, mode: widget.difficulty)
-        .nodes
-        .length;
+    // Generate ONCE here. Pass to the game via preloadedLevel so the
+    // generator is never called twice for the same game load.
+    _levelData = LevelManager.getLevel(widget.level, mode: widget.difficulty);
+    _totalNodes = _levelData.nodes.length;
 
     _timeLimitSec = _computeTimeLimit(widget.difficulty, _totalNodes);
     _timeLeftSec = _timeLimitSec;
@@ -97,6 +102,7 @@ class _GameScreenState extends State<GameScreen> {
       onWin: _handleWin,
       onJam: _handleJam,
       onNodeRemoved: _handleNodeRemoved,
+      preloadedLevel: _levelData, // ← single generation
     );
   }
 
@@ -133,15 +139,19 @@ class _GameScreenState extends State<GameScreen> {
       _autoAdvanceSec = 5;
     });
 
-    // Start 5-second auto-advance countdown.
+    // Delay auto-advance countdown by 700 ms so the star animation
+    // (3 × 150 ms stagger + 450 ms animation ≈ 900 ms) is visible first.
     _autoAdvanceTimer?.cancel();
-    _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) { t.cancel(); return; }
-      setState(() => _autoAdvanceSec--);
-      if (_autoAdvanceSec <= 0) {
-        t.cancel();
-        _goNextLevel();
-      }
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (!mounted) return;
+      _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+        if (!mounted) { t.cancel(); return; }
+        setState(() => _autoAdvanceSec--);
+        if (_autoAdvanceSec <= 0) {
+          t.cancel();
+          _goNextLevel();
+        }
+      });
     });
   }
 
@@ -633,21 +643,29 @@ class _ProgressBar extends StatelessWidget {
   const _ProgressBar({required this.progress, required this.color});
   @override
   Widget build(BuildContext context) {
+    final pct = (progress * 100).round();
     return LayoutBuilder(builder: (_, c) => Stack(children: [
-      Container(height: 4, color: Colors.white.withOpacity(0.06)),
+      Container(height: 6, color: Colors.white.withOpacity(0.07)),
       AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
-        height: 4,
+        height: 6,
         width: c.maxWidth * progress.clamp(0.0, 1.0),
         decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [color.withOpacity(0.7), color]),
-          boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 6)],
+          gradient: LinearGradient(colors: [color.withOpacity(0.6), color]),
+          boxShadow: [BoxShadow(color: color.withOpacity(0.6), blurRadius: 8, spreadRadius: 1)],
         ),
       ),
+      if (pct > 0 && pct < 100)
+        Positioned(
+          left: (c.maxWidth * progress.clamp(0.0, 1.0)).clamp(0.0, c.maxWidth - 36),
+          top: 7,
+          child: Text('$pct%', style: TextStyle(color: color.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.w800)),
+        ),
     ]));
   }
 }
+
 
 class _TimerBadge extends StatelessWidget {
   final int timeLeftSec, timeLimitSec;

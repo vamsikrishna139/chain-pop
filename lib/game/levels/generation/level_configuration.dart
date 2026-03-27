@@ -133,8 +133,10 @@ class LevelConfiguration {
         // 6x6 to 10x10
         return (6 + (levelId / 8).floor()).clamp(6, 10);
       case DifficultyMode.hard:
-        // 10x10 to 20x20
-        return (10 + (levelId / 5).floor()).clamp(10, 20);
+        // Scales from 6×6 at level 30 → 16×16 at level ~70+.
+        // Prevents the jarring jump from Medium (6–10) to Hard (was 10–20).
+        return (6 + ((levelId - 29) / 4).floor()).clamp(6, 16);
+
     }
   }
   

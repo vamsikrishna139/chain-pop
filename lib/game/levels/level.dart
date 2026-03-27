@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 enum Direction { up, down, left, right }
 
+/// Immutable data for a single board node.
+///
+/// [x] and [y] are `final` — grid coordinates never change after placement.
 class NodeData {
   final int id;
-  int x;
-  int y;
+  final int x;
+  final int y;
   final Direction dir;
   final Color color;
 
@@ -17,9 +20,7 @@ class NodeData {
     this.color = const Color(0xFF4FACFE),
   });
 
-  NodeData clone() {
-    return NodeData(id: id, x: x, y: y, dir: dir, color: color);
-  }
+  NodeData clone() => NodeData(id: id, x: x, y: y, dir: dir, color: color);
 
   @override
   String toString() => 'Node($id, at: $x,$y, dir: $dir)';

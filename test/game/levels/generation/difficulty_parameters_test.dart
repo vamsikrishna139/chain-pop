@@ -33,8 +33,8 @@ void main() {
         expect(params.mode, equals(DifficultyMode.hard));
         expect(params.minChainLength, equals(5));
         expect(params.maxChainLength, equals(10));
-        expect(params.densityFactor, equals(0.40)); // tuned down from 0.65 to prevent single-row fallback
-        expect(params.minNodes, equals(15));
+        expect(params.densityFactor, equals(0.40));
+        expect(params.minNodes, equals(5));   // low so early Hard 6×6 grid doesn't clamp
         expect(params.maxNodes, equals(60));
       });
     });
@@ -87,12 +87,14 @@ void main() {
         expect(easy.densityFactor, lessThan(medium.densityFactor));
       });
 
-      test('medium mode has lower node counts than hard', () {
+      // Hard has lower minNodes than Medium deliberately (early Hard = 6×6 grid)
+      // but allows more nodes at the top end (maxNodes).
+      test('hard mode allows more max nodes than medium', () {
         final medium = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
         final hard = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.hard);
 
-        expect(medium.minNodes, lessThan(hard.minNodes));
-        expect(medium.maxNodes, lessThan(hard.maxNodes));
+        expect(hard.maxNodes, greaterThan(medium.maxNodes),
+            reason: 'Hard allows more nodes overall');
       });
 
       // Note: Hard difficulty comes from larger grid size and more nodes (absolute count),

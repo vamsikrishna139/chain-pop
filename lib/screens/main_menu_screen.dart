@@ -202,17 +202,40 @@ class _MainMenuScreenState extends State<MainMenuScreen>
 
                   const SizedBox(height: 16),
 
-                  // ── Dev: reset ───────────────────────────────────────────
-                  TextButton(
-                    onPressed: () async {
-                      await StorageService.clearProgress();
-                      setState(() {
-                        _selected = StorageService.selectedDifficulty;
-                      });
+                  // ── Reset (long-press required to prevent accidents) ───────
+                  GestureDetector(
+                    onLongPress: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          backgroundColor: const Color(0xFF1A1A22),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          title: const Text('Reset all progress?',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          content: const Text('This cannot be undone.',
+                              style: TextStyle(color: Colors.white54)),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context, false),
+                                child: const Text('CANCEL', style: TextStyle(color: Colors.white38))),
+                            ElevatedButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                              child: const Text('RESET', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await StorageService.clearProgress();
+                        setState(() => _selected = StorageService.selectedDifficulty);
+                      }
                     },
-                    child: const Text(
-                      'RESET PROGRESS',
-                      style: TextStyle(color: Colors.white24, fontSize: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        'Hold to reset progress',
+                        style: TextStyle(color: Colors.white.withOpacity(0.15), fontSize: 11),
+                      ),
                     ),
                   ),
 
@@ -263,11 +286,7 @@ class _DifficultyPill extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              mode.icon,
-              color: selected ? color : Colors.white38,
-              size: 22,
-            ),
+            Icon(mode.icon, color: selected ? color : Colors.white38, size: 22),
             const SizedBox(height: 6),
             Text(
               mode.label,
@@ -285,35 +304,96 @@ class _DifficultyPill extends StatelessWidget {
   }
 }
 
-// ── Progress summary row ────────────────────────────────────────────────────
+// ── Progress + star summary row ────────────────────────────────────────────
 
 class _ProgressRow extends StatelessWidget {
   final DifficultyMode difficulty;
   const _ProgressRow({required this.difficulty});
+
+  int _totalStars(DifficultyMode mode) {
+    final highest = StorageService.highestUnlocked(mode);
+    int sum = 0;
+    for (int i = 1; i <= highest; i++) {
+      sum += StorageService.stars(mode, i);
+    }
+    return sum;
+  }
 
   @override
   Widget build(BuildContext context) {
     final highest = StorageService.highestUnlocked(difficulty);
     final accent = difficulty.color;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(difficulty.icon, color: accent, size: 18),
-          const SizedBox(width: 10),
-          Text(
-            '${difficulty.label}  ·  Level $highest unlocked',
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
+    return Column(
+      children: [
+        // Current difficulty progress
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white12),
           ),
-        ],
-      ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(difficulty.icon, color: accent, size: 16),
+              const SizedBox(width: 8),
+              Text(
+                '${difficulty.label}  ·  Lvl $highest unlocked',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        // Star totals across all difficulties
+        Row(
+          children: DifficultyMode.values.map((m) {
+            final stars = _totalStars(m);
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: m == difficulty ? m.color.withOpacity(0.4) : Colors.white12,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(Icons.star_rounded,
+                          size: 14, color: stars > 0 ? const Color(0xFFFFC371) : Colors.white24),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$stars',
+                        style: TextStyle(
+                          color: stars > 0 ? Colors.white70 : Colors.white24,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        m.label,
+                        style: TextStyle(
+                          color: m == difficulty ? m.color : Colors.white24,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 }
+

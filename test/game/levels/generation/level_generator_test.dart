@@ -87,8 +87,8 @@ void main() {
         final result = generator.generate(5, mode: DifficultyMode.hard);
 
         expect(result.isSuccess, isTrue);
-        expect(result.value.gridWidth, greaterThanOrEqualTo(10));
-        expect(result.value.gridWidth, lessThanOrEqualTo(20));
+        expect(result.value.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
+        expect(result.value.gridWidth, lessThanOrEqualTo(16));
         // Note: Stub implementation may not fully respect node count constraints
         expect(result.value.nodes.length, greaterThanOrEqualTo(3));
       });
@@ -99,7 +99,7 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         // Should have hard mode characteristics
-        expect(result.value.gridWidth, greaterThanOrEqualTo(10));
+        expect(result.value.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
       });
     });
 
@@ -127,8 +127,8 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         // Hard mode characteristics
-        expect(result.value.gridWidth, greaterThanOrEqualTo(10));
-        expect(result.value.gridWidth, lessThanOrEqualTo(20));
+        expect(result.value.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
+        expect(result.value.gridWidth, lessThanOrEqualTo(16));
       });
     });
 

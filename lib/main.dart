@@ -1,23 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'screens/main_menu_screen.dart';
 import 'services/storage_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize Storage (Hive)
+
   await Hive.initFlutter();
   await StorageService.init();
 
-  // Mock Initialization for Firebase, Ads, Analytics
   await _mockInitExternalServices();
-
   runApp(const ChainPopApp());
 }
 
 Future<void> _mockInitExternalServices() async {
-  // Simulate init delay
   await Future.delayed(const Duration(milliseconds: 100));
 }
 
@@ -30,8 +27,8 @@ class ChainPopApp extends StatelessWidget {
       title: 'Chain Pop',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1E1E24), // Sleek dark mode
-        fontFamily: 'Inter',
+        scaffoldBackgroundColor: const Color(0xFF1E1E24),
+        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         useMaterial3: true,
       ),
       home: const MainMenuScreen(),

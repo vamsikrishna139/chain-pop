@@ -9,25 +9,40 @@ import 'components/node_component.dart';
 
 /// The core Flame game engine for Chain Pop.
 ///
-/// Accepts both a [levelId] and a [difficulty] so the level generator
-/// produces a puzzle appropriate for the player's chosen mode.
+/// Key design points:
+///  • Accept an optional [preloadedLevel] so [GameScreen] can generate the
+///    level once and reuse it — avoids double-generation.
+///  • [topReserved] / [bottomReserved] tell the board to stay clear of the
+///    Flutter HUD widgets overlaid on top of the Flame canvas.
+///  • [extractableIds] is rebuilt after every extraction so [NodeComponent]
+///    can query it O(1) per frame to show the extractable/blocked visual state.
 class ChainPopGame extends FlameGame {
   final int levelId;
   final DifficultyMode difficulty;
   final VoidCallback onWin;
-
-  /// Called whenever the player taps a node that is currently blocked.
-  /// The screen uses this to track jams for star calculation.
   final VoidCallback? onJam;
+  final void Function(int removed, int total)? onNodeRemoved;
+
+  /// Pre-generated [LevelData] from [GameScreen]. When provided, [onLoad]
+  /// skips the generator call — no double-generation.
+  final LevelData? preloadedLevel;
+
+  /// Logical pixels reserved for the top HUD. The board is shifted down by
+  /// this amount so it doesn't sit behind the Flutter overlay widgets.
+  final double topReserved;
+
+  /// Logical pixels reserved for the bottom bar.
+  final double bottomReserved;
 
   late LevelData levelData;
   final List<NodeData> activeNodes = [];
+
+  /// IDs of nodes that are currently extractable.
+  /// Rebuilt after every extraction — O(n) once, then O(1) per NodeComponent lookup.
+  final Set<int> _extractableIds = {};
+
   bool hasWon = false;
   late PositionComponent board;
-
-  /// Called whenever a node is successfully extracted.
-  /// Reports (removedCount, totalCount) for the progress bar.
-  final void Function(int removed, int total)? onNodeRemoved;
 
   ChainPopGame({
     required this.levelId,
@@ -35,75 +50,80 @@ class ChainPopGame extends FlameGame {
     required this.onWin,
     this.onJam,
     this.onNodeRemoved,
+    this.preloadedLevel,
+    this.topReserved = 130.0,
+    this.bottomReserved = 88.0,
   });
 
   @override
-  Color backgroundColor() {
-    // Very subtle difficulty tint over the dark background.
-    // Blended with the base colour 0xFF0F0F13.
-    return const Color(0xFF0F0F13);
-  }
+  Color backgroundColor() => const Color(0xFF0F0F13);
 
   @override
   Future<void> onLoad() async {
-    levelData = LevelManager.getLevel(levelId, mode: difficulty);
+    // Use pre-generated level if provided — avoids a second generator run.
+    levelData = preloadedLevel ?? LevelManager.getLevel(levelId, mode: difficulty);
 
-    for (var node in levelData.nodes) {
+    for (final node in levelData.nodes) {
       activeNodes.add(node.clone());
     }
 
+    _rebuildExtractableIds();
     _setupBoard();
   }
 
   void _setupBoard() {
-    final screenWidth = size.x;
-    final screenHeight = size.y;
+    final screenW = size.x;
+    final screenH = size.y;
 
-    const margin = 40.0;
-    final usableWidth = screenWidth - (margin * 2);
-    final usableHeight = screenHeight - (margin * 4);
+    const margin = 24.0;
+    final usableW = screenW - margin * 2;
+    // Shrink vertical space to avoid overlapping Flutter HUD layers.
+    final usableH = screenH - topReserved - bottomReserved - margin;
 
-    final cellWidth = usableWidth / levelData.gridWidth;
-    final cellHeight = usableHeight / levelData.gridHeight;
-    final cellSize = (cellWidth < cellHeight ? cellWidth : cellHeight)
-        .clamp(28.0, 100.0); // clamp tighter for hard-mode large grids
+    final cellW = usableW / levelData.gridWidth;
+    final cellH = usableH / levelData.gridHeight;
+    final cellSize = (cellW < cellH ? cellW : cellH).clamp(26.0, 96.0);
 
-    final gridPixelWidth = cellSize * levelData.gridWidth;
-    final gridPixelHeight = cellSize * levelData.gridHeight;
+    final gridPixelW = cellSize * levelData.gridWidth;
+    final gridPixelH = cellSize * levelData.gridHeight;
 
-    final offsetX = (screenWidth - gridPixelWidth) / 2;
-    final offsetY = (screenHeight - gridPixelHeight) / 2;
+    // Centre horizontally; offset vertically into the safe zone.
+    final offsetX = (screenW - gridPixelW) / 2;
+    final offsetY = topReserved + (usableH - gridPixelH) / 2;
 
     board = PositionComponent(
       position: Vector2(offsetX, offsetY),
-      size: Vector2(gridPixelWidth, gridPixelHeight),
+      size: Vector2(gridPixelW, gridPixelH),
     );
 
-    for (var nodeData in activeNodes) {
-      final nodeComp = NodeComponent(data: nodeData, cellSize: cellSize);
-      board.add(nodeComp);
+    for (final nodeData in activeNodes) {
+      board.add(NodeComponent(data: nodeData, cellSize: cellSize));
     }
 
     add(board);
   }
 
+  // ── Public API ─────────────────────────────────────────────────────────────
+
   bool canExtract(NodeData data) => LevelSolver.canRemove(data, activeNodes);
 
-  void registerExtraction(NodeData data) {
-    activeNodes.removeWhere((node) => node.id == data.id);
+  /// Returns true if [nodeId] is currently extractable.
+  /// O(1) — checked per frame by every [NodeComponent].
+  bool isExtractable(int nodeId) => _extractableIds.contains(nodeId);
 
-    // Notify UI: how many removed vs total.
-    // Guard against tests that skip onLoad() and never initialise levelData.
+  void registerExtraction(NodeData data) {
+    activeNodes.removeWhere((n) => n.id == data.id);
+    _rebuildExtractableIds();
+
     try {
       final total = levelData.nodes.length;
       final removed = total - activeNodes.length;
       onNodeRemoved?.call(removed, total);
     } catch (_) {
-      // levelData not yet initialised (unit-test scenario) — skip callback.
+      // levelData not yet initialised (unit-test scenario).
     }
   }
 
-  /// Called by [NodeComponent] when a tap hits a blocked node.
   void reportJam() => onJam?.call();
 
   void checkWinCondition() {
@@ -115,12 +135,11 @@ class ChainPopGame extends FlameGame {
 
   void showHint() {
     final hintNode = LevelSolver.getHint(activeNodes);
-    if (hintNode != null) {
-      for (var component in board.children.whereType<NodeComponent>()) {
-        if (component.data.id == hintNode.id) {
-          component.highlight();
-          break;
-        }
+    if (hintNode == null) return;
+    for (final comp in board.children.whereType<NodeComponent>()) {
+      if (comp.data.id == hintNode.id) {
+        comp.highlight();
+        break;
       }
     }
   }
@@ -128,12 +147,23 @@ class ChainPopGame extends FlameGame {
   void restart() {
     hasWon = false;
     activeNodes.clear();
-    for (var node in levelData.nodes) {
+    for (final node in levelData.nodes) {
       activeNodes.add(node.clone());
     }
     board.removeFromParent();
+    _rebuildExtractableIds();
     _setupBoard();
-    // Reset progress to 0
     onNodeRemoved?.call(0, levelData.nodes.length);
+  }
+
+  // ── Private ────────────────────────────────────────────────────────────────
+
+  void _rebuildExtractableIds() {
+    _extractableIds.clear();
+    for (final node in activeNodes) {
+      if (LevelSolver.canRemove(node, activeNodes)) {
+        _extractableIds.add(node.id);
+      }
+    }
   }
 }

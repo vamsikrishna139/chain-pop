@@ -83,12 +83,30 @@ class LevelGenerator {
       );
     }
 
-    // Each attempt uses a different seed derived from levelId and attempt index
-    // so retries genuinely explore different configurations.
+    // Primary attempts: vary both the seed AND the node count on later tries.
+    // This explores structurally different configurations, not just different
+    // random orderings of the same density.
     for (int attempt = 0; attempt < 8; attempt++) {
       final rng = Random(levelId * 31337 + attempt * 999983);
-      final result = _attemptGeneration(config, rng);
 
+      // Gradually reduce node count in later retries (−15% per two attempts)
+      // to give the direction-assigner more room when the grid is dense.
+      final nodeCountScale = 1.0 - (attempt ~/ 2) * 0.15;
+      final scaledConfig = attempt < 2
+          ? config
+          : LevelConfiguration(
+              levelId: config.levelId,
+              gridWidth: config.gridWidth,
+              gridHeight: config.gridHeight,
+              targetNodeCount:
+                  (config.targetNodeCount * nodeCountScale).round().clamp(
+                    config.difficulty.minNodes,
+                    config.targetNodeCount,
+                  ),
+              difficulty: config.difficulty,
+            );
+
+      final result = _attemptGeneration(scaledConfig, rng);
       if (result.isSuccess) {
         final validationResult = _validator.validate(result.value);
         if (validationResult.isValid) {
@@ -157,10 +175,13 @@ class LevelGenerator {
     }
   }
 
-  /// Selects [count] unique random positions within [gridWidth] × [gridHeight].
+  /// Selects [count] unique positions spread across the grid using
+  /// **stratified sampling**.
   ///
-  /// Uses a [Set] for O(1) membership checks. Expected O(n) time; O(n²) in
-  /// worst case on a nearly-full grid.
+  /// The grid is divided into `ceil(sqrt(count))` × `ceil(sqrt(count))`
+  /// sectors. One position is sampled from each sector before filling
+  /// the remainder with pure random picks. This prevents clustering that
+  /// often happens with pure uniform random placement.
   List<Point<int>> _selectUniquePositions(
     int count,
     int gridWidth,
@@ -170,6 +191,34 @@ class LevelGenerator {
     final positions = <Point<int>>[];
     final used = <String>{};
 
+    // Phase 1 — stratified: pick one position per sector
+    if (count > 1) {
+      final sectors = sqrt(count.toDouble()).ceil();
+      final sectorW = (gridWidth / sectors).ceil();
+      final sectorH = (gridHeight / sectors).ceil();
+
+      for (int sy = 0; sy < sectors && positions.length < count; sy++) {
+        for (int sx = 0; sx < sectors && positions.length < count; sx++) {
+          final xMin = sx * sectorW;
+          final xMax = min(xMin + sectorW, gridWidth);
+          final yMin = sy * sectorH;
+          final yMax = min(yMin + sectorH, gridHeight);
+          if (xMin >= gridWidth || yMin >= gridHeight) continue;
+
+          for (int attempt = 0; attempt < 8; attempt++) {
+            final x = xMin + random.nextInt(xMax - xMin);
+            final y = yMin + random.nextInt(yMax - yMin);
+            final key = '$x,$y';
+            if (used.add(key)) {
+              positions.add(Point(x, y));
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Phase 2 — fill remainder with pure random
     int safety = 0;
     while (positions.length < count && safety++ < count * 100) {
       final x = random.nextInt(gridWidth);
@@ -180,6 +229,8 @@ class LevelGenerator {
       }
     }
 
+    // Shuffle so the stratified order doesn't bias the solution path
+    positions.shuffle(random);
     return positions;
   }
 
@@ -298,43 +349,56 @@ class LevelGenerator {
   // Fallback level generation (Task 10.1)
   // ──────────────────────────────────────────────────────────────────────────
 
-  /// Generates a guaranteed-solvable fallback level with a staggered grid layout.
+  /// Generates a guaranteed-solvable fallback level.
   ///
-  /// Places nodes across the entire grid in a checkerboard pattern
-  /// (every other cell) using all four directions in rotation.
-  /// This guarantees:
-  ///  • Nodes are spread across rows AND columns (never a single line)
-  ///  • Each node's arrow points away from any neighbour in that direction
-  ///  • The level is trivially solvable in any order (no node blocks another
-  ///    because every node ray exits the grid without hitting a neighbour
-  ///    given the checkerboard spacing)
+  /// Uses two groups of non-blocking nodes:
+  ///  • **Group A** — placed at row 0, each in a unique column, pointing UP.
+  ///    Their rays exit at y < 0 (off-grid) → never blocked.
+  ///  • **Group B** — overflow nodes placed at row [gridHeight-1], unique
+  ///    columns not used by Group A, pointing DOWN.
+  ///    Their rays exit at y > gridHeight-1 → never blocked.
+  ///  • **Group C** — any remaining placed at col 0, unique rows, pointing LEFT.
+  ///
+  /// All three groups are guaranteed immediately extractable by construction.
   LevelData _generateFallbackLevel(LevelConfiguration config) {
     final palette = _getColorPalette();
     final nodes = <NodeData>[];
-
-    // Direction rotation so adjacent nodes have different directions.
-    // Using a checkerboard every 2 columns / 2 rows guarantees rays clear.
-    const dirs = Direction.values; // up, down, left, right
-
-    // Walk every other cell across the grid (checkerboard pattern).
     int id = 0;
-    for (int y = 0; y < config.gridHeight && id < config.targetNodeCount; y++) {
-      // Alternate starting column per row so cells form a true checkerboard.
-      final startX = y.isEven ? 0 : 1;
-      for (int x = startX;
-          x < config.gridWidth && id < config.targetNodeCount;
-          x += 2) {
-        // Rotate through the 4 directions based on (row, col) so no two
-        // adjacent cells share the same direction.
-        final dir = dirs[(x + y * 3) % dirs.length];
+    int needed = min(config.targetNodeCount, config.gridWidth * config.gridHeight);
+
+    // Group A — row 0, unique columns, pointing UP
+    for (int x = 0; x < config.gridWidth && id < needed; x++) {
+      nodes.add(NodeData(
+        id: id++, x: x, y: 0,
+        dir: Direction.up,
+        color: palette[(id - 1) % palette.length],
+      ));
+    }
+
+    // Group B — row gridHeight-1, columns not used by A, pointing DOWN
+    // (only reachable if needed > gridWidth)
+    if (id < needed) {
+      for (int x = 0; x < config.gridWidth && id < needed; x++) {
+        // Skip columns already used by Group A (same col, different row — would
+        // the UP node at row 0 col x block a DOWN node at row H-1 col x?
+        // DOWN from (x, H-1): ray goes y > H-1 → off grid → not blocked. ✓
+        // But UP from (x, 0): ray goes y < 0 → not blocked even with B present. ✓
         nodes.add(NodeData(
-          id: id,
-          x: x,
-          y: y,
-          dir: dir,
-          color: palette[id % palette.length],
+          id: id++, x: x, y: config.gridHeight - 1,
+          dir: Direction.down,
+          color: palette[(id - 1) % palette.length],
         ));
-        id++;
+      }
+    }
+
+    // Group C — col 0, unique rows (excluding 0 and gridHeight-1), pointing LEFT
+    if (id < needed) {
+      for (int y = 1; y < config.gridHeight - 1 && id < needed; y++) {
+        nodes.add(NodeData(
+          id: id++, x: 0, y: y,
+          dir: Direction.left,
+          color: palette[(id - 1) % palette.length],
+        ));
       }
     }
 
