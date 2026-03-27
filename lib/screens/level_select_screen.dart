@@ -9,6 +9,10 @@ import 'game_screen.dart';
 /// Shows a scrollable grid of level cards grouped by difficulty.
 /// Tabs switch the active difficulty.  Locked levels show a padlock;
 /// completed levels show their star rating.
+int visibleLevelCardCount(int highestUnlocked) {
+  return highestUnlocked >= 19 ? highestUnlocked + 1 : 20;
+}
+
 class LevelSelectScreen extends StatefulWidget {
   final DifficultyMode initialDifficulty;
 
@@ -48,11 +52,13 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
     await StorageService.setSelectedDifficulty(mode);
 
     if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => GameScreen(level: levelId, difficulty: mode),
-      ),
-    ).then((_) => setState(() {})); // refresh stars on return
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => GameScreen(level: levelId, difficulty: mode),
+          ),
+        )
+        .then((_) => setState(() {})); // refresh stars on return
   }
 
   @override
@@ -67,10 +73,12 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
             Expanded(
               child: TabBarView(
                 controller: _tabController,
-                children: _modes.map((mode) => _LevelGrid(
-                  mode: mode,
-                  onTap: (id) => _openLevel(id, mode),
-                )).toList(),
+                children: _modes
+                    .map((mode) => _LevelGrid(
+                          mode: mode,
+                          onTap: (id) => _openLevel(id, mode),
+                        ))
+                    .toList(),
               ),
             ),
           ],
@@ -85,7 +93,8 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
       child: Row(
         children: [
           IconButton(
-            icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white70),
+            icon:
+                const Icon(Icons.arrow_back_ios_rounded, color: Colors.white70),
             onPressed: () => Navigator.of(context).pop(),
           ),
           const SizedBox(width: 8),
@@ -123,17 +132,20 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
           dividerColor: Colors.transparent,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white38,
-          labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1),
-          tabs: _modes.map((m) => Tab(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(m.icon, size: 14),
-                const SizedBox(width: 6),
-                Text(m.label),
-              ],
-            ),
-          )).toList(),
+          labelStyle: const TextStyle(
+              fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1),
+          tabs: _modes
+              .map((m) => Tab(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(m.icon, size: 14),
+                        const SizedBox(width: 6),
+                        Text(m.label),
+                      ],
+                    ),
+                  ))
+              .toList(),
           onTap: (_) => setState(() {}), // update tab indicator colour
         ),
       ),
@@ -153,7 +165,7 @@ class _LevelGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final highest = StorageService.highestUnlocked(mode);
     // Show up to highest+1 (the next challenge) or minimum 20 cards.
-    final visibleCount = (highest + 1).clamp(20, 200);
+    final visibleCount = visibleLevelCardCount(highest);
 
     return GridView.builder(
       padding: const EdgeInsets.all(16),
@@ -270,11 +282,13 @@ class _MiniStars extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: List.generate(3, (i) => Icon(
-        i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
-        size: 12,
-        color: i < stars ? color : Colors.white24,
-      )),
+      children: List.generate(
+          3,
+          (i) => Icon(
+                i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
+                size: 12,
+                color: i < stars ? color : Colors.white24,
+              )),
     );
   }
 }

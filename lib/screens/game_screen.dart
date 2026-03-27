@@ -47,6 +47,7 @@ class _GameScreenState extends State<GameScreen> {
 
   // ── Auto-advance after win (5 seconds) ───────────────────────────────────
   int _autoAdvanceSec = 5;
+  Timer? _autoAdvanceDelayTimer;
   Timer? _autoAdvanceTimer;
 
   // ── Ghost hint timer (Easy only) ─────────────────────────────────────────
@@ -78,6 +79,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     _ghostHintTimer?.cancel();
     super.dispose();
@@ -87,9 +89,12 @@ class _GameScreenState extends State<GameScreen> {
 
   static int? _computeTimeLimit(DifficultyMode mode, int nodeCount) {
     switch (mode) {
-      case DifficultyMode.easy:   return null;
-      case DifficultyMode.medium: return (nodeCount * 6).clamp(60, 240);
-      case DifficultyMode.hard:   return (nodeCount * 4).clamp(45, 180);
+      case DifficultyMode.easy:
+        return null;
+      case DifficultyMode.medium:
+        return (nodeCount * 6).clamp(60, 240);
+      case DifficultyMode.hard:
+        return (nodeCount * 4).clamp(45, 180);
     }
   }
 
@@ -141,11 +146,15 @@ class _GameScreenState extends State<GameScreen> {
 
     // Delay auto-advance countdown by 700 ms so the star animation
     // (3 × 150 ms stagger + 450 ms animation ≈ 900 ms) is visible first.
+    _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
-    Future.delayed(const Duration(milliseconds: 700), () {
-      if (!mounted) return;
+    _autoAdvanceDelayTimer = Timer(const Duration(milliseconds: 700), () {
+      if (!mounted || !_hasWon) return;
       _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-        if (!mounted) { t.cancel(); return; }
+        if (!mounted || !_hasWon) {
+          t.cancel();
+          return;
+        }
         setState(() => _autoAdvanceSec--);
         if (_autoAdvanceSec <= 0) {
           t.cancel();
@@ -165,7 +174,10 @@ class _GameScreenState extends State<GameScreen> {
       barrierDismissible: false,
       builder: (_) => _TimeUpDialog(
         difficulty: widget.difficulty,
-        onRetry: () { Navigator.of(context).pop(); _resetForRetry(); },
+        onRetry: () {
+          Navigator.of(context).pop();
+          _resetForRetry();
+        },
         onMenu: () => Navigator.of(context).popUntil((r) => r.isFirst),
       ),
     );
@@ -174,6 +186,7 @@ class _GameScreenState extends State<GameScreen> {
   // ── Navigation (all in one place, no race conditions) ─────────────────────
 
   void _resetForRetry() {
+    _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     _countdownTimer?.cancel();
     _ghostHintTimer?.cancel();
@@ -184,7 +197,9 @@ class _GameScreenState extends State<GameScreen> {
       _earnedStars = 0;
       _timeLeftSec = _timeLimitSec;
       _autoAdvanceSec = 5;
-      _stopwatch..reset()..start();
+      _stopwatch
+        ..reset()
+        ..start();
     });
     _game.restart();
     _startCountdown();
@@ -209,6 +224,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _goMenu() {
+    _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     Navigator.of(context).popUntil((r) => r.isFirst);
   }
@@ -221,7 +237,8 @@ class _GameScreenState extends State<GameScreen> {
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _hasWon) return;
       setState(() {
-        _timeLeftSec = ((_timeLeftSec ?? _timeLimitSec!) - 1).clamp(0, _timeLimitSec!);
+        _timeLeftSec =
+            ((_timeLeftSec ?? _timeLimitSec!) - 1).clamp(0, _timeLimitSec!);
       });
       if (_timeLeftSec == 0) {
         _countdownTimer?.cancel();
@@ -269,7 +286,9 @@ class _GameScreenState extends State<GameScreen> {
 
           // ── Progress bar (top edge) ───────────────────────────────────────
           Positioned(
-            top: 0, left: 0, right: 0,
+            top: 0,
+            left: 0,
+            right: 0,
             child: _ProgressBar(progress: progress, color: accent),
           ),
 
@@ -331,7 +350,9 @@ class _GameScreenState extends State<GameScreen> {
           // ── Bottom controls ───────────────────────────────────────────────
           if (!_hasWon)
             Positioned(
-              bottom: 0, left: 0, right: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
               child: SafeArea(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -423,6 +444,7 @@ class _WinPanel extends StatefulWidget {
 class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
   late final List<AnimationController> _starCtrl;
   late final List<Animation<double>> _starScale;
+  late final List<Timer> _starStartTimers;
 
   @override
   void initState() {
@@ -432,15 +454,26 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
         vsync: this,
         duration: const Duration(milliseconds: 450),
       );
-      Future.delayed(Duration(milliseconds: 200 + i * 150), c.forward);
       return c;
     });
-    _starScale = _starCtrl.map((c) => Tween<double>(begin: 0.0, end: 1.0)
-        .animate(CurvedAnimation(parent: c, curve: Curves.elasticOut))).toList();
+    _starStartTimers = List.generate(3, (i) {
+      return Timer(Duration(milliseconds: 200 + i * 150), () {
+        if (mounted) {
+          _starCtrl[i].forward();
+        }
+      });
+    });
+    _starScale = _starCtrl
+        .map((c) => Tween<double>(begin: 0.0, end: 1.0)
+            .animate(CurvedAnimation(parent: c, curve: Curves.elasticOut)))
+        .toList();
   }
 
   @override
   void dispose() {
+    for (final timer in _starStartTimers) {
+      timer.cancel();
+    }
     for (final c in _starCtrl) c.dispose();
     super.dispose();
   }
@@ -478,12 +511,19 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
             // Drag bar / label
             Text(
               'LEVEL ${widget.levelId} · ${widget.difficulty.label}',
-              style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 2),
+              style: TextStyle(
+                  color: accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2),
             ),
             const SizedBox(height: 6),
             const Text(
               'Complete!',
-              style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 20),
 
@@ -501,7 +541,12 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
                       size: 50,
                       color: earned ? const Color(0xFFFFC371) : Colors.white24,
                       shadows: earned
-                          ? [Shadow(color: const Color(0xFFFFC371).withOpacity(0.7), blurRadius: 16)]
+                          ? [
+                              Shadow(
+                                  color:
+                                      const Color(0xFFFFC371).withOpacity(0.7),
+                                  blurRadius: 16)
+                            ]
                           : [],
                     ),
                   ),
@@ -527,11 +572,13 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.skip_next_rounded, size: 14, color: Colors.white38),
+                    Icon(Icons.skip_next_rounded,
+                        size: 14, color: Colors.white38),
                     const SizedBox(width: 4),
                     Text(
                       'Next level in ${widget.autoAdvanceSec}s',
-                      style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ),
@@ -541,7 +588,8 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
                   child: LinearProgressIndicator(
                     value: frac.clamp(0.0, 1.0),
                     backgroundColor: Colors.white12,
-                    valueColor: AlwaysStoppedAnimation<Color>(accent.withOpacity(0.6)),
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(accent.withOpacity(0.6)),
                     minHeight: 3,
                   ),
                 ),
@@ -553,16 +601,26 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
             Row(
               children: [
                 Expanded(
-                  child: _OutBtn(label: 'MENU', icon: Icons.home_rounded, onPressed: widget.onMenu),
+                  child: _OutBtn(
+                      label: 'MENU',
+                      icon: Icons.home_rounded,
+                      onPressed: widget.onMenu),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _OutBtn(label: 'RETRY', icon: Icons.refresh_rounded, onPressed: widget.onRetry),
+                  child: _OutBtn(
+                      label: 'RETRY',
+                      icon: Icons.refresh_rounded,
+                      onPressed: widget.onRetry),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   flex: 2,
-                  child: _FillBtn(label: 'NEXT', icon: Icons.arrow_forward_rounded, color: accent, onPressed: widget.onNext),
+                  child: _FillBtn(
+                      label: 'NEXT',
+                      icon: Icons.arrow_forward_rounded,
+                      color: accent,
+                      onPressed: widget.onNext),
                 ),
               ],
             ),
@@ -584,11 +642,19 @@ class _Stat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: BoxDecoration(color: Colors.white.withOpacity(0.06), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12)),
       child: Column(children: [
-        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 10, letterSpacing: 1.2)),
+        Text(label,
+            style: const TextStyle(
+                color: Colors.white38, fontSize: 10, letterSpacing: 1.2)),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold)),
       ]),
     );
   }
@@ -598,16 +664,24 @@ class _OutBtn extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onPressed;
-  const _OutBtn({required this.label, required this.icon, required this.onPressed});
+  const _OutBtn(
+      {required this.label, required this.icon, required this.onPressed});
   @override
   Widget build(BuildContext context) {
     return TextButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 15, color: Colors.white38),
-      label: Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+      label: Text(label,
+          style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1)),
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(vertical: 13),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: Colors.white12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Colors.white12)),
       ),
     );
   }
@@ -618,13 +692,19 @@ class _FillBtn extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onPressed;
-  const _FillBtn({required this.label, required this.icon, required this.color, required this.onPressed});
+  const _FillBtn(
+      {required this.label,
+      required this.icon,
+      required this.color,
+      required this.onPressed});
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 18),
-      label: Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      label: Text(label,
+          style: const TextStyle(
+              fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
         foregroundColor: Colors.black,
@@ -644,33 +724,47 @@ class _ProgressBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = (progress * 100).round();
-    return LayoutBuilder(builder: (_, c) => Stack(children: [
-      Container(height: 6, color: Colors.white.withOpacity(0.07)),
-      AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-        height: 6,
-        width: c.maxWidth * progress.clamp(0.0, 1.0),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [color.withOpacity(0.6), color]),
-          boxShadow: [BoxShadow(color: color.withOpacity(0.6), blurRadius: 8, spreadRadius: 1)],
-        ),
-      ),
-      if (pct > 0 && pct < 100)
-        Positioned(
-          left: (c.maxWidth * progress.clamp(0.0, 1.0)).clamp(0.0, c.maxWidth - 36),
-          top: 7,
-          child: Text('$pct%', style: TextStyle(color: color.withOpacity(0.8), fontSize: 9, fontWeight: FontWeight.w800)),
-        ),
-    ]));
+    return LayoutBuilder(
+        builder: (_, c) => Stack(children: [
+              Container(height: 6, color: Colors.white.withOpacity(0.07)),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+                height: 6,
+                width: c.maxWidth * progress.clamp(0.0, 1.0),
+                decoration: BoxDecoration(
+                  gradient:
+                      LinearGradient(colors: [color.withOpacity(0.6), color]),
+                  boxShadow: [
+                    BoxShadow(
+                        color: color.withOpacity(0.6),
+                        blurRadius: 8,
+                        spreadRadius: 1)
+                  ],
+                ),
+              ),
+              if (pct > 0 && pct < 100)
+                Positioned(
+                  left: (c.maxWidth * progress.clamp(0.0, 1.0))
+                      .clamp(0.0, c.maxWidth - 36),
+                  top: 7,
+                  child: Text('$pct%',
+                      style: TextStyle(
+                          color: color.withOpacity(0.8),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800)),
+                ),
+            ]));
   }
 }
-
 
 class _TimerBadge extends StatelessWidget {
   final int timeLeftSec, timeLimitSec;
   final Color color;
-  const _TimerBadge({required this.timeLeftSec, required this.timeLimitSec, required this.color});
+  const _TimerBadge(
+      {required this.timeLeftSec,
+      required this.timeLimitSec,
+      required this.color});
   @override
   Widget build(BuildContext context) {
     final frac = timeLimitSec > 0 ? timeLeftSec / timeLimitSec : 0.0;
@@ -688,12 +782,19 @@ class _TimerBadge extends StatelessWidget {
         color: c.withOpacity(0.15),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: c.withOpacity(0.5)),
-        boxShadow: frac < 0.20 ? [BoxShadow(color: c.withOpacity(0.4), blurRadius: 10)] : [],
+        boxShadow: frac < 0.20
+            ? [BoxShadow(color: c.withOpacity(0.4), blurRadius: 10)]
+            : [],
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.timer_outlined, size: 14, color: c),
         const SizedBox(width: 5),
-        Text('$m:$s', style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 1)),
+        Text('$m:$s',
+            style: TextStyle(
+                color: c,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1)),
       ]),
     );
   }
@@ -702,7 +803,8 @@ class _TimerBadge extends StatelessWidget {
 class _TimeUpDialog extends StatelessWidget {
   final DifficultyMode difficulty;
   final VoidCallback onRetry, onMenu;
-  const _TimeUpDialog({required this.difficulty, required this.onRetry, required this.onMenu});
+  const _TimeUpDialog(
+      {required this.difficulty, required this.onRetry, required this.onMenu});
   @override
   Widget build(BuildContext context) {
     final accent = difficulty.color;
@@ -715,20 +817,33 @@ class _TimeUpDialog extends StatelessWidget {
       title: Column(children: [
         Icon(Icons.timer_off_rounded, color: accent, size: 48),
         const SizedBox(height: 12),
-        const Text("TIME'S UP!", textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: 2)),
+        const Text("TIME'S UP!",
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2)),
       ]),
-      content: Text('The clock ran out. Try again?', textAlign: TextAlign.center, style: TextStyle(color: Colors.white.withOpacity(0.6))),
+      content: Text('The clock ran out. Try again?',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white.withOpacity(0.6))),
       actionsAlignment: MainAxisAlignment.center,
       actions: [
-        TextButton(onPressed: onMenu, child: const Text('MENU', style: TextStyle(color: Colors.white38))),
+        TextButton(
+            onPressed: onMenu,
+            child: const Text('MENU', style: TextStyle(color: Colors.white38))),
         const SizedBox(width: 8),
         ElevatedButton.icon(
           onPressed: onRetry,
           icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text('RETRY', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+          label: const Text('RETRY',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
           style: ElevatedButton.styleFrom(
-            backgroundColor: accent, foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            backgroundColor: accent,
+            foregroundColor: Colors.black,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ],
@@ -751,7 +866,12 @@ class _DifficultyPill extends StatelessWidget {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Icon(difficulty.icon, size: 12, color: difficulty.color),
         const SizedBox(width: 5),
-        Text(difficulty.label, style: TextStyle(color: difficulty.color, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+        Text(difficulty.label,
+            style: TextStyle(
+                color: difficulty.color,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2)),
       ]),
     );
   }
@@ -762,7 +882,8 @@ class _HudButton extends StatelessWidget {
   final String? label;
   final Color? accent;
   final VoidCallback onPressed;
-  const _HudButton({required this.icon, required this.onPressed, this.label, this.accent});
+  const _HudButton(
+      {required this.icon, required this.onPressed, this.label, this.accent});
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -778,7 +899,12 @@ class _HudButton extends StatelessWidget {
           Icon(icon, color: accent ?? Colors.white70, size: 18),
           if (label != null) ...[
             const SizedBox(width: 6),
-            Text(label!, style: TextStyle(color: accent ?? Colors.white70, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1)),
+            Text(label!,
+                style: TextStyle(
+                    color: accent ?? Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1)),
           ],
         ]),
       ),
@@ -801,7 +927,11 @@ class _JamCounter extends StatelessWidget {
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         const Icon(Icons.block_rounded, color: Colors.redAccent, size: 16),
         const SizedBox(width: 6),
-        Text('$count', style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold)),
+        Text('$count',
+            style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+                fontWeight: FontWeight.bold)),
       ]),
     );
   }

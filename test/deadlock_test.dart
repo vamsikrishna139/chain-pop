@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chain_pop/game/levels/level_generator.dart';
+import 'package:chain_pop/game/levels/level_manager.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
 
 void main() {
@@ -15,7 +15,7 @@ void main() {
       final List<int> failedLevels = [];
 
       for (int id = 1; id <= 1000; id++) {
-        final level = LevelGenerator.generate(id);
+        final level = LevelManager.getLevel(id);
         if (!LevelSolver.isSolvable(level)) {
           failedLevels.add(id);
         }
@@ -35,7 +35,7 @@ void main() {
       // Levels with very high IDs hit the max node count on a small grid,
       // which exercises the fallback path.
       for (int id = 500; id <= 520; id++) {
-        final level = LevelGenerator.generate(id);
+        final level = LevelManager.getLevel(id);
         expect(
           LevelSolver.isSolvable(level),
           isTrue,

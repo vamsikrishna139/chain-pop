@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:chain_pop/game/levels/level_generator.dart';
+import 'package:chain_pop/game/levels/level_manager.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
 import 'package:chain_pop/game/levels/level.dart';
 
@@ -14,7 +14,7 @@ void main() {
 
   group('Regression Tests - Levels 1 to 5 Playthroughs', () {
     void simulateSolutionPath(int levelId) {
-      final level = LevelGenerator.generate(levelId);
+      final level = LevelManager.getLevel(levelId);
       final activeNodes = level.nodes.map((n) => n.clone()).toList();
 
       // Solution path = node IDs in ascending order (0, 1, 2, ...)

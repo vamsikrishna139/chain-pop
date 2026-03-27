@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
@@ -34,6 +35,7 @@ class WinOverlay extends StatefulWidget {
 class _WinOverlayState extends State<WinOverlay> with TickerProviderStateMixin {
   late final List<AnimationController> _starControllers;
   late final List<Animation<double>> _starScales;
+  late final List<Timer> _starStartTimers;
 
   @override
   void initState() {
@@ -45,8 +47,14 @@ class _WinOverlayState extends State<WinOverlay> with TickerProviderStateMixin {
         vsync: this,
         duration: const Duration(milliseconds: 400),
       );
-      Future.delayed(Duration(milliseconds: 200 + i * 140), ctrl.forward);
       return ctrl;
+    });
+    _starStartTimers = List.generate(3, (i) {
+      return Timer(Duration(milliseconds: 200 + i * 140), () {
+        if (mounted) {
+          _starControllers[i].forward();
+        }
+      });
     });
 
     _starScales = _starControllers.map((ctrl) {
@@ -58,6 +66,9 @@ class _WinOverlayState extends State<WinOverlay> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    for (final timer in _starStartTimers) {
+      timer.cancel();
+    }
     for (final c in _starControllers) c.dispose();
     super.dispose();
   }
@@ -84,7 +95,8 @@ class _WinOverlayState extends State<WinOverlay> with TickerProviderStateMixin {
         children: [
           // Drag handle
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
               color: Colors.white24,
               borderRadius: BorderRadius.circular(2),
@@ -127,7 +139,11 @@ class _WinOverlayState extends State<WinOverlay> with TickerProviderStateMixin {
                     size: 52,
                     color: earned ? const Color(0xFFFFC371) : Colors.white24,
                     shadows: earned
-                        ? [Shadow(color: const Color(0xFFFFC371).withOpacity(0.6), blurRadius: 16)]
+                        ? [
+                            Shadow(
+                                color: const Color(0xFFFFC371).withOpacity(0.6),
+                                blurRadius: 16)
+                          ]
                         : [],
                   ),
                 ),
@@ -200,9 +216,15 @@ class _StatChip extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text(label, style: const TextStyle(color: Colors.white38, fontSize: 11, letterSpacing: 1.2)),
+          Text(label,
+              style: const TextStyle(
+                  color: Colors.white38, fontSize: 11, letterSpacing: 1.2)),
           const SizedBox(height: 2),
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -214,14 +236,23 @@ class _OutlineButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onPressed;
-  const _OutlineButton({required this.label, required this.icon, required this.color, required this.onPressed});
+  const _OutlineButton(
+      {required this.label,
+      required this.icon,
+      required this.color,
+      required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
     return TextButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 16, color: color),
-      label: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+      label: Text(label,
+          style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1)),
       style: TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(vertical: 14),
         shape: RoundedRectangleBorder(
@@ -238,14 +269,20 @@ class _FilledButton extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onPressed;
-  const _FilledButton({required this.label, required this.icon, required this.color, required this.onPressed});
+  const _FilledButton(
+      {required this.label,
+      required this.icon,
+      required this.color,
+      required this.onPressed});
 
   @override
   Widget build(BuildContext context) {
     return ElevatedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 18),
-      label: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+      label: Text(label,
+          style: const TextStyle(
+              fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
         foregroundColor: Colors.black,
