@@ -167,7 +167,7 @@ void main() {
         for (final target in sortedByIndex) {
           final live = active.firstWhere((n) => n.id == target.id);
           expect(
-            LevelSolver.canRemove(live, active),
+            LevelSolver.canRemove(live, active, level),
             isTrue,
             reason: 'Level $id: node ${live.id} blocked at its step',
           );

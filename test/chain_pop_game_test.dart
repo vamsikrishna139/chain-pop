@@ -4,6 +4,83 @@ import 'package:chain_pop/game/chain_pop_game.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 
 void main() {
+  group('ChainPopGame callbacks and win', () {
+    test('registerExtraction invokes onNodeRemoved with counts', () {
+      var lastRemoved = -1;
+      var lastTotal = -1;
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+        onNodeRemoved: (removed, total) {
+          lastRemoved = removed;
+          lastTotal = total;
+        },
+      );
+      final nodes = [
+        NodeData(id: 0, x: 0, y: 0, dir: Direction.up),
+        NodeData(id: 1, x: 4, y: 4, dir: Direction.down),
+      ];
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: nodes.map((n) => n.clone()).toList(),
+      );
+      game.activeNodes.addAll(nodes.map((n) => n.clone()));
+
+      game.registerExtraction(nodes[0]);
+      expect(lastTotal, 2);
+      expect(lastRemoved, 1);
+    });
+
+    test('axis guides turn off after a valid extraction', () {
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+      );
+      final n = NodeData(id: 0, x: 0, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 3,
+        gridHeight: 3,
+        nodes: [n.clone()],
+      );
+      game.activeNodes.add(n.clone());
+
+      game.toggleAxisGuides();
+      expect(game.axisGuidesVisible, isTrue);
+      game.registerExtraction(n);
+      expect(game.axisGuidesVisible, isFalse);
+    });
+
+    test('checkWinCondition calls onWin once when board clears', () {
+      var wins = 0;
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () => wins++,
+      );
+      final n = NodeData(id: 0, x: 0, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 3,
+        gridHeight: 3,
+        nodes: [n.clone()],
+      );
+      game.activeNodes.add(n.clone());
+
+      game.registerExtraction(n);
+      expect(game.activeNodes, isEmpty);
+      game.checkWinCondition();
+      expect(wins, 1);
+      game.checkWinCondition();
+      expect(wins, 1);
+      expect(game.hasWon, isTrue);
+    });
+  });
+
   group('Chain Pop Mechanics Logic Tests', () {
     test('Level 2 Mechanic Checks', () {
       final game = ChainPopGame(levelId: 2, difficulty: DifficultyMode.easy, onWin: () {});
@@ -13,7 +90,13 @@ void main() {
         NodeData(id: 2, x: 1, y: 2, dir: Direction.up),
         NodeData(id: 3, x: 2, y: 1, dir: Direction.right),
       ];
-      
+
+      game.levelData = LevelData(
+        levelId: 2,
+        gridWidth: 6,
+        gridHeight: 6,
+        nodes: nodes.map((n) => n.clone()).toList(),
+      );
       game.activeNodes.addAll(nodes);
 
       expect(game.canExtract(nodes[0]), isFalse, reason: 'Node 1 is blocked by Node 2');
@@ -37,6 +120,12 @@ void main() {
         NodeData(id: 5, x: 2, y: 3, dir: Direction.left),
       ];
 
+      game.levelData = LevelData(
+        levelId: 3,
+        gridWidth: 6,
+        gridHeight: 6,
+        nodes: nodes.map((n) => n.clone()).toList(),
+      );
       game.activeNodes.addAll(nodes);
 
       expect(game.canExtract(nodes[0]), isFalse, reason: 'Node 1 blocked by Node 2 and Node 5');

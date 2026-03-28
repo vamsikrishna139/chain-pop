@@ -347,6 +347,37 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
 
+          // ── View: pinch / trackpad scroll to zoom; reset recenters 1× + pan ──
+          if (!_hasWon)
+            Positioned(
+              right: 10,
+              bottom: MediaQuery.of(context).padding.bottom + 76,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ZoomMiniButton(
+                    icon: Icons.grid_on_rounded,
+                    accent: accent,
+                    tooltip: _game.axisGuidesVisible
+                        ? 'Hide row & column guides'
+                        : 'Show row & column guides',
+                    selected: _game.axisGuidesVisible,
+                    onPressed: () {
+                      _game.toggleAxisGuides();
+                      setState(() {});
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                  _ZoomMiniButton(
+                    icon: Icons.fit_screen_rounded,
+                    accent: accent,
+                    tooltip: 'Reset view',
+                    onPressed: _game.resetView,
+                  ),
+                ],
+              ),
+            ),
+
           // ── Bottom controls ───────────────────────────────────────────────
           if (!_hasWon)
             Positioned(
@@ -873,6 +904,50 @@ class _DifficultyPill extends StatelessWidget {
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1.2)),
       ]),
+    );
+  }
+}
+
+class _ZoomMiniButton extends StatelessWidget {
+  final IconData icon;
+  final Color accent;
+  final String tooltip;
+  final VoidCallback onPressed;
+  final bool selected;
+
+  const _ZoomMiniButton({
+    required this.icon,
+    required this.accent,
+    required this.tooltip,
+    required this.onPressed,
+    this.selected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: selected
+                  ? accent.withOpacity(0.22)
+                  : Colors.white.withOpacity(0.07),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? accent.withOpacity(0.5) : accent.withOpacity(0.22),
+              ),
+            ),
+            child: Icon(icon, color: accent.withOpacity(0.95), size: 22),
+          ),
+        ),
+      ),
     );
   }
 }

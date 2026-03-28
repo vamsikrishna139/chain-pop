@@ -20,15 +20,13 @@ class LevelSolver {
   /// bounds (min/max removal waves ≈ puzzle “depth”).
   static int countRemovalWaves(LevelData level) {
     final nodes = level.nodes.map((n) => n.clone()).toList();
-    final gw = level.gridWidth;
-    final gh = level.gridHeight;
     final positions = <String>{for (final n in nodes) '${n.x},${n.y}'};
     var waves = 0;
 
     while (true) {
       final wave = [
         for (final n in nodes)
-          if (_canRemoveWithSet(n, positions, gw, gh)) n,
+          if (_canRemoveWithSet(n, positions, level)) n,
       ];
       if (wave.isEmpty) {
         return nodes.isEmpty ? waves : -1;
@@ -47,65 +45,55 @@ class LevelSolver {
   /// correct on large boards.
   static NodeData? getHint(
     List<NodeData> activeNodes,
-    int gridWidth,
-    int gridHeight,
+    LevelData level,
   ) {
     final positions = <String>{for (final n in activeNodes) '${n.x},${n.y}'};
     for (final n in activeNodes) {
-      if (_canRemoveWithSet(n, positions, gridWidth, gridHeight)) return n;
+      if (_canRemoveWithSet(n, positions, level)) return n;
     }
     return null;
   }
 
   /// Public API: returns true if [node] can be extracted from [allNodes].
   ///
-  /// O(n) per call — called once per tap, acceptable.
-  static bool canRemove(NodeData node, List<NodeData> allNodes) {
-    for (final other in allNodes) {
-      if (other.id == node.id) continue;
-      switch (node.dir) {
-        case Direction.up:
-          if (other.x == node.x && other.y < node.y) return false;
-        case Direction.down:
-          if (other.x == node.x && other.y > node.y) return false;
-        case Direction.left:
-          if (other.y == node.y && other.x < node.x) return false;
-        case Direction.right:
-          if (other.y == node.y && other.x > node.x) return false;
-      }
+  /// Walks a straight ray across the full bounding grid until it leaves the
+  /// board; [LevelData.playCells] does not shorten the ray (void is not an
+  /// exit). O(max(n, grid span)) per call.
+  static bool canRemove(NodeData node, List<NodeData> allNodes, LevelData level) {
+    final others = <String>{};
+    for (final o in allNodes) {
+      if (o.id != node.id) others.add('${o.x},${o.y}');
     }
-    return true;
+    return _canRemoveWithSet(node, others, level);
   }
 
   // ── Internal helper ──────────────────────────────────────────────────────
 
-  /// Position-set variant of [canRemove].
-  ///
-  /// Walks the ray cell-by-cell until the grid edge and checks the O(1) Set.
+  /// Walks the ray cell-by-cell across the full grid: blocked by another node;
+  /// clear only when the ray leaves the bounding rectangle.
   static bool _canRemoveWithSet(
     NodeData node,
-    Set<String> positions,
-    int gridWidth,
-    int gridHeight,
+    Set<String> otherPositions,
+    LevelData level,
   ) {
-    switch (node.dir) {
-      case Direction.up:
-        for (var y = node.y - 1; y >= 0; y--) {
-          if (positions.contains('${node.x},$y')) return false;
-        }
-      case Direction.down:
-        for (var y = node.y + 1; y < gridHeight; y++) {
-          if (positions.contains('${node.x},$y')) return false;
-        }
-      case Direction.left:
-        for (var x = node.x - 1; x >= 0; x--) {
-          if (positions.contains('$x,${node.y}')) return false;
-        }
-      case Direction.right:
-        for (var x = node.x + 1; x < gridWidth; x++) {
-          if (positions.contains('$x,${node.y}')) return false;
-        }
+    var x = node.x;
+    var y = node.y;
+    final gw = level.gridWidth;
+    final gh = level.gridHeight;
+
+    while (true) {
+      switch (node.dir) {
+        case Direction.up:
+          y--;
+        case Direction.down:
+          y++;
+        case Direction.left:
+          x--;
+        case Direction.right:
+          x++;
+      }
+      if (x < 0 || x >= gw || y < 0 || y >= gh) return true;
+      if (otherPositions.contains('$x,$y')) return false;
     }
-    return true;
   }
 }
