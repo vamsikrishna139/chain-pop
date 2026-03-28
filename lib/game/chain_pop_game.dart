@@ -11,6 +11,7 @@ import 'levels/generation/difficulty_mode.dart';
 import 'components/arrow_axis_guide_component.dart';
 import 'components/board_mask_component.dart';
 import 'components/node_component.dart';
+import '../theme/app_colors.dart';
 
 /// The core Flame game engine for Chain Pop.
 ///
@@ -88,7 +89,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   });
 
   @override
-  Color backgroundColor() => const Color(0xFF0F0F13);
+  Color backgroundColor() => AppColors.background;
 
   @override
   Future<void> onLoad() async {
@@ -316,12 +317,20 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   // ── Private ────────────────────────────────────────────────────────────────
 
+  /// Refreshes which nodes can exit the board. O(n × grid span): one position
+  /// set for all [activeNodes], then each node is checked via a ray walk only.
   void _rebuildExtractableIds() {
     _extractableIds.clear();
+    final positions = <String>{
+      for (final n in activeNodes) '${n.x},${n.y}',
+    };
     for (final node in activeNodes) {
-      if (LevelSolver.canRemove(node, activeNodes, levelData)) {
+      final key = '${node.x},${node.y}';
+      positions.remove(key);
+      if (LevelSolver.canRemoveWithPositions(node, positions, levelData)) {
         _extractableIds.add(node.id);
       }
+      positions.add(key);
     }
   }
 }

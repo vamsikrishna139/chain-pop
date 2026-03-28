@@ -8,6 +8,7 @@ import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
 import '../models/difficulty.dart';
 import '../services/storage_service.dart';
+import '../theme/app_colors.dart';
 
 /// Full-screen game view for a single level.
 ///
@@ -285,7 +286,7 @@ class _GameScreenState extends State<GameScreen> {
     final progress = _totalNodes > 0 ? _removedNodes / _totalNodes : 0.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F13),
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
           // Ambient tint
@@ -389,9 +390,9 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                   const SizedBox(height: 6),
                   _ZoomMiniButton(
-                    icon: Icons.fit_screen_rounded,
+                    icon: Icons.zoom_out_map,
                     accent: accent,
-                    tooltip: 'Reset view',
+                    tooltip: 'Reset zoom & center',
                     onPressed: _game.resetView,
                   ),
                 ],
@@ -544,7 +545,7 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
       child: Container(
         margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF14141C),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(28),
           border: Border.all(color: accent.withOpacity(0.3), width: 1.5),
           boxShadow: [
@@ -590,12 +591,12 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
                     child: Icon(
                       earned ? Icons.star_rounded : Icons.star_outline_rounded,
                       size: 50,
-                      color: earned ? const Color(0xFFFFC371) : Colors.white24,
+                      color: earned ? AppColors.starGold : Colors.white24,
                       shadows: earned
                           ? [
                               Shadow(
                                   color:
-                                      const Color(0xFFFFC371).withOpacity(0.7),
+                                      AppColors.starGold.withOpacity(0.7),
                                   blurRadius: 16)
                             ]
                           : [],
@@ -820,9 +821,9 @@ class _TimerBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final frac = timeLimitSec > 0 ? timeLeftSec / timeLimitSec : 0.0;
     final c = frac < 0.20
-        ? const Color(0xFFFF5F6D)
+        ? AppColors.timerWarning
         : frac < 0.40
-            ? const Color(0xFFFFC371)
+            ? AppColors.timerCaution
             : color;
     final m = (timeLeftSec ~/ 60).toString();
     final s = (timeLeftSec % 60).toString().padLeft(2, '0');
@@ -860,7 +861,7 @@ class _TimeUpDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = difficulty.color;
     return AlertDialog(
-      backgroundColor: const Color(0xFF1A1A22),
+      backgroundColor: AppColors.surfaceDialog,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
         side: BorderSide(color: accent.withOpacity(0.3)),

@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../../theme/app_colors.dart';
 import '../level.dart';
 import '../level_solver.dart';
 import 'difficulty_mode.dart';
@@ -742,14 +743,7 @@ class LevelGenerator {
   // Helpers
   // ────────────────────────────────────────────────────────────────────────
 
-  List<Color> _getColorPalette() => const [
-        Color(0xFF60EFFF),
-        Color(0xFF00FF87),
-        Color(0xFFFF5F6D),
-        Color(0xFFFFC371),
-        Color(0xFFA18CD1),
-        Color(0xFF4FACFE),
-      ];
+  List<Color> _getColorPalette() => AppColors.nodePalette;
 
   /// Returns the grid width for a given [levelId] and [mode].
   static int calculateGridSize(int levelId, DifficultyMode mode) {

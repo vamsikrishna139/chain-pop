@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../game/levels/generation/difficulty_mode.dart';
+import '../theme/app_colors.dart';
 
 /// Extension on [DifficultyMode] that adds UI metadata.
 ///
@@ -31,9 +32,9 @@ extension DifficultyExt on DifficultyMode {
   /// Primary accent colour for this difficulty.
   Color get color {
     switch (this) {
-      case DifficultyMode.easy:   return const Color(0xFF00F2FE); // cyan
-      case DifficultyMode.medium: return const Color(0xFFFFC371); // amber
-      case DifficultyMode.hard:   return const Color(0xFFFF5F6D); // crimson
+      case DifficultyMode.easy:   return AppColors.accentEasy;
+      case DifficultyMode.medium: return AppColors.accentMedium;
+      case DifficultyMode.hard:   return AppColors.accentHard;
     }
   }
 
