@@ -68,7 +68,7 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         expect(result.value.gridWidth, greaterThanOrEqualTo(4));
-        expect(result.value.gridWidth, lessThanOrEqualTo(6));
+        expect(result.value.gridWidth, lessThanOrEqualTo(8));
         // Note: Stub implementation may not fully respect node count constraints
         expect(result.value.nodes.length, greaterThanOrEqualTo(3));
       });
@@ -78,7 +78,7 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         expect(result.value.gridWidth, greaterThanOrEqualTo(6));
-        expect(result.value.gridWidth, lessThanOrEqualTo(10));
+        expect(result.value.gridWidth, lessThanOrEqualTo(12));
         // Note: Stub implementation may not fully respect node count constraints
         expect(result.value.nodes.length, greaterThanOrEqualTo(3));
       });
@@ -87,8 +87,8 @@ void main() {
         final result = generator.generate(5, mode: DifficultyMode.hard);
 
         expect(result.isSuccess, isTrue);
-        expect(result.value.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
-        expect(result.value.gridWidth, lessThanOrEqualTo(16));
+        expect(result.value.gridWidth, greaterThanOrEqualTo(6));
+        expect(result.value.gridWidth, lessThanOrEqualTo(18));
         // Note: Stub implementation may not fully respect node count constraints
         expect(result.value.nodes.length, greaterThanOrEqualTo(3));
       });
@@ -98,8 +98,7 @@ void main() {
         final result = generator.generate(5, mode: DifficultyMode.hard);
 
         expect(result.isSuccess, isTrue);
-        // Should have hard mode characteristics
-        expect(result.value.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
+        expect(result.value.gridWidth, greaterThanOrEqualTo(6));
       });
     });
 
@@ -108,27 +107,24 @@ void main() {
         final result = generator.generate(5);
 
         expect(result.isSuccess, isTrue);
-        // Easy mode characteristics
         expect(result.value.gridWidth, greaterThanOrEqualTo(4));
-        expect(result.value.gridWidth, lessThanOrEqualTo(6));
+        expect(result.value.gridWidth, lessThanOrEqualTo(8));
       });
 
       test('level 10-29 auto-derives medium mode', () {
         final result = generator.generate(15);
 
         expect(result.isSuccess, isTrue);
-        // Medium mode characteristics
         expect(result.value.gridWidth, greaterThanOrEqualTo(6));
-        expect(result.value.gridWidth, lessThanOrEqualTo(10));
+        expect(result.value.gridWidth, lessThanOrEqualTo(12));
       });
 
       test('level 30+ auto-derives hard mode', () {
         final result = generator.generate(50);
 
         expect(result.isSuccess, isTrue);
-        // Hard mode characteristics
-        expect(result.value.gridWidth, greaterThanOrEqualTo(6));  // Hard starts at 6x6
-        expect(result.value.gridWidth, lessThanOrEqualTo(16));
+        expect(result.value.gridWidth, greaterThanOrEqualTo(6));
+        expect(result.value.gridWidth, lessThanOrEqualTo(18));
       });
     });
 

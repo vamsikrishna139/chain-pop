@@ -56,7 +56,7 @@ class DifficultyParameters {
         return const DifficultyParameters(
           mode: DifficultyMode.medium,
           minChainLength: 2,
-          maxChainLength: 6,
+          maxChainLength: 8,
           densityFactor: 0.45,
           minNodes: 10,
           maxNodes: 30,
@@ -65,9 +65,9 @@ class DifficultyParameters {
         return const DifficultyParameters(
           mode: DifficultyMode.hard,
           minChainLength: 5,
-          maxChainLength: 10,
+          maxChainLength: 12,
           densityFactor: 0.40,
-          minNodes: 5,   // low so early Hard (6×6 grid) doesn't clamp-crash
+          minNodes: 5,
           maxNodes: 60,
         );
     }

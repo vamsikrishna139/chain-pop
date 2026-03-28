@@ -21,7 +21,7 @@ void main() {
 
         expect(params.mode, equals(DifficultyMode.medium));
         expect(params.minChainLength, equals(2));
-        expect(params.maxChainLength, equals(6));
+        expect(params.maxChainLength, equals(8));
         expect(params.densityFactor, equals(0.45));
         expect(params.minNodes, equals(10));
         expect(params.maxNodes, equals(30));
@@ -32,9 +32,9 @@ void main() {
 
         expect(params.mode, equals(DifficultyMode.hard));
         expect(params.minChainLength, equals(5));
-        expect(params.maxChainLength, equals(10));
+        expect(params.maxChainLength, equals(12));
         expect(params.densityFactor, equals(0.40));
-        expect(params.minNodes, equals(5));   // low so early Hard 6×6 grid doesn't clamp
+        expect(params.minNodes, equals(5));
         expect(params.maxNodes, equals(60));
       });
     });

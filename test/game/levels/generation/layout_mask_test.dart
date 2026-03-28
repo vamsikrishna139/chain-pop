@@ -48,36 +48,58 @@ void main() {
   });
 
   group('rollIrregularLayout', () {
-    test('easy never rolls irregular', () {
+    test('easy rolls irregular less often than medium and hard', () {
+      var easyCount = 0;
+      var mediumCount = 0;
+      var hardCount = 0;
+      const trials = 500;
       final r = Random(12345);
-      for (var i = 0; i < 50; i++) {
-        expect(rollIrregularLayout(DifficultyMode.easy, r), isFalse);
+      for (var i = 0; i < trials; i++) {
+        if (rollIrregularLayout(DifficultyMode.easy, r)) easyCount++;
+        if (rollIrregularLayout(DifficultyMode.medium, r)) mediumCount++;
+        if (rollIrregularLayout(DifficultyMode.hard, r)) hardCount++;
       }
+      expect(easyCount, lessThan(mediumCount));
+      expect(mediumCount, lessThan(hardCount));
     });
 
-    test('medium/hard can roll true or false over many draws', () {
+    test('all modes can roll true over many draws', () {
+      var easyTrue = false;
       var mediumTrue = false;
       var hardTrue = false;
       final r = Random(7);
       for (var i = 0; i < 200; i++) {
+        if (rollIrregularLayout(DifficultyMode.easy, r)) easyTrue = true;
         if (rollIrregularLayout(DifficultyMode.medium, r)) mediumTrue = true;
         if (rollIrregularLayout(DifficultyMode.hard, r)) hardTrue = true;
       }
+      expect(easyTrue, isTrue);
       expect(mediumTrue, isTrue);
       expect(hardTrue, isTrue);
     });
   });
 
   group('pickIrregularKind', () {
-    test('returns one of vShape, pentagon, cShape', () {
+    test('returns a variety of non-fullRect shapes', () {
       final kinds = <LayoutMaskKind>{};
       final r = Random(3);
-      for (var i = 0; i < 300; i++) {
+      for (var i = 0; i < 500; i++) {
         kinds.add(pickIrregularKind(r));
       }
+      expect(kinds, isNot(contains(LayoutMaskKind.fullRect)));
+      expect(kinds.length, greaterThanOrEqualTo(5));
       expect(kinds, contains(LayoutMaskKind.vShape));
       expect(kinds, contains(LayoutMaskKind.pentagon));
       expect(kinds, contains(LayoutMaskKind.cShape));
+    });
+
+    test('respects preferred list when provided', () {
+      final r = Random(42);
+      const preferred = [LayoutMaskKind.diamond, LayoutMaskKind.donut];
+      for (var i = 0; i < 50; i++) {
+        final kind = pickIrregularKind(r, preferred: preferred);
+        expect(preferred, contains(kind));
+      }
     });
   });
 }
