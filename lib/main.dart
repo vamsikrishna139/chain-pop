@@ -27,7 +27,7 @@ class ChainPopApp extends StatelessWidget {
       title: 'Chain Pop',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1E1E24),
+        scaffoldBackgroundColor: const Color(0xFF0F0F13),
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         useMaterial3: true,
       ),

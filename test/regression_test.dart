@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/level_manager.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
 import 'package:chain_pop/game/levels/level.dart';
@@ -27,7 +28,7 @@ void main() {
         final liveNode = activeNodes.firstWhere((n) => n.id == target.id);
 
         expect(
-          LevelSolver.canRemove(liveNode, activeNodes),
+          LevelSolver.canRemove(liveNode, activeNodes, level),
           isTrue,
           reason: 'Level $levelId: node ${liveNode.id} blocked at step $step',
         );
@@ -47,5 +48,32 @@ void main() {
     test('Level 3 Playthrough', () => simulateSolutionPath(3));
     test('Level 4 Playthrough', () => simulateSolutionPath(4));
     test('Level 5 Playthrough', () => simulateSolutionPath(5));
+  });
+
+  group('Regression — ascending-ID path for all difficulties (levels 1–10)', () {
+    void simulateForMode(DifficultyMode mode) {
+      for (var levelId = 1; levelId <= 10; levelId++) {
+        final level = LevelManager.getLevel(levelId, mode: mode);
+        final activeNodes = level.nodes.map((n) => n.clone()).toList();
+        final solutionOrder = List<NodeData>.from(activeNodes)
+          ..sort((a, b) => a.id.compareTo(b.id));
+
+        for (var step = 0; step < solutionOrder.length; step++) {
+          final target = solutionOrder[step];
+          final liveNode = activeNodes.firstWhere((n) => n.id == target.id);
+          expect(
+            LevelSolver.canRemove(liveNode, activeNodes, level),
+            isTrue,
+            reason: '$mode level $levelId: node ${liveNode.id} blocked at step $step',
+          );
+          activeNodes.removeWhere((n) => n.id == liveNode.id);
+        }
+        expect(activeNodes, isEmpty, reason: '$mode level $levelId not empty');
+      }
+    }
+
+    test('Easy', () => simulateForMode(DifficultyMode.easy));
+    test('Medium', () => simulateForMode(DifficultyMode.medium));
+    test('Hard', () => simulateForMode(DifficultyMode.hard));
   });
 }

@@ -28,16 +28,12 @@ void main() {
 
         final level = result.value;
         final active = level.nodes.map((n) => n.clone()).toList();
-        final hint = LevelSolver.getHint(
-          active,
-          level.gridWidth,
-          level.gridHeight,
-        );
+        final hint = LevelSolver.getHint(active, level);
 
         expect(hint, isNotNull, reason: 'No hint available for level $id');
         // Verify the hint node is actually extractable
         expect(
-          LevelSolver.canRemove(hint!, active),
+          LevelSolver.canRemove(hint!, active, level),
           isTrue,
           reason: 'Hint node ${hint.id} is not extractable in level $id',
         );
@@ -53,11 +49,7 @@ void main() {
       int steps = 0;
 
       while (active.isNotEmpty) {
-        final hint = LevelSolver.getHint(
-          active,
-          level.gridWidth,
-          level.gridHeight,
-        );
+        final hint = LevelSolver.getHint(active, level);
         expect(hint, isNotNull, reason: 'Solver stuck at step $steps');
         active.removeWhere((n) => n.id == hint!.id);
         steps++;

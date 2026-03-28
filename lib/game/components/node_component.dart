@@ -46,22 +46,17 @@ class NodeComponent extends PositionComponent
 
   @override
   void render(Canvas canvas) {
-    // During fly-out the node is no longer in _extractableIds — still draw it
-    // at full brightness so the motion to the screen edge is visible.
-    final isExtractable = isPopping || gameRef.isExtractable(data.id);
+    // Same full brightness for every node so legal moves are not telegraphed;
+    // wrong taps still jam via [onTapDown] / [gameRef.canExtract].
     final rect = size.toRect();
     final rrect = RRect.fromRectAndRadius(rect, Radius.circular(cellSize * 0.18));
 
-    // ── Visual state: extractable = full glow; blocked = dimmed ──────────────
     final nodeColor = isHighlighted ? Colors.white : data.color;
-    final opacity = isExtractable ? 1.0 : 0.55;
-    final effectiveColor = nodeColor.withOpacity(opacity);
+    final effectiveColor = nodeColor.withOpacity(1.0);
 
-    // Outer glow — stronger for extractable nodes, subtle for blocked
-    final glowRadius =
-        isHighlighted ? 20.0 : (isExtractable ? 14.0 : 4.0);
-    final glowColor = (isHighlighted ? Colors.white : data.color)
-        .withOpacity(isExtractable ? 0.55 : 0.18);
+    final glowRadius = isHighlighted ? 20.0 : 14.0;
+    final glowColor =
+        (isHighlighted ? Colors.white : data.color).withOpacity(0.55);
 
     canvas.drawShadow(
       Path()..addRRect(rrect),
@@ -70,19 +65,17 @@ class NodeComponent extends PositionComponent
       true,
     );
 
-    // Fill
     canvas.drawRRect(
       rrect,
       Paint()..color = effectiveColor,
     );
 
-    // Inner gloss
     canvas.drawRRect(
       rrect,
       Paint()
         ..shader = LinearGradient(
           colors: [
-            Colors.white.withOpacity(isExtractable ? 0.35 : 0.12),
+            Colors.white.withOpacity(0.35),
             Colors.transparent,
           ],
           begin: Alignment.topLeft,
@@ -90,22 +83,10 @@ class NodeComponent extends PositionComponent
         ).createShader(rect),
     );
 
-    // Extractable border pulse (slight white rim)
-    if (isExtractable && !isHighlighted) {
-      canvas.drawRRect(
-        rrect,
-        Paint()
-          ..color = Colors.white.withOpacity(0.18)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = cellSize * 0.045,
-      );
-    }
-
-    // Arrow
     final arrowPaint = Paint()
       ..color = isHighlighted
           ? Colors.black
-          : Colors.white.withOpacity(isExtractable ? 0.92 : 0.45)
+          : Colors.white.withOpacity(0.92)
       ..strokeWidth = cellSize * 0.09
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;

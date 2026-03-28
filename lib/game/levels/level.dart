@@ -30,6 +30,12 @@ class LevelData {
   final int levelId;
   final int gridWidth;
   final int gridHeight;
+
+  /// When non-null and non-empty, only these `"x,y"` cells may hold nodes
+  /// (irregular silhouette). Blocking rays still use straight lines across the
+  /// full `gridWidth`×`gridHeight` bounds. When null, every cell may hold a node.
+  final Set<String>? playCells;
+
   final List<NodeData> nodes;
 
   LevelData({
@@ -37,5 +43,6 @@ class LevelData {
     required this.gridWidth,
     required this.gridHeight,
     required this.nodes,
+    this.playCells,
   });
 }

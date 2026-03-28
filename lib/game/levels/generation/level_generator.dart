@@ -5,6 +5,7 @@ import '../level_solver.dart';
 import 'difficulty_mode.dart';
 import 'generation_error.dart';
 import 'difficulty_parameters.dart';
+import 'layout_mask.dart';
 import 'level_configuration.dart';
 import 'level_validator.dart';
 import 'result.dart';
@@ -16,15 +17,21 @@ import 'result.dart';
 ///
 /// The backward generation algorithm guarantees solvability by construction:
 ///
-/// 1. **Select positions** — Pick N unique random positions on the grid.
-/// 2. **Define solution order** — Shuffle positions to create a removal sequence.
+/// 1. **Play region** — On medium/hard, sometimes pick an irregular subset of
+///    cells ([LevelData.playCells]): V, pentagon, or C-notch. Easy stays a full
+///    rectangle. Nodes are placed only inside that region. **Rays** for blocking
+///    still run in a straight line across the **full** bounding grid until the
+///    edge (void does not act as an exit); only other nodes on that line block.
+/// 2. **Select positions** — Pick N unique random positions in the play region
+///    (or full grid when no mask).
+/// 3. **Define solution order** — Shuffle positions to create a removal sequence.
 ///    Index 0 = first node the player removes, index N-1 = last.
-/// 3. **Assign directions** — For each node at index `i`, only nodes at indices
+/// 4. **Assign directions** — For each node at index `i`, only nodes at indices
 ///    `i+1..N-1` are still on the board. Assign a direction whose ray does **not**
 ///    pass through any of those "future" nodes.
-/// 4. **Validate** — Run [LevelValidator] plus removal-wave bounds from
+/// 5. **Validate** — Run [LevelValidator] plus removal-wave bounds from
 ///    [DifficultyParameters.minChainLength] / [maxChainLength].
-/// 5. **Fallback** — If all retries fail, return a guaranteed-solvable strip layout
+/// 6. **Fallback** — If all retries fail, return a guaranteed-solvable strip layout
 ///    (does not enforce wave bounds — last resort only).
 ///
 /// Because each direction is chosen to avoid future nodes, it is mathematically
@@ -171,11 +178,28 @@ class LevelGenerator {
     Random random,
   ) {
     try {
+      Set<String>? playCells;
+      if (rollIrregularLayout(config.difficulty.mode, random)) {
+        final kind = pickIrregularKind(random);
+        final mask = buildLayoutMask(
+          kind,
+          config.gridWidth,
+          config.gridHeight,
+          random: random,
+        );
+        if (mask != null &&
+            mask.length >= config.targetNodeCount &&
+            mask.length >= config.difficulty.minNodes) {
+          playCells = mask;
+        }
+      }
+
       final positions = _selectUniquePositions(
         config.targetNodeCount,
         config.gridWidth,
         config.gridHeight,
         random,
+        playCells,
       );
 
       if (positions.length < config.targetNodeCount) {
@@ -205,6 +229,7 @@ class LevelGenerator {
         levelId: config.levelId,
         gridWidth: config.gridWidth,
         gridHeight: config.gridHeight,
+        playCells: playCells,
         nodes: nodes,
       ));
     } catch (e) {
@@ -224,9 +249,25 @@ class LevelGenerator {
     int gridWidth,
     int gridHeight,
     Random random,
+    Set<String>? allowedCells,
   ) {
     final positions = <Point<int>>[];
     final used = <String>{};
+
+    if (allowedCells != null && allowedCells.isNotEmpty) {
+      final pool = allowedCells
+          .map((k) {
+            final parts = k.split(',');
+            return Point(int.parse(parts[0]), int.parse(parts[1]));
+          })
+          .toList()
+        ..shuffle(random);
+      if (pool.length < count) return positions;
+      for (var i = 0; i < count; i++) {
+        positions.add(pool[i]);
+      }
+      return positions;
+    }
 
     // Phase 1 — stratified: pick one position per sector
     if (count > 1) {
@@ -342,7 +383,13 @@ class LevelGenerator {
 
     final shuffled = Direction.values.toList()..shuffle(random);
     for (final dir in shuffled) {
-      if (!_directionHitsNodes(position, dir, futureSet, gridWidth, gridHeight)) {
+      if (!_directionHitsNodes(
+        position,
+        dir,
+        futureSet,
+        gridWidth,
+        gridHeight,
+      )) {
         return dir;
       }
     }
@@ -377,8 +424,10 @@ class LevelGenerator {
       // Ray left the grid — path is clear.
       if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return false;
 
-      // Ray hit a future node — direction is blocked.
-      if (futureSet.contains('$x,$y')) return true;
+      final key = '$x,$y';
+      // Ray hit a future node — direction is blocked (full grid line; void
+      // cells do not stop the ray).
+      if (futureSet.contains(key)) return true;
     }
   }
 
