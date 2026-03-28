@@ -1,47 +1,58 @@
-import 'dart:collection';
 import 'level.dart';
 
 /// Stateless solver utilities for Chain Pop.
 ///
 /// Performance notes:
 /// - [canRemove] is O(n) — called once per tap, acceptable.
-/// - [isSolvable] uses wave-based BFS with a position Set — O(n²) worst case
-///   but with much smaller constant than the old break-and-restart loop.
-/// - [getHint] builds a position Set once for all O(1) direction checks.
+/// - [isSolvable] / [countRemovalWaves] use parallel “waves” of removal — each
+///   wave removes every currently extractable node; typically O(waves × n).
+/// - [getHint] builds a position Set once; ray walks are bounded by grid size.
 class LevelSolver {
   /// Returns true if the level can be fully cleared from its initial state.
   ///
-  /// Uses wave-based removal: instead of restarting from index 0 after every
-  /// single removal, all simultaneously removable nodes are cleared in one
-  /// "wave". This reduces iterations from O(n²) to O(waves × n).
-  static bool isSolvable(LevelData level) {
+  /// Uses wave-based removal: all simultaneously removable nodes are cleared in
+  /// each wave until the board is empty or no progress is possible.
+  static bool isSolvable(LevelData level) => countRemovalWaves(level) >= 0;
+
+  /// Number of parallel-removal waves until the board is empty, or `-1` if stuck.
+  ///
+  /// Used by [LevelGenerator] to enforce [DifficultyParameters] chain-length
+  /// bounds (min/max removal waves ≈ puzzle “depth”).
+  static int countRemovalWaves(LevelData level) {
     final nodes = level.nodes.map((n) => n.clone()).toList();
+    final gw = level.gridWidth;
+    final gh = level.gridHeight;
     final positions = <String>{for (final n in nodes) '${n.x},${n.y}'};
+    var waves = 0;
 
     while (true) {
-      // Collect every node that is currently removable in this wave.
       final wave = [
         for (final n in nodes)
-          if (_canRemoveWithSet(n, positions)) n,
+          if (_canRemoveWithSet(n, positions, gw, gh)) n,
       ];
-      if (wave.isEmpty) break;
-
+      if (wave.isEmpty) {
+        return nodes.isEmpty ? waves : -1;
+      }
+      waves++;
       for (final n in wave) {
         nodes.remove(n);
         positions.remove('${n.x},${n.y}');
       }
     }
-    return nodes.isEmpty;
   }
 
   /// Finds the first currently-removable node for the hint system.
   ///
-  /// Builds the position set once, then checks each node in O(grid_size) — 
-  /// far fewer string comparisons than the old O(n) list scan per node.
-  static NodeData? getHint(List<NodeData> activeNodes) {
+  /// Rays are clipped to [gridWidth] × [gridHeight] so down/right scans stay
+  /// correct on large boards.
+  static NodeData? getHint(
+    List<NodeData> activeNodes,
+    int gridWidth,
+    int gridHeight,
+  ) {
     final positions = <String>{for (final n in activeNodes) '${n.x},${n.y}'};
     for (final n in activeNodes) {
-      if (_canRemoveWithSet(n, positions)) return n;
+      if (_canRemoveWithSet(n, positions, gridWidth, gridHeight)) return n;
     }
     return null;
   }
@@ -70,24 +81,28 @@ class LevelSolver {
 
   /// Position-set variant of [canRemove].
   ///
-  /// Walks the ray cell-by-cell and checks the O(1) Set instead of scanning
-  /// the full node list.  Grid size upper-bound keeps the loop bounded.
-  static bool _canRemoveWithSet(NodeData node, Set<String> positions) {
+  /// Walks the ray cell-by-cell until the grid edge and checks the O(1) Set.
+  static bool _canRemoveWithSet(
+    NodeData node,
+    Set<String> positions,
+    int gridWidth,
+    int gridHeight,
+  ) {
     switch (node.dir) {
       case Direction.up:
-        for (int y = node.y - 1; y >= 0; y--) {
+        for (var y = node.y - 1; y >= 0; y--) {
           if (positions.contains('${node.x},$y')) return false;
         }
       case Direction.down:
-        for (int y = node.y + 1; y <= 20; y++) {
+        for (var y = node.y + 1; y < gridHeight; y++) {
           if (positions.contains('${node.x},$y')) return false;
         }
       case Direction.left:
-        for (int x = node.x - 1; x >= 0; x--) {
+        for (var x = node.x - 1; x >= 0; x--) {
           if (positions.contains('$x,${node.y}')) return false;
         }
       case Direction.right:
-        for (int x = node.x + 1; x <= 20; x++) {
+        for (var x = node.x + 1; x < gridWidth; x++) {
           if (positions.contains('$x,${node.y}')) return false;
         }
     }

@@ -134,7 +134,11 @@ class ChainPopGame extends FlameGame {
   }
 
   void showHint() {
-    final hintNode = LevelSolver.getHint(activeNodes);
+    final hintNode = LevelSolver.getHint(
+      activeNodes,
+      levelData.gridWidth,
+      levelData.gridHeight,
+    );
     if (hintNode == null) return;
     for (final comp in board.children.whereType<NodeComponent>()) {
       if (comp.data.id == hintNode.id) {

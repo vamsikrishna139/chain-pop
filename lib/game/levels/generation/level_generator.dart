@@ -1,8 +1,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../level.dart';
+import '../level_solver.dart';
 import 'difficulty_mode.dart';
 import 'generation_error.dart';
+import 'difficulty_parameters.dart';
 import 'level_configuration.dart';
 import 'level_validator.dart';
 import 'result.dart';
@@ -20,8 +22,10 @@ import 'result.dart';
 /// 3. **Assign directions** — For each node at index `i`, only nodes at indices
 ///    `i+1..N-1` are still on the board. Assign a direction whose ray does **not**
 ///    pass through any of those "future" nodes.
-/// 4. **Validate** — Run [LevelValidator] as a safety net before returning.
-/// 5. **Fallback** — If all retries fail, return a guaranteed-solvable diagonal layout.
+/// 4. **Validate** — Run [LevelValidator] plus removal-wave bounds from
+///    [DifficultyParameters.minChainLength] / [maxChainLength].
+/// 5. **Fallback** — If all retries fail, return a guaranteed-solvable strip layout
+///    (does not enforce wave bounds — last resort only).
 ///
 /// Because each direction is chosen to avoid future nodes, it is mathematically
 /// impossible to create a deadlock.
@@ -50,6 +54,33 @@ class LevelGenerator {
   LevelGenerator({LevelValidator? validator})
       : _validator = validator ?? LevelValidator();
 
+  /// Effective inclusive bounds on [LevelSolver.countRemovalWaves] for a level
+  /// with [nodeCount] nodes under [d].
+  ///
+  /// Hard mode tiers down the documented floor as boards grow: very small
+  /// puzzles rarely reach five parallel-removal waves, yet we still want a
+  /// stricter floor on huge layouts when random layouts tend to be deeper.
+  static (int min, int max) removalWaveBounds(
+    DifficultyParameters d,
+    int nodeCount,
+  ) {
+    if (nodeCount <= 0) return (0, 0);
+    var minW = d.minChainLength;
+    final maxW = min(d.maxChainLength, nodeCount);
+    if (d.mode == DifficultyMode.hard) {
+      if (nodeCount <= 18) {
+        minW = min(minW, 2);
+      } else if (nodeCount <= 35) {
+        minW = min(minW, 3);
+      } else if (nodeCount <= 55) {
+        minW = min(minW, 4);
+      }
+    }
+    minW = min(minW, maxW);
+    if (minW < 1) minW = 1;
+    return (minW, maxW);
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // Public API
   // ──────────────────────────────────────────────────────────────────────────
@@ -60,8 +91,8 @@ class LevelGenerator {
   /// produces the same puzzle.  Difficulty mode can be auto-derived or
   /// explicitly specified.
   ///
-  /// Attempts generation up to 3 times. On persistent failure returns a
-  /// simple, guaranteed-solvable fallback level.
+  /// Attempts generation up to 16 times (varying seed and scaled node count).
+  /// On persistent failure returns a simple, guaranteed-solvable fallback level.
   ///
   /// Parameters:
   /// - [levelId] — Unique level identifier, used as random seed.
@@ -86,7 +117,7 @@ class LevelGenerator {
     // Primary attempts: vary both the seed AND the node count on later tries.
     // This explores structurally different configurations, not just different
     // random orderings of the same density.
-    for (int attempt = 0; attempt < 8; attempt++) {
+    for (int attempt = 0; attempt < 16; attempt++) {
       final rng = Random(levelId * 31337 + attempt * 999983);
 
       // Gradually reduce node count in later retries (−15% per two attempts)
@@ -108,9 +139,15 @@ class LevelGenerator {
 
       final result = _attemptGeneration(scaledConfig, rng);
       if (result.isSuccess) {
-        final validationResult = _validator.validate(result.value);
-        if (validationResult.isValid) {
-          return Result.success(result.value);
+        final level = result.value;
+        final validationResult = _validator.validate(level);
+        if (!validationResult.isValid) continue;
+
+        final waves = LevelSolver.countRemovalWaves(level);
+        final (wMin, wMax) =
+            removalWaveBounds(scaledConfig.difficulty, level.nodes.length);
+        if (waves >= wMin && waves <= wMax) {
+          return Result.success(level);
         }
       }
     }
@@ -432,7 +469,7 @@ class LevelGenerator {
   ///
   /// - Easy:   4×4 → 6×6
   /// - Medium: 6×6 → 10×10
-  /// - Hard:   10×10 → 20×20
+  /// - Hard:   6×6 → 16×16 (see [LevelConfiguration._calculateGridSize])
   static int calculateGridSize(int levelId, DifficultyMode mode) {
     return LevelConfiguration.fromLevelId(levelId, mode: mode).gridWidth;
   }

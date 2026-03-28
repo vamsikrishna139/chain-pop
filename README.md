@@ -21,18 +21,20 @@ All levels are generated procedurally using the **backward-generation algorithm*
 1. **Select positions** — Pick N unique random positions on the grid.
 2. **Define solution order** — Shuffle positions to create the removal sequence. Index 0 = first node the player taps; index N-1 = last.
 3. **Assign directions** — For each node at index `i`, only nodes at `i+1..N-1` are still on the board. Assign a direction whose ray does **not** pass through any of those "future" nodes.
-4. **Validate** — Run `LevelValidator` as a double-safety net.
-5. **Fallback** — If all retries fail, return a guaranteed-solvable diagonal layout.
+4. **Validate** — Run `LevelValidator`, then enforce removal-wave count within each mode’s chain-length band (see below).
+5. **Fallback** — If all retries fail, return a guaranteed-solvable strip layout (validator bypass; wave band not applied).
 
 Because every direction is chosen to avoid future nodes, no deadlock can ever occur.
 
 ### Difficulty Modes
 
-| Mode   | Grid Size  | Nodes    | Density | Chain Length | Auto levels |
-|--------|-----------|----------|---------|--------------|------------|
-| Easy   | 4×4–6×6   | 4–12     | 25%     | 2–4          | 0–9        |
-| Medium | 6×6–10×10 | 10–30    | 45%     | 3–6          | 10–29      |
-| Hard   | 10×10–20×20 | 25–100 | 65%     | 5–10         | 30+        |
+| Mode   | Grid size (typ.) | Nodes (clamped) | Density | Removal waves¹ | Auto levels |
+|--------|------------------|-----------------|---------|------------------|-------------|
+| Easy   | 4×4–6×6          | 4–12            | 25%     | 2–4              | 0–9         |
+| Medium | 6×6–10×10        | 10–30           | 45%     | 2–6              | 10–29       |
+| Hard   | 6×6–16×16        | 5–60            | 40%     | 5–10             | 30+         |
+
+¹ *Removal waves* = how many rounds of “remove every currently extractable node at once” are needed to clear the board (parallel depth). Hard uses a slightly lower density than Medium so backward direction assignment stays reliable on larger grids. `LevelGenerator.removalWaveBounds` tiers Hard’s minimum wave floor by node count (e.g. ≤18 → min 2, ≤35 → min 3, ≤55 → min 4) so generation usually succeeds without the emergency fallback.
 
 ### Usage
 
@@ -75,7 +77,7 @@ final hardLevel = LevelManager.getLevel(levelId, mode: DifficultyMode.hard);
 lib/game/levels/
 ├── level.dart               # NodeData, LevelData, Direction
 ├── level_manager.dart       # Thin adapter — LevelManager.getLevel()
-├── level_solver.dart        # LevelSolver.isSolvable(), canRemove(), getHint()
+├── level_solver.dart        # isSolvable, countRemovalWaves, canRemove, getHint
 ├── level_generator.dart     # Simple seeded generator (used by level_manager)
 └── generation/
     ├── generation.dart      # Barrel file — import everything from here

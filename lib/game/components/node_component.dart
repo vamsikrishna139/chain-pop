@@ -46,9 +46,9 @@ class NodeComponent extends PositionComponent
 
   @override
   void render(Canvas canvas) {
-    if (isPopping) return; // Skip rendering during fly-off
-
-    final isExtractable = gameRef.isExtractable(data.id);
+    // During fly-out the node is no longer in _extractableIds — still draw it
+    // at full brightness so the motion to the screen edge is visible.
+    final isExtractable = isPopping || gameRef.isExtractable(data.id);
     final rect = size.toRect();
     final rrect = RRect.fromRectAndRadius(rect, Radius.circular(cellSize * 0.18));
 
@@ -161,10 +161,15 @@ class NodeComponent extends PositionComponent
     // ── Pop (fly off in arrow direction) ────────────────────────────────────
     if (isPopping) {
       position += _directionVector() * _speed * dt;
-      if (position.x < -200 ||
-          position.x > gameRef.size.x + 200 ||
-          position.y < -200 ||
-          position.y > gameRef.size.y + 200) {
+      // [position] is board-local; compare in game/world space so we actually
+      // reach the viewport edge before removing.
+      final world = absoluteCenter;
+      final gs = gameRef.size;
+      final pad = math.max(size.x, size.y) * 0.55 + 48;
+      if (world.x < -pad ||
+          world.x > gs.x + pad ||
+          world.y < -pad ||
+          world.y > gs.y + pad) {
         removeFromParent();
         gameRef.checkWinCondition();
       }
