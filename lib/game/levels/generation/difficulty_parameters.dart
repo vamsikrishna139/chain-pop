@@ -5,10 +5,13 @@ class DifficultyParameters {
   /// The difficulty mode
   final DifficultyMode mode;
   
-  /// Minimum chain length (number of dependencies)
+  /// Target minimum **removal waves** — rounds of “extract all currently free
+  /// nodes” ([LevelSolver.countRemovalWaves]) before the board is empty.
+  /// [LevelGenerator.removalWaveBounds] may lower this for Hard/Medium on
+  /// smaller layouts so generation does not always fall back.
   final int minChainLength;
-  
-  /// Maximum chain length (number of dependencies)
+
+  /// Target maximum removal waves (clamped to node count in [removalWaveBounds]).
   final int maxChainLength;
   
   /// Density factor (0.0-1.0) controlling how full the grid should be
@@ -52,7 +55,7 @@ class DifficultyParameters {
       case DifficultyMode.medium:
         return const DifficultyParameters(
           mode: DifficultyMode.medium,
-          minChainLength: 3,
+          minChainLength: 2,
           maxChainLength: 6,
           densityFactor: 0.45,
           minNodes: 10,

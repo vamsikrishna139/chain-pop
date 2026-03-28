@@ -20,7 +20,7 @@ void main() {
         final params = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
 
         expect(params.mode, equals(DifficultyMode.medium));
-        expect(params.minChainLength, equals(3));
+        expect(params.minChainLength, equals(2));
         expect(params.maxChainLength, equals(6));
         expect(params.densityFactor, equals(0.45));
         expect(params.minNodes, equals(10));
@@ -158,7 +158,7 @@ void main() {
         final medium = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
         final hard = DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
 
-        expect(easy.minChainLength, lessThan(medium.minChainLength));
+        expect(easy.minChainLength, lessThanOrEqualTo(medium.minChainLength));
         expect(medium.minChainLength, lessThan(hard.minChainLength));
         expect(easy.maxChainLength, lessThan(medium.maxChainLength));
         expect(medium.maxChainLength, lessThan(hard.maxChainLength));

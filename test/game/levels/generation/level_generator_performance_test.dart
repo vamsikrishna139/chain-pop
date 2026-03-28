@@ -47,7 +47,7 @@ void main() {
       );
     });
 
-    test('Hard levels (≈25-100 nodes) generate in < 2000 ms', () {
+    test('Hard levels (≈5-60 nodes) generate in < 2000 ms', () {
       // Level 50 → hard mode
       final avg = _measureAvg(50);
       expect(
