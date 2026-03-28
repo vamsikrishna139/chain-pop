@@ -67,6 +67,19 @@ class LevelSolver {
     return _canRemoveWithSet(node, others, level);
   }
 
+  /// Like [canRemove] but uses a pre-built occupancy set.
+  ///
+  /// Caller must exclude [node]'s own `'${x},${y}'` key from [otherPositions]
+  /// so the ray is not blocked by itself. Each call is O(grid span); batching
+  /// rebuilds with one set is O(n × grid span) instead of O(n²).
+  static bool canRemoveWithPositions(
+    NodeData node,
+    Set<String> otherPositions,
+    LevelData level,
+  ) {
+    return _canRemoveWithSet(node, otherPositions, level);
+  }
+
   // ── Internal helper ──────────────────────────────────────────────────────
 
   /// Walks the ray cell-by-cell across the full grid: blocked by another node;

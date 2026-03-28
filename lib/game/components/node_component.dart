@@ -19,9 +19,25 @@ class NodeComponent extends PositionComponent
   double _shakeTimer = 0.0;
   double _highlightTimer = 0.0; // replaces Future.delayed — lifecycle-safe
 
+  late Rect _rect;
+  late RRect _rrect;
+  late Path _shadowPath;
+  late Path _arrowPath;
+  late Paint _fillPaint;
+  late Paint _gradientPaint;
+  late Paint _arrowPaintNormal;
+
+  Color _shadowGlowColor = Colors.transparent;
+  double _shadowGlowRadius = 14.0;
+
   static const double _shakeDuration = 0.3;
-  static const double _highlightDuration = 1.5;
+  static const double _highlightDuration = 2.0;
+  static const double _highlightPulseCount = 3.0;
   static const double _speed = 1500.0;
+
+  final Paint _ringPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.5;
 
   NodeComponent({required this.data, required this.cellSize})
       : super(
@@ -32,69 +48,46 @@ class NodeComponent extends PositionComponent
   @override
   Future<void> onLoad() async {
     _updatePositionFromGrid();
+    _buildRenderCaches();
   }
 
-  void _updatePositionFromGrid() {
-    position = Vector2((data.x + 0.5) * cellSize, (data.y + 0.5) * cellSize);
-    _originalPos = position.clone();
-  }
-
-  void highlight() {
-    isHighlighted = true;
-    _highlightTimer = 0.0;
-  }
-
-  @override
-  void render(Canvas canvas) {
-    // Same full brightness for every node so legal moves are not telegraphed;
-    // wrong taps still jam via [onTapDown] / [gameRef.canExtract].
-    final rect = size.toRect();
-    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(cellSize * 0.18));
-
-    final nodeColor = isHighlighted ? Colors.white : data.color;
-    final effectiveColor = nodeColor.withOpacity(1.0);
-
-    final glowRadius = isHighlighted ? 20.0 : 14.0;
-    final glowColor =
-        (isHighlighted ? Colors.white : data.color).withOpacity(0.55);
-
-    canvas.drawShadow(
-      Path()..addRRect(rrect),
-      glowColor,
-      glowRadius,
-      true,
+  void _buildRenderCaches() {
+    _rect = size.toRect();
+    _rrect = RRect.fromRectAndRadius(
+      _rect,
+      Radius.circular(cellSize * 0.18),
     );
+    _shadowPath = Path()..addRRect(_rrect);
 
-    canvas.drawRRect(
-      rrect,
-      Paint()..color = effectiveColor,
-    );
+    _gradientPaint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          Colors.white.withOpacity(0.35),
+          Colors.transparent,
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ).createShader(_rect);
 
-    canvas.drawRRect(
-      rrect,
-      Paint()
-        ..shader = LinearGradient(
-          colors: [
-            Colors.white.withOpacity(0.35),
-            Colors.transparent,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ).createShader(rect),
-    );
+    _fillPaint = Paint()..color = data.color.withOpacity(1.0);
 
-    final arrowPaint = Paint()
-      ..color = isHighlighted
-          ? Colors.black
-          : Colors.white.withOpacity(0.92)
-      ..strokeWidth = cellSize * 0.09
+    final strokeW = cellSize * 0.09;
+    _arrowPaintNormal = Paint()
+      ..color = Colors.white.withOpacity(0.92)
+      ..strokeWidth = strokeW
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
-    final center = rect.center;
-    final al = cellSize * 0.22;
+    _buildArrowPath();
 
+    _shadowGlowColor = data.color.withOpacity(0.55);
+    _shadowGlowRadius = 14.0;
+  }
+
+  void _buildArrowPath() {
     final arrow = Path();
+    final center = _rect.center;
+    final al = cellSize * 0.22;
     switch (data.dir) {
       case Direction.up:
         arrow
@@ -125,7 +118,77 @@ class NodeComponent extends PositionComponent
           ..lineTo(center.dx + al, center.dy)
           ..lineTo(center.dx + al / 4, center.dy + al / 2);
     }
-    canvas.drawPath(arrow, arrowPaint);
+    _arrowPath = arrow;
+  }
+
+  void _updatePositionFromGrid() {
+    position = Vector2((data.x + 0.5) * cellSize, (data.y + 0.5) * cellSize);
+    _originalPos = position.clone();
+  }
+
+  void highlight() {
+    isHighlighted = true;
+    _highlightTimer = 0.0;
+  }
+
+  @override
+  void render(Canvas canvas) {
+    if (isHighlighted) {
+      _renderHighlighted(canvas);
+    } else {
+      canvas.drawShadow(
+          _shadowPath, _shadowGlowColor, _shadowGlowRadius, true);
+      canvas.drawRRect(_rrect, _fillPaint);
+      canvas.drawRRect(_rrect, _gradientPaint);
+      canvas.drawPath(_arrowPath, _arrowPaintNormal);
+    }
+  }
+
+  /// Pulsing scale + expanding ring ripple — much more noticeable than a
+  /// static color swap and universally reads as "tap me."
+  void _renderHighlighted(Canvas canvas) {
+    final progress = _highlightTimer / _highlightDuration;
+    final fadeOut =
+        progress < 0.7 ? 1.0 : ((1.0 - progress) / 0.3).clamp(0.0, 1.0);
+
+    final phase =
+        _highlightTimer * math.pi * _highlightPulseCount / _highlightDuration;
+    final pulseVal = math.sin(phase).abs();
+    final center = _rect.center;
+
+    // ── Expanding ring ripple (one ring per pulse cycle) ──
+    final ringPeriod = _highlightDuration / _highlightPulseCount;
+    final ringT = (_highlightTimer % ringPeriod) / ringPeriod;
+    final baseRadius = _rect.width * 0.5;
+    final ringRadius = baseRadius + ringT * baseRadius * 0.6;
+    final ringOpacity = (1.0 - ringT) * 0.45 * fadeOut;
+    if (ringOpacity > 0.005) {
+      _ringPaint
+        ..color = data.color.withOpacity(ringOpacity)
+        ..strokeWidth = 2.5 * (1.0 - ringT * 0.6);
+      canvas.drawCircle(center, ringRadius, _ringPaint);
+    }
+
+    // ── Pulsing scale + intensified glow ──
+    final scaleAmt = 1.0 + 0.09 * pulseVal * fadeOut;
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.scale(scaleAmt, scaleAmt);
+    canvas.translate(-center.dx, -center.dy);
+
+    final glowStrength = 14.0 + 12.0 * pulseVal * fadeOut;
+    final glowOpacity = (0.55 + 0.3 * pulseVal * fadeOut).clamp(0.0, 1.0);
+    canvas.drawShadow(
+      _shadowPath,
+      data.color.withOpacity(glowOpacity),
+      glowStrength,
+      true,
+    );
+    canvas.drawRRect(_rrect, _fillPaint);
+    canvas.drawRRect(_rrect, _gradientPaint);
+    canvas.drawPath(_arrowPath, _arrowPaintNormal);
+
+    canvas.restore();
   }
 
   @override

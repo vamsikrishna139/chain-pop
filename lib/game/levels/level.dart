@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 
 enum Direction { up, down, left, right }
 
@@ -17,7 +18,7 @@ class NodeData {
     required this.x,
     required this.y,
     required this.dir,
-    this.color = const Color(0xFF4FACFE),
+    this.color = AppColors.nodeDefault,
   });
 
   NodeData clone() => NodeData(id: id, x: x, y: y, dir: dir, color: color);

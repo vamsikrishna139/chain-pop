@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
 import '../services/storage_service.dart';
+import '../theme/app_colors.dart';
 import 'level_select_screen.dart';
 
 class MainMenuScreen extends StatefulWidget {
@@ -68,7 +69,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     final pillGutter = compact ? 2.0 : 4.0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F13),
+      backgroundColor: AppColors.background,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -256,7 +257,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                         final confirm = await showDialog<bool>(
                           context: context,
                           builder: (_) => AlertDialog(
-                            backgroundColor: const Color(0xFF1A1A22),
+                            backgroundColor: AppColors.surfaceDialog,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                             title: const Text('Reset all progress?',
                                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -436,7 +437,7 @@ class _ProgressRow extends StatelessWidget {
                   child: Column(
                     children: [
                       Icon(Icons.star_rounded,
-                          size: 14, color: stars > 0 ? const Color(0xFFFFC371) : Colors.white24),
+                          size: 14, color: stars > 0 ? AppColors.starGold : Colors.white24),
                       const SizedBox(height: 2),
                       Text(
                         '$stars',

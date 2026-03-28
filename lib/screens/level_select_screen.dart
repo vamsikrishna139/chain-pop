@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
 import '../services/storage_service.dart';
+import '../theme/app_colors.dart';
 import 'game_screen.dart';
 
 const int _pageSize = 20;
@@ -145,7 +146,7 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F0F13),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -666,7 +667,7 @@ class _LevelCard extends StatelessWidget {
                   ),
                 const SizedBox(height: 4),
                 if (completed)
-                  _MiniStars(stars: stars, color: const Color(0xFFFFC371))
+                  _MiniStars(stars: stars, color: AppColors.starGold)
                 else if (isNext)
                   Icon(Icons.play_circle_outline_rounded,
                       color: accent, size: 16)

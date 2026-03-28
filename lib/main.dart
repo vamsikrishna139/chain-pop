@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'screens/main_menu_screen.dart';
 import 'services/storage_service.dart';
+import 'theme/app_colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,7 +28,7 @@ class ChainPopApp extends StatelessWidget {
       title: 'Chain Pop',
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0F0F13),
+        scaffoldBackgroundColor: AppColors.background,
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         useMaterial3: true,
       ),

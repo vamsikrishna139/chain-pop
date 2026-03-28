@@ -1,5 +1,6 @@
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 import '../levels/level.dart';
 
 /// Fills non-playable cells so irregular [LevelData.playCells] silhouettes read
@@ -23,7 +24,7 @@ class BoardMaskComponent extends PositionComponent {
     final play = levelData.playCells;
     if (play == null || play.isEmpty) return;
 
-    final paint = Paint()..color = const Color(0xFF14141C);
+    final paint = Paint()..color = AppColors.surface;
     for (var y = 0; y < levelData.gridHeight; y++) {
       for (var x = 0; x < levelData.gridWidth; x++) {
         if (!play.contains('$x,$y')) {

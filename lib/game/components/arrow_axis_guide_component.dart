@@ -1,5 +1,6 @@
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
+import '../../theme/app_colors.dart';
 import '../chain_pop_game.dart';
 import '../levels/level.dart';
 
@@ -50,7 +51,7 @@ class ArrowAxisGuideComponent extends PositionComponent
 
     final stroke = (cellSize * 0.06).clamp(1.0, 4.0);
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.14)
+      ..color = Colors.white.withValues(alpha: AppColors.guideLineAlpha)
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
