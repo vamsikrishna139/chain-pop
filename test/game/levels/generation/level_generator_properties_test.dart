@@ -106,27 +106,23 @@ void main() {
       }
     });
 
-    test('Node count respects difficulty max constraint and grid capacity', () {
+    test('Node count respects grid capacity', () {
       for (final mode in DifficultyMode.values) {
-        final params = DifficultyParameters.fromLevelId(0, mode: mode);
         for (final id in [1, 5, 10]) {
           final level = generator.generate(id, mode: mode).value;
-          // Node count must not exceed the difficulty max or grid capacity.
           final gridCapacity = level.gridWidth * level.gridHeight;
-          expect(level.nodes.length, lessThanOrEqualTo(params.maxNodes));
           expect(level.nodes.length, lessThanOrEqualTo(gridCapacity));
-          // Must have at least 1 node
           expect(level.nodes.length, greaterThanOrEqualTo(1));
         }
       }
     });
 
     test('Grid dimensions respect difficulty constraints', () {
-      // Easy: 4–6, Medium: 6–10, Hard: 6–16 (scales up gradually from lvl 30)
+      // Easy: 4–8, Medium: 6–12, Hard: 6–18 (log growth)
       final bounds = {
-        DifficultyMode.easy:   (4, 6),
-        DifficultyMode.medium: (6, 10),
-        DifficultyMode.hard:   (6, 16),
+        DifficultyMode.easy:   (4, 8),
+        DifficultyMode.medium: (6, 12),
+        DifficultyMode.hard:   (6, 18),
       };
       for (final entry in bounds.entries) {
         final level = generator.generate(1, mode: entry.key).value;

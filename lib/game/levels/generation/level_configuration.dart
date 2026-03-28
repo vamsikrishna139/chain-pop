@@ -3,99 +3,118 @@ import 'difficulty_mode.dart';
 import 'difficulty_parameters.dart';
 import 'validation_result.dart';
 
-/// Immutable configuration class that encapsulates all parameters for level generation.
-///
-/// This class defines the grid dimensions, target node count, and difficulty parameters
-/// for generating a puzzle level. It provides factory constructors for deriving
-/// configurations from level IDs with automatic or explicit difficulty mode selection.
+// ═══════════════════════════════════════════════════════════════════════════
+// Supporting enums
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Determines the "flavour" of a level — grid shape, density, and direction
+/// bias — without changing the core puzzle mechanic.
+enum LevelArchetype {
+  /// Balanced square grid, default density.
+  standard,
+
+  /// Smaller-than-normal square grid, high density (tight board).
+  claustrophobic,
+
+  /// Larger-than-normal square grid, sparse placement.
+  openField,
+
+  /// Rectangular (tall or wide) grid with axis-biased arrows.
+  corridor,
+
+  /// Square grid that strongly favours donut / ring masks; inward arrows.
+  fortress,
+
+  /// Square grid with organic blob / zigzag masks; uniform arrows.
+  chaos,
+
+  /// Larger grid, very low density (few nodes, lots of open space).
+  sniper,
+}
+
+/// Controls how the backward generator weights direction selection.
+enum DirectionBiasType {
+  /// Equal probability for all four directions.
+  uniform,
+
+  /// Prefer left / right over up / down.
+  horizontal,
+
+  /// Prefer up / down over left / right.
+  vertical,
+
+  /// Prefer directions pointing toward grid centre (position-dependent).
+  inward,
+
+  /// Prefer directions pointing away from grid centre (position-dependent).
+  outward,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LevelConfiguration
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Immutable configuration class that encapsulates all parameters for level
+/// generation, including archetype-driven variety.
 ///
 /// Example usage:
 /// ```dart
-/// // Auto-derive difficulty from level ID
 /// final config = LevelConfiguration.fromLevelId(15);
-///
-/// // Explicit difficulty mode
 /// final hardConfig = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.hard);
 /// ```
 class LevelConfiguration {
-  /// Unique identifier for this level
   final int levelId;
-  
-  /// Width of the grid in cells
   final int gridWidth;
-  
-  /// Height of the grid in cells
   final int gridHeight;
-  
-  /// Target number of nodes to place in the level
   final int targetNodeCount;
-  
-  /// Difficulty parameters controlling level complexity
   final DifficultyParameters difficulty;
-  
+
+  /// Archetype that flavours this level (grid shape, density, bias).
+  final LevelArchetype archetype;
+
+  /// How the backward generator should weight direction selection.
+  final DirectionBiasType directionBias;
+
   const LevelConfiguration({
     required this.levelId,
     required this.gridWidth,
     required this.gridHeight,
     required this.targetNodeCount,
     required this.difficulty,
+    this.archetype = LevelArchetype.standard,
+    this.directionBias = DirectionBiasType.uniform,
   });
-  
+
   /// Factory constructor that derives configuration from level ID.
   ///
   /// If [mode] is not specified, automatically derives the difficulty mode
   /// from the level ID (0-9: easy, 10-29: medium, 30+: hard).
-  ///
-  /// Example:
-  /// ```dart
-  /// // Auto-derive mode (level 5 will be easy)
-  /// final config1 = LevelConfiguration.fromLevelId(5);
-  ///
-  /// // Explicit hard mode for level 5
-  /// final config2 = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.hard);
-  /// ```
   factory LevelConfiguration.fromLevelId(int levelId, {DifficultyMode? mode}) {
-    // Get difficulty parameters (auto-derived or explicit mode)
     final difficulty = DifficultyParameters.fromLevelId(levelId, mode: mode);
-    
-    // Calculate grid size based on difficulty mode
-    final gridSize = _calculateGridSize(levelId, difficulty.mode);
-    
-    // Calculate node count within difficulty constraints
-    final nodeCount = _calculateNodeCount(levelId, gridSize, difficulty);
-    
+    final archetype = _selectArchetype(levelId, difficulty.mode);
+    final (gw, gh) =
+        _calculateGridDimensions(levelId, difficulty.mode, archetype);
+    final nodeCount =
+        _calculateNodeCount(levelId, gw, gh, difficulty, archetype);
+    final bias = _archetypeDirectionBias(archetype, levelId);
+
     return LevelConfiguration(
       levelId: levelId,
-      gridWidth: gridSize,
-      gridHeight: gridSize,
+      gridWidth: gw,
+      gridHeight: gh,
       targetNodeCount: nodeCount,
       difficulty: difficulty,
+      archetype: archetype,
+      directionBias: bias,
     );
   }
-  
-  /// Factory constructor with explicit difficulty mode.
-  ///
-  /// Convenience method for creating a configuration with a specific difficulty mode.
-  ///
-  /// Example:
-  /// ```dart
-  /// final config = LevelConfiguration.withMode(10, DifficultyMode.easy);
-  /// ```
+
+  /// Convenience factory with explicit difficulty mode.
   factory LevelConfiguration.withMode(int levelId, DifficultyMode mode) {
     return LevelConfiguration.fromLevelId(levelId, mode: mode);
   }
-  
+
   /// Validates that configuration parameters are within acceptable ranges.
-  ///
-  /// Checks:
-  /// - Level ID is non-negative
-  /// - Grid dimensions are at least 3x3
-  /// - Grid dimensions do not exceed 20x20
-  /// - Node count is at least 3
-  /// - Node count does not exceed grid capacity
-  /// - Node count does not exceed 400
-  ///
-  /// Returns a [ValidationResult] indicating success or failure with error message.
   ValidationResult validate() {
     if (levelId < 0) {
       return ValidationResult.error('Level ID must be non-negative');
@@ -117,50 +136,172 @@ class LevelConfiguration {
     }
     return ValidationResult.success();
   }
-  
-  /// Calculates grid size based on level ID and difficulty mode.
-  ///
-  /// Grid size progression:
-  /// - Easy: 4x4 to 6x6
-  /// - Medium: 6x6 to 10x10
-  /// - Hard: 10x10 to 20x20
-  static int _calculateGridSize(int levelId, DifficultyMode mode) {
+
+  // ── Archetype selection ────────────────────────────────────────────────
+
+  /// Deterministic archetype assignment per level.  Early levels in each mode
+  /// always get [LevelArchetype.standard] to preserve the learning curve.
+  static LevelArchetype _selectArchetype(int levelId, DifficultyMode mode) {
     switch (mode) {
       case DifficultyMode.easy:
-        // 4x4 to 6x6
-        return (4 + (levelId / 10).floor()).clamp(4, 6);
+        if (levelId < 15) return LevelArchetype.standard;
       case DifficultyMode.medium:
-        // 6x6 to 10x10
-        return (6 + (levelId / 8).floor()).clamp(6, 10);
+        if (levelId < 12) return LevelArchetype.standard;
       case DifficultyMode.hard:
-        // Scales from 6×6 at level 30 → 16×16 at level ~70+.
-        // Prevents the jarring jump from Medium (6–10) to Hard (was 10–20).
-        return (6 + ((levelId - 29) / 4).floor()).clamp(6, 16);
+        if (levelId < 32) return LevelArchetype.standard;
+    }
 
+    final pool = switch (mode) {
+      DifficultyMode.easy => const [
+          LevelArchetype.standard,
+          LevelArchetype.standard,
+          LevelArchetype.standard,
+          LevelArchetype.openField,
+          LevelArchetype.corridor,
+        ],
+      DifficultyMode.medium => const [
+          LevelArchetype.standard,
+          LevelArchetype.standard,
+          LevelArchetype.claustrophobic,
+          LevelArchetype.openField,
+          LevelArchetype.corridor,
+          LevelArchetype.fortress,
+          LevelArchetype.sniper,
+        ],
+      DifficultyMode.hard => const [
+          LevelArchetype.standard,
+          LevelArchetype.claustrophobic,
+          LevelArchetype.openField,
+          LevelArchetype.corridor,
+          LevelArchetype.fortress,
+          LevelArchetype.chaos,
+          LevelArchetype.sniper,
+        ],
+    };
+
+    final rng = Random(levelId * 31337 + 777);
+    return pool[rng.nextInt(pool.length)];
+  }
+
+  // ── Grid dimensions ────────────────────────────────────────────────────
+
+  /// Returns `(width, height)` for the bounding grid.  Most archetypes use a
+  /// square grid; [LevelArchetype.corridor] produces a rectangular one.
+  static (int, int) _calculateGridDimensions(
+    int levelId,
+    DifficultyMode mode,
+    LevelArchetype archetype,
+  ) {
+    final base = _baseGridSize(levelId, mode);
+
+    switch (archetype) {
+      case LevelArchetype.standard:
+      case LevelArchetype.chaos:
+        return (base, base);
+      case LevelArchetype.claustrophobic:
+        final s = max(3, base - 1);
+        return (s, s);
+      case LevelArchetype.openField:
+      case LevelArchetype.sniper:
+        final s = min(20, base + 2);
+        return (s, s);
+      case LevelArchetype.corridor:
+        final longAxis = min(20, (base * 1.45).round());
+        final shortAxis = max(3, (base * 0.65).round());
+        return levelId.isEven
+            ? (shortAxis, longAxis)
+            : (longAxis, shortAxis);
+      case LevelArchetype.fortress:
+        final s = max(5, base);
+        return (s, s);
     }
   }
-  
-  /// Calculates node count based on level ID, grid size, and difficulty parameters.
-  ///
-  /// The calculation:
-  /// 1. Starts with a base count from level progression
-  /// 2. Applies density factor to respect grid capacity
-  /// 3. Clamps to difficulty min/max constraints
+
+  /// Logarithmic grid growth, capped per mode.
+  static int _baseGridSize(int levelId, DifficultyMode mode) {
+    final logLevel = levelId >= 0 ? log(levelId + 1) / ln2 : 0.0;
+    switch (mode) {
+      case DifficultyMode.easy:
+        return (4 + logLevel * 0.55).floor().clamp(4, 8);
+      case DifficultyMode.medium:
+        return (6 + logLevel * 0.7).floor().clamp(6, 12);
+      case DifficultyMode.hard:
+        return (6 + logLevel * 1.15).floor().clamp(6, 18);
+    }
+  }
+
+  // ── Node count ─────────────────────────────────────────────────────────
+
+  /// Target node count, modulated by archetype density and sinusoidal
+  /// variation.
   static int _calculateNodeCount(
     int levelId,
-    int gridSize,
+    int gridWidth,
+    int gridHeight,
     DifficultyParameters difficulty,
+    LevelArchetype archetype,
   ) {
-    // Base count from level progression
-    final baseCount = (difficulty.minNodes + (levelId * 0.5).floor());
-    
-    // Apply density factor
-    final maxPossible = (gridSize * gridSize * difficulty.densityFactor).floor();
-    
-    // Clamp to difficulty constraints
-    return baseCount.clamp(
-      difficulty.minNodes,
-      min(difficulty.maxNodes, maxPossible),
+    final area = gridWidth * gridHeight;
+
+    final logLevel = levelId >= 0 ? log(levelId + 1) / ln2 : 0.0;
+    final growthRate = switch (difficulty.mode) {
+      DifficultyMode.easy => 1.5,
+      DifficultyMode.medium => 2.5,
+      DifficultyMode.hard => 3.5,
+    };
+    final effectiveMaxNodes = min(
+      difficulty.maxNodes + (logLevel * growthRate).floor(),
+      difficulty.maxNodes * 3,
     );
+
+    final baseCount = difficulty.minNodes + (levelId * 0.5).floor();
+    final densityMod = _archetypeDensityModifier(archetype);
+    final maxPossible =
+        (area * difficulty.densityFactor * densityMod).floor();
+    final clamped = baseCount.clamp(
+      difficulty.minNodes,
+      min(effectiveMaxNodes, maxPossible),
+    );
+
+    final m = 1.0 +
+        sin(levelId * 0.157) * 0.10 +
+        sin(levelId * 0.067) * 0.07 +
+        sin(levelId * 0.031) * 0.04;
+
+    return (clamped * m).round().clamp(difficulty.minNodes, area);
+  }
+
+  // ── Archetype helpers ──────────────────────────────────────────────────
+
+  /// Density multiplier per archetype (applied on top of the mode's
+  /// base density factor).
+  static double _archetypeDensityModifier(LevelArchetype archetype) {
+    return switch (archetype) {
+      LevelArchetype.standard => 1.0,
+      LevelArchetype.claustrophobic => 1.35,
+      LevelArchetype.openField => 0.65,
+      LevelArchetype.corridor => 0.85,
+      LevelArchetype.fortress => 0.90,
+      LevelArchetype.chaos => 1.10,
+      LevelArchetype.sniper => 0.45,
+    };
+  }
+
+  /// Direction bias that matches the archetype's intended feel.
+  static DirectionBiasType _archetypeDirectionBias(
+    LevelArchetype archetype,
+    int levelId,
+  ) {
+    return switch (archetype) {
+      LevelArchetype.standard => DirectionBiasType.uniform,
+      LevelArchetype.claustrophobic => DirectionBiasType.uniform,
+      LevelArchetype.openField => DirectionBiasType.uniform,
+      LevelArchetype.corridor => levelId.isEven
+          ? DirectionBiasType.vertical
+          : DirectionBiasType.horizontal,
+      LevelArchetype.fortress => DirectionBiasType.inward,
+      LevelArchetype.chaos => DirectionBiasType.uniform,
+      LevelArchetype.sniper => DirectionBiasType.uniform,
+    };
   }
 }

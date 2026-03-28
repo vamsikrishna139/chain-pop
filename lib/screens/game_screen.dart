@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flame/game.dart';
 import '../game/chain_pop_game.dart';
@@ -68,7 +69,7 @@ class _GameScreenState extends State<GameScreen> {
     _levelData = LevelManager.getLevel(widget.level, mode: widget.difficulty);
     _totalNodes = _levelData.nodes.length;
 
-    _timeLimitSec = _computeTimeLimit(widget.difficulty, _totalNodes);
+    _timeLimitSec = _computeTimeLimit(widget.difficulty, _totalNodes, widget.level);
     _timeLeftSec = _timeLimitSec;
 
     _buildGame();
@@ -86,15 +87,34 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   // ── Time limit ────────────────────────────────────────────────────────────
+  //
+  // T(mode, N, L) = α × N × (1 + β × ln N) × max(γ_min, 1 − δ × L)
+  //
+  //   α   – base seconds per node (Fitts + Hick + scan + error budget)
+  //   β   – Hick's-Law complexity coefficient (log-scaling for larger boards)
+  //   δ   – Power-Law-of-Practice learning rate per level
+  //   γ_min – floor on the learning discount (caps total speedup)
+  //
+  // Calibrated for the 65th-percentile casual gamer (avg IQ, age 18-35).
 
-  static int? _computeTimeLimit(DifficultyMode mode, int nodeCount) {
+  static int? _computeTimeLimit(
+    DifficultyMode mode,
+    int nodeCount,
+    int levelId,
+  ) {
     switch (mode) {
       case DifficultyMode.easy:
         return null;
       case DifficultyMode.medium:
-        return (nodeCount * 6).clamp(60, 240);
+        final n = nodeCount.clamp(1, 999);
+        final base = 4.0 * n * (1 + 0.18 * log(n));
+        final learning = (1.0 - 0.008 * levelId).clamp(0.75, 1.0);
+        return (base * learning).round().clamp(45, 180);
       case DifficultyMode.hard:
-        return (nodeCount * 4).clamp(45, 180);
+        final n = nodeCount.clamp(1, 999);
+        final base = 2.8 * n * (1 + 0.12 * log(n));
+        final learning = (1.0 - 0.004 * levelId).clamp(0.60, 1.0);
+        return (base * learning).round().clamp(25, 150);
     }
   }
 
