@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/models/game_settings.dart';
 import 'package:chain_pop/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
@@ -73,6 +74,28 @@ void main() {
       await StorageService.setSelectedDifficulty(DifficultyMode.medium);
       await StorageService.unlockLevel(DifficultyMode.medium, 12);
       expect(StorageService.highestUnlockedLevel, 12);
+    });
+
+    test('unlockLevelLegacy uses selected difficulty', () async {
+      await StorageService.setSelectedDifficulty(DifficultyMode.easy);
+      await StorageService.unlockLevelLegacy(6);
+      expect(StorageService.highestUnlocked(DifficultyMode.easy), 6);
+      expect(StorageService.highestUnlocked(DifficultyMode.medium), 1);
+    });
+
+    test('gameSettings defaults and saveGameSettings persists', () async {
+      expect(StorageService.gameSettings.soundEnabled, isTrue);
+      expect(StorageService.gameSettings.hapticsEnabled, isTrue);
+      expect(StorageService.gameSettings.colorblindFriendly, isFalse);
+      await StorageService.saveGameSettings(const GameSettings(
+        soundEnabled: false,
+        hapticsEnabled: false,
+        colorblindFriendly: true,
+      ));
+      final s = StorageService.gameSettings;
+      expect(s.soundEnabled, isFalse);
+      expect(s.hapticsEnabled, isFalse);
+      expect(s.colorblindFriendly, isTrue);
     });
   });
 }

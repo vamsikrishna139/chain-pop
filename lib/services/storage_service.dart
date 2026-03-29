@@ -1,6 +1,7 @@
 import 'package:hive/hive.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
+import '../models/game_settings.dart';
 
 /// Persistent storage for all game progress using Hive.
 ///
@@ -19,6 +20,9 @@ class StorageService {
   static const String _difficultyKey = 'selected_difficulty';
   static const String _unlockedPrefix = 'unlocked_';
   static const String _starsPrefix = 'stars_';
+  static const String _settingsSoundKey = 'settings_sound';
+  static const String _settingsHapticsKey = 'settings_haptics';
+  static const String _settingsColorblindKey = 'settings_colorblind';
 
   static late Box _box;
 
@@ -37,6 +41,21 @@ class StorageService {
   /// Persists the player's difficulty selection.
   static Future<void> setSelectedDifficulty(DifficultyMode mode) async {
     await _box.put(_difficultyKey, mode.key);
+  }
+
+  // ── Gameplay / accessibility preferences ─────────────────────────────────
+
+  static GameSettings get gameSettings => GameSettings(
+        soundEnabled: _box.get(_settingsSoundKey, defaultValue: true) as bool,
+        hapticsEnabled: _box.get(_settingsHapticsKey, defaultValue: true) as bool,
+        colorblindFriendly:
+            _box.get(_settingsColorblindKey, defaultValue: false) as bool,
+      );
+
+  static Future<void> saveGameSettings(GameSettings settings) async {
+    await _box.put(_settingsSoundKey, settings.soundEnabled);
+    await _box.put(_settingsHapticsKey, settings.hapticsEnabled);
+    await _box.put(_settingsColorblindKey, settings.colorblindFriendly);
   }
 
   // ── Level unlock tracking (per difficulty) ────────────────────────────────

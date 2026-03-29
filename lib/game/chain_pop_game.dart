@@ -11,6 +11,7 @@ import 'levels/generation/difficulty_mode.dart';
 import 'components/arrow_axis_guide_component.dart';
 import 'components/board_mask_component.dart';
 import 'components/node_component.dart';
+import '../services/game_sfx.dart';
 import '../theme/app_colors.dart';
 
 /// The core Flame game engine for Chain Pop.
@@ -47,8 +48,15 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// Rebuilt after every extraction — O(n) once, then O(1) per NodeComponent lookup.
   final Set<int> _extractableIds = {};
 
+  /// Stack of removed nodes for undo. Most recent removal is last.
+  final List<NodeData> _undoStack = [];
+
+  bool get canUndo => _undoStack.isNotEmpty;
+
   bool hasWon = false;
+  bool isGameOver = false;
   late PositionComponent board;
+  double _cellSize = 0;
 
   // ── Board zoom / pan (scale is around board centre; pan in screen space) ──
   static const double _minZoom = 1.0;
@@ -77,6 +85,34 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// Whether alignment guides are shown (driven by HUD; cleared after a valid extraction).
   bool get axisGuidesVisible => _axisGuidesVisible;
 
+  /// Mirrors persisted accessibility/audio flags — updated from [GameScreen] when preferences change.
+  bool soundEnabled = true;
+  bool hapticsEnabled = true;
+  bool colorblindPalette = false;
+
+  /// Plays short SFX via the Flutter layer ([GameAudioController]).
+  void Function(GameSfx sfx, {double playbackRate})? onSfx;
+
+  int _extractionStreak = 0;
+
+  /// Playback rate for [GameSfx.pop] — rises with consecutive good extractions.
+  double get popPlaybackRate =>
+      1.0 + math.min((_extractionStreak - 1) * 0.06, 0.42);
+
+  void playSfx(GameSfx sfx, {double playbackRate = 1.0}) {
+    if (!soundEnabled) return;
+    onSfx?.call(sfx, playbackRate: playbackRate);
+  }
+
+  Color effectiveNodeColor(NodeData data) {
+    if (!colorblindPalette) return data.color;
+    final slot = data.colorSlot >= 0
+        ? data.colorSlot
+        : AppColors.matchNodePaletteIndex(data.color);
+    const list = AppColors.nodePaletteColorblind;
+    return list[slot % list.length];
+  }
+
   ChainPopGame({
     required this.levelId,
     required this.difficulty,
@@ -84,8 +120,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     this.onJam,
     this.onNodeRemoved,
     this.preloadedLevel,
-    this.topReserved = 130.0,
-    this.bottomReserved = 88.0,
+    this.topReserved = 100.0,
+    this.bottomReserved = 70.0,
   });
 
   @override
@@ -141,6 +177,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     final cellW = usableW / levelData.gridWidth;
     final cellH = usableH / levelData.gridHeight;
     final cellSize = (cellW < cellH ? cellW : cellH).clamp(26.0, 96.0);
+    _cellSize = cellSize;
 
     final gridPixelW = cellSize * levelData.gridWidth;
     final gridPixelH = cellSize * levelData.gridHeight;
@@ -264,6 +301,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   void registerExtraction(NodeData data) {
     _axisGuidesVisible = false;
+    _extractionStreak++;
+    _undoStack.add(data.clone());
     activeNodes.removeWhere((n) => n.id == data.id);
     _rebuildExtractableIds();
 
@@ -271,12 +310,32 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       final total = levelData.nodes.length;
       final removed = total - activeNodes.length;
       onNodeRemoved?.call(removed, total);
-    } catch (_) {
-      // levelData not yet initialised (unit-test scenario).
-    }
+    } catch (_) {}
   }
 
-  void reportJam() => onJam?.call();
+  /// Restores the last removed node back onto the board.
+  /// Returns true if an undo was performed.
+  bool undo() {
+    if (_undoStack.isEmpty || hasWon || isGameOver) return false;
+    final restored = _undoStack.removeLast();
+    if (_extractionStreak > 0) _extractionStreak--;
+    activeNodes.add(restored);
+    _rebuildExtractableIds();
+
+    if (_boardLaidOut && _cellSize > 0) {
+      board.add(NodeComponent(data: restored, cellSize: _cellSize));
+    }
+
+    final total = levelData.nodes.length;
+    final removed = total - activeNodes.length;
+    onNodeRemoved?.call(removed, total);
+    return true;
+  }
+
+  void reportJam() {
+    _extractionStreak = 0;
+    onJam?.call();
+  }
 
   void checkWinCondition() {
     if (activeNodes.isEmpty && !hasWon) {
@@ -288,6 +347,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   void showHint() {
     final hintNode = LevelSolver.getHint(activeNodes, levelData);
     if (hintNode == null) return;
+    playSfx(GameSfx.hint);
     for (final comp in board.children.whereType<NodeComponent>()) {
       if (comp.data.id == hintNode.id) {
         comp.highlight();
@@ -297,8 +357,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   }
 
   void restart() {
+    _extractionStreak = 0;
     hasWon = false;
+    isGameOver = false;
     activeNodes.clear();
+    _undoStack.clear();
     for (final node in levelData.nodes) {
       activeNodes.add(node.clone());
     }

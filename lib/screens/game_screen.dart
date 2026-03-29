@@ -7,6 +7,9 @@ import '../game/levels/generation/difficulty_mode.dart';
 import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
 import '../models/difficulty.dart';
+import '../models/game_settings.dart';
+import '../services/game_audio.dart';
+import '../services/game_sfx.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
 
@@ -36,8 +39,9 @@ class _GameScreenState extends State<GameScreen> {
   int _totalNodes = 0;
   int _removedNodes = 0;
 
-  // ── Jam tracking ─────────────────────────────────────────────────────────
-  int _jamCount = 0;
+  // ── Lives tracking ───────────────────────────────────────────────────────
+  static const int _maxLives = 3;
+  int _livesRemaining = _maxLives;
   bool _hasWon = false;
   late final Stopwatch _stopwatch;
   int _earnedStars = 0;
@@ -58,12 +62,17 @@ class _GameScreenState extends State<GameScreen> {
   // ── Pre-generated level (single generation) ───────────────────────────────
   late LevelData _levelData;
 
+  late GameSettings _settings;
+  late final GameAudioController _audio;
+
   // ─────────────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
     _stopwatch = Stopwatch()..start();
+    _settings = StorageService.gameSettings;
+    _audio = GameAudioController();
 
     // Generate ONCE here. Pass to the game via preloadedLevel so the
     // generator is never called twice for the same game load.
@@ -84,7 +93,16 @@ class _GameScreenState extends State<GameScreen> {
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     _ghostHintTimer?.cancel();
+    unawaited(_audio.dispose());
     super.dispose();
+  }
+
+  void _pushFeedbackToGame() {
+    _game.soundEnabled = _settings.soundEnabled;
+    _game.hapticsEnabled = _settings.hapticsEnabled;
+    _game.colorblindPalette = _settings.colorblindFriendly;
+    _game.onSfx = (sfx, {double playbackRate = 1.0}) =>
+        unawaited(_audio.play(sfx, playbackRate: playbackRate));
   }
 
   // ── Time limit ────────────────────────────────────────────────────────────
@@ -126,18 +144,42 @@ class _GameScreenState extends State<GameScreen> {
       levelId: widget.level,
       difficulty: widget.difficulty,
       onWin: _handleWin,
-      onJam: _handleJam,
+      onJam: _handleFoul,
       onNodeRemoved: _handleNodeRemoved,
       preloadedLevel: _levelData, // ← single generation
     );
+    _pushFeedbackToGame();
   }
 
   // ── Event handlers ────────────────────────────────────────────────────────
 
-  void _handleJam() {
+  void _handleFoul() {
     if (_hasWon) return;
-    setState(() => _jamCount++);
+    setState(() => _livesRemaining--);
     _resetGhostHintTimer();
+    if (_livesRemaining <= 0) {
+      _handleGameOver();
+    }
+  }
+
+  void _handleGameOver() {
+    _countdownTimer?.cancel();
+    _ghostHintTimer?.cancel();
+    _game.isGameOver = true;
+    _game.playSfx(GameSfx.gameOver);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _GameOverDialog(
+        difficulty: widget.difficulty,
+        onRetry: () {
+          Navigator.of(context).pop();
+          _resetForRetry();
+        },
+        onMenu: () => Navigator.of(context).popUntil((r) => r.isFirst),
+      ),
+    );
   }
 
   void _handleNodeRemoved(int removed, int total) {
@@ -153,8 +195,9 @@ class _GameScreenState extends State<GameScreen> {
     _stopwatch.stop();
     _countdownTimer?.cancel();
     _ghostHintTimer?.cancel();
+    _game.playSfx(GameSfx.win);
 
-    final earned = widget.difficulty.starsForJams(_jamCount);
+    final earned = widget.difficulty.starsForJams(_maxLives - _livesRemaining);
     await StorageService.saveStars(widget.difficulty, widget.level, earned);
     await StorageService.unlockLevel(widget.difficulty, widget.level + 1);
 
@@ -190,6 +233,7 @@ class _GameScreenState extends State<GameScreen> {
     _ghostHintTimer?.cancel();
     if (_hasWon || !mounted) return;
 
+    _game.playSfx(GameSfx.gameOver);
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -206,13 +250,23 @@ class _GameScreenState extends State<GameScreen> {
 
   // ── Navigation (all in one place, no race conditions) ─────────────────────
 
+  void _handleUndo() {
+    if (_game.undo()) {
+      _game.playSfx(GameSfx.uiTap);
+      _resetGhostHintTimer();
+      setState(() {});
+    }
+  }
+
+  void _confirmReset() => _resetForRetry();
+
   void _resetForRetry() {
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     _countdownTimer?.cancel();
     _ghostHintTimer?.cancel();
     setState(() {
-      _jamCount = 0;
+      _livesRemaining = _maxLives;
       _hasWon = false;
       _removedNodes = 0;
       _earnedStars = 0;
@@ -223,6 +277,7 @@ class _GameScreenState extends State<GameScreen> {
         ..start();
     });
     _game.restart();
+    _game.playSfx(GameSfx.restart);
     _startCountdown();
     _resetGhostHintTimer();
   }
@@ -278,6 +333,106 @@ class _GameScreenState extends State<GameScreen> {
     });
   }
 
+  Future<void> _openSettings() async {
+    _game.playSfx(GameSfx.uiTap);
+    if (!mounted) return;
+    final accent = widget.difficulty.color;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surfaceDialog,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Settings',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.95),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Sound',
+                          style: TextStyle(color: Colors.white70)),
+                      value: _settings.soundEnabled,
+                      activeThumbColor: accent,
+                      onChanged: (v) async {
+                        setState(() =>
+                            _settings = _settings.copyWith(soundEnabled: v));
+                        setModalState(() {});
+                        _pushFeedbackToGame();
+                        await StorageService.saveGameSettings(_settings);
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Haptics',
+                          style: TextStyle(color: Colors.white70)),
+                      value: _settings.hapticsEnabled,
+                      activeThumbColor: accent,
+                      onChanged: (v) async {
+                        setState(() =>
+                            _settings = _settings.copyWith(hapticsEnabled: v));
+                        setModalState(() {});
+                        _pushFeedbackToGame();
+                        await StorageService.saveGameSettings(_settings);
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Colorblind palette',
+                          style: TextStyle(color: Colors.white70)),
+                      subtitle: Text(
+                        'Higher-contrast hues (Okabe–Ito style)',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.45),
+                          fontSize: 12,
+                        ),
+                      ),
+                      value: _settings.colorblindFriendly,
+                      activeThumbColor: accent,
+                      onChanged: (v) async {
+                        setState(() => _settings =
+                            _settings.copyWith(colorblindFriendly: v));
+                        setModalState(() {});
+                        _pushFeedbackToGame();
+                        await StorageService.saveGameSettings(_settings);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
@@ -305,62 +460,97 @@ class _GameScreenState extends State<GameScreen> {
           // Flame canvas
           GameWidget(game: _game),
 
-          // ── Progress bar (top edge) ───────────────────────────────────────
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: _ProgressBar(progress: progress, color: accent),
-          ),
-
           // ── Top HUD ───────────────────────────────────────────────────────
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Row 1: Back | Level title | Hearts
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      _HudButton(
-                        icon: Icons.arrow_back_ios_rounded,
-                        onPressed: _goMenu,
+                      GestureDetector(
+                        onTap: _goMenu,
+                        behavior: HitTestBehavior.opaque,
+                        child: const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Icon(Icons.chevron_left_rounded,
+                              color: Colors.white70, size: 28),
+                        ),
                       ),
                       const Spacer(),
-                      Column(
-                        children: [
-                          Text(
-                            'LEVEL ${widget.level}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          _DifficultyPill(difficulty: widget.difficulty),
-                        ],
+                      Text(
+                        'LEVEL ${widget.level}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
+                        ),
                       ),
                       const Spacer(),
-                      if (_timeLimitSec != null && _timeLeftSec != null)
-                        _TimerBadge(
-                          timeLeftSec: _timeLeftSec!,
-                          timeLimitSec: _timeLimitSec!,
-                          color: accent,
-                        )
-                      else
-                        const SizedBox(width: 56),
+                      IconButton(
+                        onPressed: _openSettings,
+                        tooltip: 'Settings',
+                        icon: Icon(
+                          Icons.tune_rounded,
+                          color: Colors.white.withOpacity(0.72),
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      _LivesDisplay(livesRemaining: _livesRemaining),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$_removedNodes / $_totalNodes nodes',
-                    style: TextStyle(
-                      color: accent.withOpacity(0.7),
-                      fontSize: 11,
-                      letterSpacing: 1,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(height: 6),
+                  // Row 2: Difficulty | Progress | Timer
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Row(
+                      children: [
+                        _DifficultyLabel(difficulty: widget.difficulty),
+                        const Spacer(),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '$_removedNodes / $_totalNodes nodes',
+                              style: TextStyle(
+                                color: accent.withOpacity(0.7),
+                                fontSize: 11,
+                                letterSpacing: 1,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: 80,
+                              height: 3,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(2),
+                                child: LinearProgressIndicator(
+                                  value: progress.clamp(0.0, 1.0),
+                                  backgroundColor: Colors.white12,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      accent.withOpacity(0.7)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        if (_timeLimitSec != null &&
+                            _timeLeftSec != null)
+                          _TimerBadge(
+                            timeLeftSec: _timeLeftSec!,
+                            timeLimitSec: _timeLimitSec!,
+                            color: accent,
+                          )
+                        else
+                          const SizedBox(width: 48),
+                      ],
                     ),
                   ),
                 ],
@@ -368,38 +558,7 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
 
-          // ── View: pinch / trackpad scroll to zoom; reset recenters 1× + pan ──
-          if (!_hasWon)
-            Positioned(
-              right: 10,
-              bottom: MediaQuery.of(context).padding.bottom + 76,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _ZoomMiniButton(
-                    icon: Icons.grid_on_rounded,
-                    accent: accent,
-                    tooltip: _game.axisGuidesVisible
-                        ? 'Hide row & column guides'
-                        : 'Show row & column guides',
-                    selected: _game.axisGuidesVisible,
-                    onPressed: () {
-                      _game.toggleAxisGuides();
-                      setState(() {});
-                    },
-                  ),
-                  const SizedBox(height: 6),
-                  _ZoomMiniButton(
-                    icon: Icons.zoom_out_map,
-                    accent: accent,
-                    tooltip: 'Reset zoom & center',
-                    onPressed: _game.resetView,
-                  ),
-                ],
-              ),
-            ),
-
-          // ── Bottom controls ───────────────────────────────────────────────
+          // ── Bottom toolbar ────────────────────────────────────────────────
           if (!_hasWon)
             Positioned(
               bottom: 0,
@@ -407,24 +566,45 @@ class _GameScreenState extends State<GameScreen> {
               right: 0,
               child: SafeArea(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                  padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _JamCounter(count: _jamCount),
-                      _HudButton(
+                      _ToolbarButton(
                         icon: Icons.lightbulb_outline_rounded,
-                        label: 'HINT',
                         accent: accent,
+                        tooltip: 'Hint',
                         onPressed: () {
                           _game.showHint();
                           _resetGhostHintTimer();
                         },
                       ),
-                      _HudButton(
-                        icon: Icons.refresh_rounded,
-                        label: 'RESET',
-                        onPressed: _resetForRetry,
+                      const SizedBox(width: 12),
+                      _ToolbarButton(
+                        icon: Icons.grid_on_rounded,
+                        accent: accent,
+                        tooltip: _game.axisGuidesVisible
+                            ? 'Hide guides'
+                            : 'Show guides',
+                        selected: _game.axisGuidesVisible,
+                        onPressed: () {
+                          _game.toggleAxisGuides();
+                          setState(() {});
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      _ToolbarButton(
+                        icon: Icons.zoom_out_map_rounded,
+                        accent: accent,
+                        tooltip: 'Reset view',
+                        onPressed: _game.resetView,
+                      ),
+                      const SizedBox(width: 12),
+                      _UndoRestartButton(
+                        accent: accent,
+                        canUndo: _game.canUndo,
+                        onUndo: _handleUndo,
+                        onRestart: _confirmReset,
                       ),
                     ],
                   ),
@@ -446,7 +626,7 @@ class _GameScreenState extends State<GameScreen> {
                   levelId: widget.level,
                   difficulty: widget.difficulty,
                   stars: _earnedStars,
-                  jamCount: _jamCount,
+                  foulCount: _maxLives - _livesRemaining,
                   timeTaken: _stopwatch.elapsed,
                   autoAdvanceSec: _autoAdvanceSec,
                   onMenu: _goMenu,
@@ -470,7 +650,7 @@ class _WinPanel extends StatefulWidget {
   final int levelId;
   final DifficultyMode difficulty;
   final int stars;
-  final int jamCount;
+  final int foulCount;
   final Duration timeTaken;
   final int autoAdvanceSec;
   final VoidCallback onMenu;
@@ -481,7 +661,7 @@ class _WinPanel extends StatefulWidget {
     required this.levelId,
     required this.difficulty,
     required this.stars,
-    required this.jamCount,
+    required this.foulCount,
     required this.timeTaken,
     required this.autoAdvanceSec,
     required this.onMenu,
@@ -613,7 +793,7 @@ class _WinPanelState extends State<_WinPanel> with TickerProviderStateMixin {
               children: [
                 _Stat(label: 'TIME', value: _fmt(widget.timeTaken)),
                 const SizedBox(width: 16),
-                _Stat(label: 'JAMS', value: '${widget.jamCount}'),
+                _Stat(label: 'FOULS', value: '${widget.foulCount}'),
               ],
             ),
             const SizedBox(height: 20),
@@ -769,47 +949,6 @@ class _FillBtn extends StatelessWidget {
   }
 }
 
-class _ProgressBar extends StatelessWidget {
-  final double progress;
-  final Color color;
-  const _ProgressBar({required this.progress, required this.color});
-  @override
-  Widget build(BuildContext context) {
-    final pct = (progress * 100).round();
-    return LayoutBuilder(
-        builder: (_, c) => Stack(children: [
-              Container(height: 6, color: Colors.white.withOpacity(0.07)),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-                height: 6,
-                width: c.maxWidth * progress.clamp(0.0, 1.0),
-                decoration: BoxDecoration(
-                  gradient:
-                      LinearGradient(colors: [color.withOpacity(0.6), color]),
-                  boxShadow: [
-                    BoxShadow(
-                        color: color.withOpacity(0.6),
-                        blurRadius: 8,
-                        spreadRadius: 1)
-                  ],
-                ),
-              ),
-              if (pct > 0 && pct < 100)
-                Positioned(
-                  left: (c.maxWidth * progress.clamp(0.0, 1.0))
-                      .clamp(0.0, c.maxWidth - 36),
-                  top: 7,
-                  child: Text('$pct%',
-                      style: TextStyle(
-                          color: color.withOpacity(0.8),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800)),
-                ),
-            ]));
-  }
-}
-
 class _TimerBadge extends StatelessWidget {
   final int timeLeftSec, timeLimitSec;
   final Color color;
@@ -827,28 +966,16 @@ class _TimerBadge extends StatelessWidget {
             : color;
     final m = (timeLeftSec ~/ 60).toString();
     final s = (timeLeftSec % 60).toString().padLeft(2, '0');
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: c.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: c.withOpacity(0.5)),
-        boxShadow: frac < 0.20
-            ? [BoxShadow(color: c.withOpacity(0.4), blurRadius: 10)]
-            : [],
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.timer_outlined, size: 14, color: c),
-        const SizedBox(width: 5),
-        Text('$m:$s',
-            style: TextStyle(
-                color: c,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1)),
-      ]),
-    );
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.timer_outlined, size: 14, color: c),
+      const SizedBox(width: 4),
+      Text('$m:$s',
+          style: TextStyle(
+              color: c,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1)),
+    ]);
   }
 }
 
@@ -903,40 +1030,242 @@ class _TimeUpDialog extends StatelessWidget {
   }
 }
 
-class _DifficultyPill extends StatelessWidget {
+class _DifficultyLabel extends StatelessWidget {
   final DifficultyMode difficulty;
-  const _DifficultyPill({required this.difficulty});
+  const _DifficultyLabel({required this.difficulty});
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: difficulty.color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: difficulty.color.withOpacity(0.4)),
+    return Text(
+      difficulty.label.toUpperCase(),
+      style: TextStyle(
+        color: difficulty.color,
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.2,
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(difficulty.icon, size: 12, color: difficulty.color),
-        const SizedBox(width: 5),
-        Text(difficulty.label,
-            style: TextStyle(
-                color: difficulty.color,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2)),
-      ]),
     );
   }
 }
 
-class _ZoomMiniButton extends StatelessWidget {
+/// Dual-purpose button: **tap → undo**, **hold → restart**.
+///
+/// Shows a brief floating label ("UNDO" / "RESTART") above the button as
+/// feedback. The hold gesture uses a circular progress ring (popular game
+/// pattern — no blocking dialog). Both actions are designed to later gate
+/// behind a rewarded ad.
+class _UndoRestartButton extends StatefulWidget {
+  final Color accent;
+  final bool canUndo;
+  final VoidCallback onUndo;
+  final VoidCallback onRestart;
+
+  const _UndoRestartButton({
+    required this.accent,
+    required this.canUndo,
+    required this.onUndo,
+    required this.onRestart,
+  });
+
+  @override
+  State<_UndoRestartButton> createState() => _UndoRestartButtonState();
+}
+
+class _UndoRestartButtonState extends State<_UndoRestartButton>
+    with TickerProviderStateMixin {
+  static const _holdDuration = Duration(milliseconds: 700);
+
+  late final AnimationController _holdCtrl;
+  late final AnimationController _labelCtrl;
+  bool _holding = false;
+  String _labelText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _holdCtrl = AnimationController(vsync: this, duration: _holdDuration)
+      ..addStatusListener((s) {
+        if (s == AnimationStatus.completed) {
+          _holding = false;
+          _holdCtrl.reset();
+          _showLabel('RESTART');
+          widget.onRestart();
+        }
+      });
+    _labelCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+  }
+
+  @override
+  void dispose() {
+    _holdCtrl.dispose();
+    _labelCtrl.dispose();
+    super.dispose();
+  }
+
+  void _showLabel(String text) {
+    setState(() => _labelText = text);
+    _labelCtrl.forward(from: 0);
+  }
+
+  void _onTap() {
+    if (!widget.canUndo) return;
+    _showLabel('UNDO');
+    widget.onUndo();
+  }
+
+  void _onLongPressStart(LongPressStartDetails _) {
+    _holding = true;
+    _holdCtrl.forward(from: 0);
+  }
+
+  void _onLongPressEnd(LongPressEndDetails _) {
+    if (_holding) {
+      _holding = false;
+      _holdCtrl.reverse();
+    }
+  }
+
+  void _onLongPressCancel() {
+    if (_holding) {
+      _holding = false;
+      _holdCtrl.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUndo = widget.canUndo;
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          // Floating label — positioned above the button via negative top
+          Positioned(
+            top: -22,
+            child: AnimatedBuilder(
+              animation: _labelCtrl,
+              builder: (context, _) {
+                final t = _labelCtrl.value;
+                final opacity = t < 0.15
+                    ? (t / 0.15)
+                    : t > 0.7
+                        ? ((1.0 - t) / 0.3).clamp(0.0, 1.0)
+                        : 1.0;
+                final slide = t < 0.15 ? (1.0 - t / 0.15) * 6 : 0.0;
+                if (opacity <= 0) return const SizedBox.shrink();
+                return Transform.translate(
+                  offset: Offset(0, slide),
+                  child: Opacity(
+                    opacity: opacity,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: widget.accent.withValues(alpha: 0.85),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _labelText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // The button itself
+          GestureDetector(
+            onTap: _onTap,
+            onLongPressStart: _onLongPressStart,
+            onLongPressEnd: _onLongPressEnd,
+            onLongPressCancel: _onLongPressCancel,
+            child: AnimatedBuilder(
+              animation: _holdCtrl,
+              builder: (context, _) {
+                final v = _holdCtrl.value;
+                return Container(
+                  width: 48,
+                  height: 48,
+                    decoration: BoxDecoration(
+                      color: Color.lerp(
+                        Colors.white.withValues(alpha: hasUndo ? 0.06 : 0.03),
+                        widget.accent.withValues(alpha: 0.18),
+                        v,
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: v > 0
+                          ? [
+                              BoxShadow(
+                                color: widget.accent
+                                    .withValues(alpha: v * 0.4),
+                                blurRadius: 12 * v,
+                                spreadRadius: 2 * v,
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        if (v > 0)
+                          SizedBox(
+                            width: 36,
+                            height: 36,
+                            child: CircularProgressIndicator(
+                              value: v,
+                              strokeWidth: 2.5,
+                              color: widget.accent,
+                              backgroundColor: Colors.white12,
+                            ),
+                          ),
+                        Transform.rotate(
+                          angle: v * 2 * 3.14159265,
+                          child: Icon(
+                            v > 0.1
+                                ? Icons.refresh_rounded
+                                : Icons.undo_rounded,
+                            color: Color.lerp(
+                              hasUndo
+                                  ? Colors.white70
+                                  : Colors.white24,
+                              widget.accent,
+                              v,
+                            ),
+                            size: 22,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolbarButton extends StatelessWidget {
   final IconData icon;
   final Color accent;
   final String tooltip;
   final VoidCallback onPressed;
   final bool selected;
 
-  const _ZoomMiniButton({
+  const _ToolbarButton({
     required this.icon,
     required this.accent,
     required this.tooltip,
@@ -952,20 +1281,18 @@ class _ZoomMiniButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           child: Container(
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               color: selected
-                  ? accent.withOpacity(0.22)
-                  : Colors.white.withOpacity(0.07),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selected ? accent.withOpacity(0.5) : accent.withOpacity(0.22),
-              ),
+                  ? accent.withOpacity(0.18)
+                  : Colors.white.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon, color: accent.withOpacity(0.95), size: 22),
+            child: Icon(icon,
+                color: selected ? accent : Colors.white70, size: 22),
           ),
         ),
       ),
@@ -973,62 +1300,94 @@ class _ZoomMiniButton extends StatelessWidget {
   }
 }
 
-class _HudButton extends StatelessWidget {
-  final IconData icon;
-  final String? label;
-  final Color? accent;
-  final VoidCallback onPressed;
-  const _HudButton(
-      {required this.icon, required this.onPressed, this.label, this.accent});
+class _LivesDisplay extends StatelessWidget {
+  final int livesRemaining;
+  final int maxLives;
+  const _LivesDisplay({required this.livesRemaining, this.maxLives = 3});
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.07),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: (accent ?? Colors.white).withOpacity(0.15)),
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, color: accent ?? Colors.white70, size: 18),
-          if (label != null) ...[
-            const SizedBox(width: 6),
-            Text(label!,
-                style: TextStyle(
-                    color: accent ?? Colors.white70,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1)),
-          ],
-        ]),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(maxLives, (i) {
+        final alive = i < livesRemaining;
+        return Padding(
+          padding: EdgeInsets.only(left: i > 0 ? 4.0 : 0),
+          child: AnimatedScale(
+            scale: alive ? 1.0 : 0.7,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutBack,
+            child: AnimatedOpacity(
+              opacity: alive ? 1.0 : 0.3,
+              duration: const Duration(milliseconds: 400),
+              child: Icon(
+                alive ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                color: alive ? Colors.redAccent : Colors.white38,
+                size: 20,
+                shadows: alive
+                    ? [
+                        Shadow(
+                          color: Colors.redAccent.withOpacity(0.5),
+                          blurRadius: 8,
+                        )
+                      ]
+                    : [],
+              ),
+            ),
+          ),
+        );
+      }),
     );
   }
 }
 
-class _JamCounter extends StatelessWidget {
-  final int count;
-  const _JamCounter({required this.count});
+class _GameOverDialog extends StatelessWidget {
+  final DifficultyMode difficulty;
+  final VoidCallback onRetry, onMenu;
+  const _GameOverDialog(
+      {required this.difficulty, required this.onRetry, required this.onMenu});
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
+    final accent = difficulty.color;
+    return AlertDialog(
+      backgroundColor: AppColors.surfaceDialog,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: Colors.redAccent.withOpacity(0.3)),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.block_rounded, color: Colors.redAccent, size: 16),
-        const SizedBox(width: 6),
-        Text('$count',
-            style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-                fontWeight: FontWeight.bold)),
+      title: Column(children: [
+        Icon(Icons.favorite_rounded, color: Colors.redAccent.withOpacity(0.4), size: 48),
+        const SizedBox(height: 12),
+        const Text('OUT OF LIVES',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2)),
       ]),
+      content: Text('You ran out of lives. Try again?',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.white.withOpacity(0.6))),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        TextButton(
+            onPressed: onMenu,
+            child: const Text('MENU', style: TextStyle(color: Colors.white38))),
+        const SizedBox(width: 8),
+        ElevatedButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh_rounded, size: 18),
+          label: const Text('RETRY',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: accent,
+            foregroundColor: Colors.black,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ],
     );
   }
 }

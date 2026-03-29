@@ -5,6 +5,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 import 'dart:math' as math;
 import '../levels/level.dart';
 import '../chain_pop_game.dart';
+import '../../services/game_sfx.dart';
 
 class NodeComponent extends PositionComponent
     with TapCallbacks, HasGameRef<ChainPopGame> {
@@ -131,8 +132,15 @@ class NodeComponent extends PositionComponent
     _highlightTimer = 0.0;
   }
 
+  void _syncColorsFromSettings() {
+    final c = gameRef.effectiveNodeColor(data);
+    _fillPaint.color = c.withOpacity(1.0);
+    _shadowGlowColor = c.withOpacity(0.55);
+  }
+
   @override
   void render(Canvas canvas) {
+    _syncColorsFromSettings();
     if (isHighlighted) {
       _renderHighlighted(canvas);
     } else {
@@ -164,7 +172,7 @@ class NodeComponent extends PositionComponent
     final ringOpacity = (1.0 - ringT) * 0.45 * fadeOut;
     if (ringOpacity > 0.005) {
       _ringPaint
-        ..color = data.color.withOpacity(ringOpacity)
+        ..color = gameRef.effectiveNodeColor(data).withOpacity(ringOpacity)
         ..strokeWidth = 2.5 * (1.0 - ringT * 0.6);
       canvas.drawCircle(center, ringRadius, _ringPaint);
     }
@@ -180,7 +188,7 @@ class NodeComponent extends PositionComponent
     final glowOpacity = (0.55 + 0.3 * pulseVal * fadeOut).clamp(0.0, 1.0);
     canvas.drawShadow(
       _shadowPath,
-      data.color.withOpacity(glowOpacity),
+      gameRef.effectiveNodeColor(data).withOpacity(glowOpacity),
       glowStrength,
       true,
     );
@@ -237,16 +245,25 @@ class NodeComponent extends PositionComponent
 
   @override
   void onTapDown(TapDownEvent event) {
-    if (isPopping || isJamming) return;
+    if (isPopping || isJamming || gameRef.hasWon || gameRef.isGameOver) return;
 
     if (gameRef.canExtract(data)) {
       isPopping = true;
       gameRef.registerExtraction(data);
-      Haptics.vibrate(HapticsType.medium);
+      if (gameRef.hapticsEnabled) {
+        Haptics.vibrate(HapticsType.medium);
+      }
+      gameRef.playSfx(
+        GameSfx.pop,
+        playbackRate: gameRef.popPlaybackRate,
+      );
     } else {
       isJamming = true;
       _shakeTimer = 0.0;
-      Haptics.vibrate(HapticsType.heavy);
+      if (gameRef.hapticsEnabled) {
+        Haptics.vibrate(HapticsType.heavy);
+      }
+      gameRef.playSfx(GameSfx.jam);
       gameRef.reportJam();
     }
   }
