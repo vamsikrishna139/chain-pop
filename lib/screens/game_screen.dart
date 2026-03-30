@@ -71,6 +71,11 @@ class _GameScreenState extends State<GameScreen> {
   late GameSettings _settings;
   late final GameAudioController _audio;
 
+  /// Measure stacked HUD height so the Flame board stays below real overlays.
+  final GlobalKey _headerHudKey = GlobalKey();
+  final GlobalKey _footerHudKey = GlobalKey();
+  bool _playfieldInsetFrameScheduled = false;
+
   // ─────────────────────────────────────────────────────────────────────────
 
   @override
@@ -157,6 +162,46 @@ class _GameScreenState extends State<GameScreen> {
       preloadedLevel: _levelData, // ← single generation
     );
     _pushFeedbackToGame();
+  }
+
+  void _schedulePlayfieldInsetSync() {
+    if (_playfieldInsetFrameScheduled) return;
+    _playfieldInsetFrameScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _playfieldInsetFrameScheduled = false;
+      if (!mounted) return;
+      _syncPlayfieldInsetsFromHud();
+    });
+  }
+
+  /// Maps Flutter HUD geometry to [ChainPopGame] top/bottom reserves (logical px).
+  void _syncPlayfieldInsetsFromHud() {
+    final mq = MediaQuery.of(context);
+    final h = mq.size.height;
+
+    double topReserved = mq.padding.top + 128;
+    final headerBox =
+        _headerHudKey.currentContext?.findRenderObject() as RenderBox?;
+    if (headerBox != null && headerBox.hasSize) {
+      final headerBottom =
+          headerBox.localToGlobal(Offset(0, headerBox.size.height)).dy;
+      topReserved = headerBottom + 20;
+    }
+
+    double bottomReserved = mq.padding.bottom + 88;
+    if (!_hasWon) {
+      final footerBox =
+          _footerHudKey.currentContext?.findRenderObject() as RenderBox?;
+      if (footerBox != null && footerBox.hasSize) {
+        final footerTop = footerBox.localToGlobal(Offset.zero).dy;
+        bottomReserved = (h - footerTop) + 16;
+      }
+    }
+
+    topReserved = topReserved.clamp(96.0, h * 0.55);
+    bottomReserved = bottomReserved.clamp(64.0, h * 0.5);
+
+    _game.configurePlayfieldInsets(top: topReserved, bottom: bottomReserved);
   }
 
   // ── Event handlers ────────────────────────────────────────────────────────
@@ -492,6 +537,7 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _schedulePlayfieldInsetSync();
     final accent = widget.difficulty.color;
     final progress = _totalNodes > 0 ? _removedNodes / _totalNodes : 0.0;
 
@@ -512,12 +558,13 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
 
-          // Flame canvas
-          GameWidget(game: _game),
+          // Flame canvas — fill stack so [size] matches HUD [localToGlobal] coords.
+          Positioned.fill(child: GameWidget(game: _game)),
 
           // ── Top HUD ───────────────────────────────────────────────────────
           SafeArea(
             child: Padding(
+              key: _headerHudKey,
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -620,6 +667,7 @@ class _GameScreenState extends State<GameScreen> {
               right: 0,
               child: SafeArea(
                 child: Padding(
+                  key: _footerHudKey,
                   padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,

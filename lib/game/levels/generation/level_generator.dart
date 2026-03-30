@@ -95,7 +95,10 @@ class LevelGenerator {
       if (result.isSuccess) {
         final level = result.value;
         final validationResult = _validator.validate(level);
-        if (validationResult.isValid) return result;
+        if (validationResult.isValid) {
+          _assertGeneratedLayout(level);
+          return result;
+        }
       }
       // If milestone generation failed, fall through to normal generation.
     }
@@ -131,12 +134,15 @@ class LevelGenerator {
         final (wMin, wMax) =
             removalWaveBounds(scaledConfig.difficulty, level.nodes.length);
         if (waves >= wMin && waves <= wMax) {
+          _assertGeneratedLayout(level);
           return Result.success(level);
         }
       }
     }
 
-    return Result.success(_generateFallbackLevel(config));
+    final fallback = _generateFallbackLevel(config);
+    _assertGeneratedLayout(fallback);
+    return Result.success(fallback);
   }
 
   // ────────────────────────────────────────────────────────────────────────
@@ -752,6 +758,11 @@ class LevelGenerator {
   // ────────────────────────────────────────────────────────────────────────
   // Helpers
   // ────────────────────────────────────────────────────────────────────────
+
+  void _assertGeneratedLayout(LevelData level) {
+    final msg = LevelData.layoutValidationMessage(level);
+    assert(msg == null, 'Invalid layout: $msg');
+  }
 
   List<Color> _getColorPalette() => AppColors.nodePalette;
 

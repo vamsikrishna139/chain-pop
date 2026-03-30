@@ -29,7 +29,7 @@ class NodeComponent extends PositionComponent
   late Paint _arrowPaintNormal;
 
   Color _shadowGlowColor = Colors.transparent;
-  double _shadowGlowRadius = 14.0;
+  late double _shadowGlowRadius;
 
   static const double _shakeDuration = 0.3;
   static const double _highlightDuration = 2.0;
@@ -82,7 +82,7 @@ class NodeComponent extends PositionComponent
     _buildArrowPath();
 
     _shadowGlowColor = data.color.withOpacity(0.55);
-    _shadowGlowRadius = 14.0;
+    _shadowGlowRadius = (cellSize * 0.38).clamp(4.0, 18.0);
   }
 
   void _buildArrowPath() {
@@ -125,6 +125,15 @@ class NodeComponent extends PositionComponent
   void _updatePositionFromGrid() {
     position = Vector2((data.x + 0.5) * cellSize, (data.y + 0.5) * cellSize);
     _originalPos = position.clone();
+  }
+
+  /// After a board relayout (e.g. resize), sync the jam "home" position to the
+  /// new grid cell center while the node may still be mid-shake.
+  void resyncJamRestPositionForCellSize(double newCellSize) {
+    _originalPos.setValues(
+      (data.x + 0.5) * newCellSize,
+      (data.y + 0.5) * newCellSize,
+    );
   }
 
   void highlight() {
@@ -184,7 +193,8 @@ class NodeComponent extends PositionComponent
     canvas.scale(scaleAmt, scaleAmt);
     canvas.translate(-center.dx, -center.dy);
 
-    final glowStrength = 14.0 + 12.0 * pulseVal * fadeOut;
+    final glowStrength =
+        _shadowGlowRadius + _shadowGlowRadius * 0.85 * pulseVal * fadeOut;
     final glowOpacity = (0.55 + 0.3 * pulseVal * fadeOut).clamp(0.0, 1.0);
     canvas.drawShadow(
       _shadowPath,

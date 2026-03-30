@@ -4,6 +4,7 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+import 'board_layout.dart';
 import 'levels/level.dart';
 import 'levels/level_manager.dart';
 import 'levels/level_solver.dart';
@@ -19,8 +20,8 @@ import '../theme/app_colors.dart';
 /// Key design points:
 ///  • Accept an optional [preloadedLevel] so [GameScreen] can generate the
 ///    level once and reuse it — avoids double-generation.
-///  • [topReserved] / [bottomReserved] tell the board to stay clear of the
-///    Flutter HUD widgets overlaid on top of the Flame canvas.
+///  • [topReserved] / [bottomReserved] match stacked HUD height; [GameScreen]
+///    measures the real overlays and calls [configurePlayfieldInsets].
 ///  • [extractableIds] is rebuilt after every extraction so [NodeComponent]
 ///    can query it O(1) per frame to show the extractable/blocked visual state.
 class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
@@ -34,12 +35,13 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// skips the generator call — no double-generation.
   final LevelData? preloadedLevel;
 
-  /// Logical pixels reserved for the top HUD. The board is shifted down by
-  /// this amount so it doesn't sit behind the Flutter overlay widgets.
-  final double topReserved;
+  /// Logical pixels from the top of the canvas to the top of the playfield.
+  /// Must match the stacked Flutter HUD height (SafeArea + header). Updated by
+  /// [configurePlayfieldInsets] from [GameScreen] using real measurements.
+  double topReserved;
 
-  /// Logical pixels reserved for the bottom bar.
-  final double bottomReserved;
+  /// Logical pixels reserved above the bottom edge for the Flutter toolbar.
+  double bottomReserved;
 
   late LevelData levelData;
   final List<NodeData> activeNodes = [];
@@ -73,6 +75,19 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   bool _pinchActive = false;
   bool _boardLaidOut = false;
 
+  /// Last [size] used for layout; avoids rebuilding every frame when the
+  /// embedder reports tiny [onGameResize] deltas (which recreated all nodes and
+  /// caused flicker, and dropped [isPopping] nodes that are off [activeNodes]).
+  Vector2? _lastLaidOutGameSize;
+  static const double _layoutResizeEpsilon = 1.5;
+
+  bool _gameSizeChangedMeaningfully(Vector2 s) {
+    final last = _lastLaidOutGameSize;
+    if (last == null) return true;
+    return (s.x - last.x).abs() >= _layoutResizeEpsilon ||
+        (s.y - last.y).abs() >= _layoutResizeEpsilon;
+  }
+
   /// Zoom when the current pinch began; Flutter's [ScaleUpdateDetails.scale] is
   /// **cumulative** (≈1.0 at start), not per-frame — must not multiply into
   /// [_targetZoom] each update or zoom explodes.
@@ -104,6 +119,28 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     onSfx?.call(sfx, playbackRate: playbackRate);
   }
 
+  static const double _insetConfigEpsilon = 1.0;
+
+  /// Sync vertical bands with the real [GameScreen] HUD (measured in Flutter).
+  void configurePlayfieldInsets({
+    required double top,
+    required double bottom,
+  }) {
+    if ((top - topReserved).abs() < _insetConfigEpsilon &&
+        (bottom - bottomReserved).abs() < _insetConfigEpsilon) {
+      return;
+    }
+    topReserved = top;
+    bottomReserved = bottom;
+    if (!isLoaded || !_boardLaidOut) return;
+    _targetZoom = _minZoom;
+    _displayZoom = _minZoom;
+    _pan.setZero();
+    _pinchActive = false;
+    _lastScalePointerCount = 0;
+    _setupBoard(preserveAnimatingNodes: true);
+  }
+
   Color effectiveNodeColor(NodeData data) {
     if (!colorblindPalette) return data.color;
     final slot = data.colorSlot >= 0
@@ -120,8 +157,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     this.onJam,
     this.onNodeRemoved,
     this.preloadedLevel,
-    this.topReserved = 100.0,
-    this.bottomReserved = 70.0,
+    this.topReserved = 140.0,
+    this.bottomReserved = 92.0,
   });
 
   @override
@@ -138,6 +175,20 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
     _rebuildExtractableIds();
     _setupBoard();
+  }
+
+  @override
+  void onGameResize(Vector2 size) {
+    super.onGameResize(size);
+    if (!isLoaded || size.x <= 0 || size.y <= 0) return;
+    if (!_boardLaidOut) return;
+    if (!_gameSizeChangedMeaningfully(size)) return;
+    _targetZoom = _minZoom;
+    _displayZoom = _minZoom;
+    _pan.setZero();
+    _pinchActive = false;
+    _lastScalePointerCount = 0;
+    _setupBoard(preserveAnimatingNodes: true);
   }
 
   @override
@@ -165,19 +216,55 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     board.scale.setAll(_displayZoom);
   }
 
-  void _setupBoard() {
+  void _setupBoard({bool preserveAnimatingNodes = false}) {
+    final orphans = <(NodeComponent, Vector2)>[];
+    if (_boardLaidOut) {
+      if (preserveAnimatingNodes) {
+        for (final c in board.children.whereType<NodeComponent>()) {
+          if (c.isPopping || c.isJamming) {
+            orphans.add((c, c.absoluteCenter.clone()));
+            c.removeFromParent();
+          }
+        }
+      }
+      board.removeFromParent();
+      _boardLaidOut = false;
+    }
+
+    final skipActiveIds = <int>{
+      for (final o in orphans) o.$1.data.id,
+    };
+
     final screenW = size.x;
     final screenH = size.y;
 
     const margin = 24.0;
-    final usableW = screenW - margin * 2;
+    final usableW = math.max(0.0, screenW - margin * 2);
     // Shrink vertical space to avoid overlapping Flutter HUD layers.
-    final usableH = screenH - topReserved - bottomReserved - margin;
+    final usableH = math.max(
+      0.0,
+      screenH - topReserved - bottomReserved - margin,
+    );
 
-    final cellW = usableW / levelData.gridWidth;
-    final cellH = usableH / levelData.gridHeight;
-    final cellSize = (cellW < cellH ? cellW : cellH).clamp(26.0, 96.0);
+    var cellSize = BoardLayoutMetrics.fitCellSize(
+      bandW: usableW,
+      bandH: usableH,
+      gridWidth: levelData.gridWidth,
+      gridHeight: levelData.gridHeight,
+    );
+    if (cellSize <= 0 &&
+        levelData.gridWidth > 0 &&
+        levelData.gridHeight > 0) {
+      cellSize = 1.0;
+    }
     _cellSize = cellSize;
+
+    assert(() {
+      const eps = 1e-6;
+      if (cellSize <= 0) return true;
+      return cellSize * levelData.gridWidth <= usableW + eps &&
+          cellSize * levelData.gridHeight <= usableH + eps;
+    }());
 
     final gridPixelW = cellSize * levelData.gridWidth;
     final gridPixelH = cellSize * levelData.gridHeight;
@@ -212,12 +299,25 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     board.add(axisGuides);
 
     for (final nodeData in activeNodes) {
+      if (skipActiveIds.contains(nodeData.id)) continue;
       board.add(NodeComponent(data: nodeData, cellSize: cellSize));
     }
 
     add(board);
     _boardLaidOut = true;
     _applyBoardTransform();
+
+    for (final o in orphans) {
+      final node = o.$1;
+      final worldCenter = o.$2;
+      board.add(node);
+      node.position.setFrom(board.toLocal(worldCenter));
+      if (node.isJamming) {
+        node.resyncJamRestPositionForCellSize(cellSize);
+      }
+    }
+
+    (_lastLaidOutGameSize ??= Vector2.zero()).setValues(size.x, size.y);
   }
 
   void _clampPan() {
@@ -365,8 +465,6 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     for (final node in levelData.nodes) {
       activeNodes.add(node.clone());
     }
-    board.removeFromParent();
-    _boardLaidOut = false;
     _lastScalePointerCount = 0;
     _targetZoom = _minZoom;
     _displayZoom = _minZoom;
@@ -374,7 +472,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _pinchActive = false;
     _axisGuidesVisible = false;
     _rebuildExtractableIds();
-    _setupBoard();
+    _setupBoard(preserveAnimatingNodes: false);
     onNodeRemoved?.call(0, levelData.nodes.length);
   }
 
