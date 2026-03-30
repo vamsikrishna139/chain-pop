@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
+import '../services/game_audio.dart';
+import '../services/game_sfx.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
 import 'level_select_screen.dart';
@@ -17,11 +20,13 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   late DifficultyMode _selected;
   late AnimationController _pulseCtrl;
   late Animation<double> _pulseAnim;
+  late GameAudioController _audio;
 
   @override
   void initState() {
     super.initState();
     _selected = StorageService.selectedDifficulty;
+    _audio = GameAudioController(voiceCount: 2);
 
     _pulseCtrl = AnimationController(
       vsync: this,
@@ -36,16 +41,23 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    unawaited(_audio.dispose());
     super.dispose();
   }
 
   Future<void> _selectDifficulty(DifficultyMode mode) async {
+    if (_selected != mode && StorageService.gameSettings.soundEnabled) {
+      unawaited(_audio.play(GameSfx.uiTap, playbackRate: 1.1));
+    }
     await StorageService.setSelectedDifficulty(mode);
     if (!mounted) return;
     setState(() => _selected = mode);
   }
 
   void _play() {
+    if (StorageService.gameSettings.soundEnabled) {
+      unawaited(_audio.play(GameSfx.uiTap));
+    }
     Navigator.of(context)
         .push(
           MaterialPageRoute(
@@ -467,4 +479,3 @@ class _ProgressRow extends StatelessWidget {
     );
   }
 }
-

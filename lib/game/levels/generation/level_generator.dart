@@ -95,7 +95,10 @@ class LevelGenerator {
       if (result.isSuccess) {
         final level = result.value;
         final validationResult = _validator.validate(level);
-        if (validationResult.isValid) return result;
+        if (validationResult.isValid) {
+          _assertGeneratedLayout(level);
+          return result;
+        }
       }
       // If milestone generation failed, fall through to normal generation.
     }
@@ -131,12 +134,15 @@ class LevelGenerator {
         final (wMin, wMax) =
             removalWaveBounds(scaledConfig.difficulty, level.nodes.length);
         if (waves >= wMin && waves <= wMax) {
+          _assertGeneratedLayout(level);
           return Result.success(level);
         }
       }
     }
 
-    return Result.success(_generateFallbackLevel(config));
+    final fallback = _generateFallbackLevel(config);
+    _assertGeneratedLayout(fallback);
+    return Result.success(fallback);
   }
 
   // ────────────────────────────────────────────────────────────────────────
@@ -351,12 +357,14 @@ class LevelGenerator {
 
       if (direction == null) return null;
 
+      final colorSlot = random.nextInt(palette.length);
       nodes.add(NodeData(
         id: i,
         x: position.x,
         y: position.y,
         dir: direction,
-        color: palette[random.nextInt(palette.length)],
+        color: palette[colorSlot],
+        colorSlot: colorSlot,
       ));
     }
 
@@ -581,12 +589,14 @@ class LevelGenerator {
     final palette = _getColorPalette();
     final nodes = <NodeData>[];
     for (int i = 0; i < positions.length; i++) {
+      final colorSlot = random.nextInt(palette.length);
       nodes.add(NodeData(
         id: i,
         x: positions[i].x,
         y: positions[i].y,
         dir: dir,
-        color: palette[random.nextInt(palette.length)],
+        color: palette[colorSlot],
+        colorSlot: colorSlot,
       ));
     }
 
@@ -698,35 +708,41 @@ class LevelGenerator {
         min(config.targetNodeCount, config.gridWidth * config.gridHeight);
 
     for (int x = 0; x < config.gridWidth && id < needed; x++) {
+      final slot = id % palette.length;
       nodes.add(NodeData(
         id: id++,
         x: x,
         y: 0,
         dir: Direction.up,
-        color: palette[(id - 1) % palette.length],
+        color: palette[slot],
+        colorSlot: slot,
       ));
     }
 
     if (id < needed) {
       for (int x = 0; x < config.gridWidth && id < needed; x++) {
+        final slot = id % palette.length;
         nodes.add(NodeData(
           id: id++,
           x: x,
           y: config.gridHeight - 1,
           dir: Direction.down,
-          color: palette[(id - 1) % palette.length],
+          color: palette[slot],
+          colorSlot: slot,
         ));
       }
     }
 
     if (id < needed) {
       for (int y = 1; y < config.gridHeight - 1 && id < needed; y++) {
+        final slot = id % palette.length;
         nodes.add(NodeData(
           id: id++,
           x: 0,
           y: y,
           dir: Direction.left,
-          color: palette[(id - 1) % palette.length],
+          color: palette[slot],
+          colorSlot: slot,
         ));
       }
     }
@@ -742,6 +758,11 @@ class LevelGenerator {
   // ────────────────────────────────────────────────────────────────────────
   // Helpers
   // ────────────────────────────────────────────────────────────────────────
+
+  void _assertGeneratedLayout(LevelData level) {
+    final msg = LevelData.layoutValidationMessage(level);
+    assert(msg == null, 'Invalid layout: $msg');
+  }
 
   List<Color> _getColorPalette() => AppColors.nodePalette;
 

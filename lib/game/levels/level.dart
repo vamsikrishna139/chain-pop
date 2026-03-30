@@ -13,15 +13,27 @@ class NodeData {
   final Direction dir;
   final Color color;
 
+  /// Index into [AppColors.nodePalette] when assigned at generation; `-1` uses
+  /// [AppColors.matchNodePaletteIndex] for colorblind remapping only.
+  final int colorSlot;
+
   NodeData({
     required this.id,
     required this.x,
     required this.y,
     required this.dir,
     this.color = AppColors.nodeDefault,
+    this.colorSlot = -1,
   });
 
-  NodeData clone() => NodeData(id: id, x: x, y: y, dir: dir, color: color);
+  NodeData clone() => NodeData(
+        id: id,
+        x: x,
+        y: y,
+        dir: dir,
+        color: color,
+        colorSlot: colorSlot,
+      );
 
   @override
   String toString() => 'Node($id, at: $x,$y, dir: $dir)';
@@ -46,4 +58,27 @@ class LevelData {
     required this.nodes,
     this.playCells,
   });
+
+  /// Layout invariants (not solvability). Returns `null` if valid.
+  static String? layoutValidationMessage(LevelData data) {
+    final seen = <String>{};
+    final play = data.playCells;
+    for (final n in data.nodes) {
+      if (n.x < 0 ||
+          n.x >= data.gridWidth ||
+          n.y < 0 ||
+          n.y >= data.gridHeight) {
+        return 'Node ${n.id} at (${n.x},${n.y}) out of bounds for '
+            '${data.gridWidth}x${data.gridHeight}';
+      }
+      final key = '${n.x},${n.y}';
+      if (!seen.add(key)) {
+        return 'Duplicate cell $key';
+      }
+      if (play != null && play.isNotEmpty && !play.contains(key)) {
+        return 'Node ${n.id} at $key not in playCells';
+      }
+    }
+    return null;
+  }
 }

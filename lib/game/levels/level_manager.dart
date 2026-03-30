@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import 'level.dart';
 import 'generation/generation.dart';
@@ -20,7 +19,10 @@ class LevelManager {
     final result = _generator.generate(levelId, mode: mode);
 
     if (result.isSuccess) {
-      return result.value;
+      final level = result.value;
+      final layoutMsg = LevelData.layoutValidationMessage(level);
+      assert(layoutMsg == null, 'Invalid layout: $layoutMsg');
+      return level;
     }
 
     // Log error and use emergency fallback (a single-node level is always
@@ -42,6 +44,7 @@ class LevelManager {
           y: 3,
           dir: Direction.up,
           color: AppColors.nodeDefault,
+          colorSlot: 5,
         ),
       ],
     );

@@ -55,7 +55,7 @@ void main() {
 
     expect(find.text('LEVEL 1'), findsWidgets);
     expect(find.text('LEVEL 2'), findsNothing);
-    expect(find.text('RESET'), findsOneWidget);
+    expect(find.byIcon(Icons.undo_rounded), findsWidgets);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
     await tester.pump();
@@ -108,7 +108,7 @@ void main() {
 
     expect(find.text('LEVEL 1'), findsWidgets);
     expect(find.text('LEVEL 2'), findsNothing);
-    expect(find.text('RESET'), findsOneWidget);
+    expect(find.byIcon(Icons.undo_rounded), findsWidgets);
 
     // Pump past the 15-second ghost hint timer to ensure it clears before unmount
     await tester.pump(const Duration(seconds: 15));

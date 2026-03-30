@@ -5,6 +5,7 @@ import 'package:haptic_feedback/haptic_feedback.dart';
 import 'dart:math' as math;
 import '../levels/level.dart';
 import '../chain_pop_game.dart';
+import '../../services/game_sfx.dart';
 
 class NodeComponent extends PositionComponent
     with TapCallbacks, HasGameRef<ChainPopGame> {
@@ -28,7 +29,7 @@ class NodeComponent extends PositionComponent
   late Paint _arrowPaintNormal;
 
   Color _shadowGlowColor = Colors.transparent;
-  double _shadowGlowRadius = 14.0;
+  late double _shadowGlowRadius;
 
   static const double _shakeDuration = 0.3;
   static const double _highlightDuration = 2.0;
@@ -81,7 +82,7 @@ class NodeComponent extends PositionComponent
     _buildArrowPath();
 
     _shadowGlowColor = data.color.withOpacity(0.55);
-    _shadowGlowRadius = 14.0;
+    _shadowGlowRadius = (cellSize * 0.38).clamp(4.0, 18.0);
   }
 
   void _buildArrowPath() {
@@ -126,13 +127,29 @@ class NodeComponent extends PositionComponent
     _originalPos = position.clone();
   }
 
+  /// After a board relayout (e.g. resize), sync the jam "home" position to the
+  /// new grid cell center while the node may still be mid-shake.
+  void resyncJamRestPositionForCellSize(double newCellSize) {
+    _originalPos.setValues(
+      (data.x + 0.5) * newCellSize,
+      (data.y + 0.5) * newCellSize,
+    );
+  }
+
   void highlight() {
     isHighlighted = true;
     _highlightTimer = 0.0;
   }
 
+  void _syncColorsFromSettings() {
+    final c = gameRef.effectiveNodeColor(data);
+    _fillPaint.color = c.withOpacity(1.0);
+    _shadowGlowColor = c.withOpacity(0.55);
+  }
+
   @override
   void render(Canvas canvas) {
+    _syncColorsFromSettings();
     if (isHighlighted) {
       _renderHighlighted(canvas);
     } else {
@@ -164,7 +181,7 @@ class NodeComponent extends PositionComponent
     final ringOpacity = (1.0 - ringT) * 0.45 * fadeOut;
     if (ringOpacity > 0.005) {
       _ringPaint
-        ..color = data.color.withOpacity(ringOpacity)
+        ..color = gameRef.effectiveNodeColor(data).withOpacity(ringOpacity)
         ..strokeWidth = 2.5 * (1.0 - ringT * 0.6);
       canvas.drawCircle(center, ringRadius, _ringPaint);
     }
@@ -176,11 +193,12 @@ class NodeComponent extends PositionComponent
     canvas.scale(scaleAmt, scaleAmt);
     canvas.translate(-center.dx, -center.dy);
 
-    final glowStrength = 14.0 + 12.0 * pulseVal * fadeOut;
+    final glowStrength =
+        _shadowGlowRadius + _shadowGlowRadius * 0.85 * pulseVal * fadeOut;
     final glowOpacity = (0.55 + 0.3 * pulseVal * fadeOut).clamp(0.0, 1.0);
     canvas.drawShadow(
       _shadowPath,
-      data.color.withOpacity(glowOpacity),
+      gameRef.effectiveNodeColor(data).withOpacity(glowOpacity),
       glowStrength,
       true,
     );
@@ -237,16 +255,25 @@ class NodeComponent extends PositionComponent
 
   @override
   void onTapDown(TapDownEvent event) {
-    if (isPopping || isJamming) return;
+    if (isPopping || isJamming || gameRef.hasWon || gameRef.isGameOver) return;
 
     if (gameRef.canExtract(data)) {
       isPopping = true;
       gameRef.registerExtraction(data);
-      Haptics.vibrate(HapticsType.medium);
+      if (gameRef.hapticsEnabled) {
+        Haptics.vibrate(HapticsType.medium);
+      }
+      gameRef.playSfx(
+        GameSfx.pop,
+        playbackRate: gameRef.popPlaybackRate,
+      );
     } else {
       isJamming = true;
       _shakeTimer = 0.0;
-      Haptics.vibrate(HapticsType.heavy);
+      if (gameRef.hapticsEnabled) {
+        Haptics.vibrate(HapticsType.heavy);
+      }
+      gameRef.playSfx(GameSfx.jam);
       gameRef.reportJam();
     }
   }

@@ -19,6 +19,7 @@ void main() {
       expect(b.y, a.y);
       expect(b.dir, a.dir);
       expect(b.color, a.color);
+      expect(b.colorSlot, a.colorSlot);
     });
 
     test('toString contains id and coordinates', () {

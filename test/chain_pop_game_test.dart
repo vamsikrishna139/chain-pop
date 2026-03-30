@@ -1,7 +1,9 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/chain_pop_game.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/game/levels/level.dart';
+import 'package:chain_pop/services/game_sfx.dart';
+import 'package:chain_pop/theme/app_colors.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('ChainPopGame callbacks and win', () {
@@ -108,6 +110,139 @@ void main() {
       
       // Node 1 should now be free
       expect(game.canExtract(nodes[0]), isTrue, reason: 'Node 1 should be freed after Node 2 pops');
+    });
+
+    test('undo restores last removal and updates onNodeRemoved', () {
+      var lastRemoved = -1;
+      var lastTotal = -1;
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+        onNodeRemoved: (removed, total) {
+          lastRemoved = removed;
+          lastTotal = total;
+        },
+      );
+      final n0 = NodeData(id: 0, x: 0, y: 0, dir: Direction.up);
+      final n1 = NodeData(id: 1, x: 4, y: 4, dir: Direction.down);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: [n0.clone(), n1.clone()],
+      );
+      game.activeNodes.addAll([n0.clone(), n1.clone()]);
+
+      expect(game.canUndo, isFalse);
+      game.registerExtraction(n0);
+      expect(game.canUndo, isTrue);
+      expect(lastRemoved, 1);
+      expect(lastTotal, 2);
+
+      expect(game.undo(), isTrue);
+      expect(game.activeNodes, hasLength(2));
+      expect(lastRemoved, 0);
+      expect(game.canUndo, isFalse);
+    });
+
+    test('undo returns false when stack is empty', () {
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+      );
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 3,
+        gridHeight: 3,
+        nodes: [NodeData(id: 0, x: 0, y: 0, dir: Direction.up)],
+      );
+      game.activeNodes.add(game.levelData.nodes.first.clone());
+      expect(game.undo(), isFalse);
+    });
+
+    test('undo returns false after win', () {
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+      );
+      final n = NodeData(id: 0, x: 0, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 3,
+        gridHeight: 3,
+        nodes: [n.clone()],
+      );
+      game.activeNodes.add(n.clone());
+      game.registerExtraction(n);
+      game.checkWinCondition();
+      expect(game.hasWon, isTrue);
+      expect(game.undo(), isFalse);
+    });
+
+    test('playSfx does not call onSfx when sound is disabled', () {
+      var calls = 0;
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+      );
+      game.onSfx = (sfx, {double playbackRate = 1.0}) {
+        calls++;
+      };
+      game.soundEnabled = false;
+      game.playSfx(GameSfx.uiTap);
+      expect(calls, 0);
+      game.soundEnabled = true;
+      game.playSfx(GameSfx.uiTap);
+      expect(calls, 1);
+    });
+
+    test('reportJam resets popPlaybackRate baseline', () {
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+      );
+      final n0 = NodeData(id: 0, x: 0, y: 0, dir: Direction.up);
+      final n1 = NodeData(id: 1, x: 2, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: [n0.clone(), n1.clone()],
+      );
+      game.activeNodes.addAll([n0.clone(), n1.clone()]);
+
+      expect(game.popPlaybackRate, closeTo(0.94, 1e-9));
+      game.registerExtraction(n0);
+      expect(game.popPlaybackRate, 1.0);
+      game.reportJam();
+      expect(game.popPlaybackRate, closeTo(0.94, 1e-9));
+    });
+
+    test('effectiveNodeColor maps colorSlot when colorblind palette is on', () {
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+      );
+      const slot = 2;
+      final c = AppColors.nodePalette[slot];
+      final n = NodeData(
+        id: 0,
+        x: 0,
+        y: 0,
+        dir: Direction.up,
+        color: c,
+        colorSlot: slot,
+      );
+      game.colorblindPalette = false;
+      expect(game.effectiveNodeColor(n), c);
+      game.colorblindPalette = true;
+      expect(game.effectiveNodeColor(n), AppColors.nodePaletteColorblind[slot]);
     });
 
     test('Level 3 Mechanics Checks', () {

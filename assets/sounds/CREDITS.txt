@@ -1,0 +1,11 @@
+In-game audio (CC0 — Kenney.nl)
+
+- pop.ogg     — Kenney Digital Audio, phaseJump1 (mirror: iwenzhou/kenney)
+- jam.wav     — Kenney Interface Sounds, error_003 (mirror: Calinou/kenney-interface-sounds)
+- win.wav     — Kenney Interface Sounds, confirmation_003
+- game_over.wav — Kenney Interface Sounds, error_006
+- hint.wav    — Kenney UI Audio, rollover2 (mirror: Calinou/kenney-ui-audio)
+- ui_tap.wav  — Kenney Interface Sounds, click_002
+- restart.wav — Kenney Interface Sounds, open_002
+
+License copies: KENNEY_UI_AUDIO_LICENSE.txt, KENNEY_INTERFACE_SOUNDS_LICENSE.txt

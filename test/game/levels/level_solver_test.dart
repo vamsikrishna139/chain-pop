@@ -71,6 +71,28 @@ void main() {
     });
   });
 
+  group('LevelSolver.canRemoveWithPositions', () {
+    test('matches canRemove when others set excludes self', () {
+      final level = LevelData(levelId: 1, gridWidth: 6, gridHeight: 6, nodes: []);
+      final a = NodeData(id: 0, x: 1, y: 1, dir: Direction.right);
+      final b = NodeData(id: 1, x: 3, y: 1, dir: Direction.left);
+      final c = NodeData(id: 2, x: 5, y: 5, dir: Direction.down);
+      final all = [a, b, c];
+
+      for (final focus in all) {
+        final others = <String>{
+          for (final o in all)
+            if (o.id != focus.id) '${o.x},${o.y}',
+        };
+        expect(
+          LevelSolver.canRemoveWithPositions(focus, others, level),
+          LevelSolver.canRemove(focus, all, level),
+          reason: 'node ${focus.id}',
+        );
+      }
+    });
+  });
+
   group('LevelSolver.countRemovalWaves / isSolvable', () {
     test('single node pointing to edge clears in one wave', () {
       final level = LevelData(
