@@ -13,15 +13,27 @@ class NodeData {
   final Direction dir;
   final Color color;
 
+  /// Index into [AppColors.nodePalette] when assigned at generation; `-1` uses
+  /// [AppColors.matchNodePaletteIndex] for colorblind remapping only.
+  final int colorSlot;
+
   NodeData({
     required this.id,
     required this.x,
     required this.y,
     required this.dir,
     this.color = AppColors.nodeDefault,
+    this.colorSlot = -1,
   });
 
-  NodeData clone() => NodeData(id: id, x: x, y: y, dir: dir, color: color);
+  NodeData clone() => NodeData(
+        id: id,
+        x: x,
+        y: y,
+        dir: dir,
+        color: color,
+        colorSlot: colorSlot,
+      );
 
   @override
   String toString() => 'Node($id, at: $x,$y, dir: $dir)';

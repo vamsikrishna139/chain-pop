@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flame/game.dart';
 import '../game/chain_pop_game.dart';
@@ -59,6 +60,11 @@ class _GameScreenState extends State<GameScreen> {
   // ── Ghost hint timer (Easy only) ─────────────────────────────────────────
   Timer? _ghostHintTimer;
 
+  // ── Easy mode: refresh elapsed label on HUD ───────────────────────────────
+  Timer? _easyHudTimer;
+
+  bool _isPaused = false;
+
   // ── Pre-generated level (single generation) ───────────────────────────────
   late LevelData _levelData;
 
@@ -85,6 +91,7 @@ class _GameScreenState extends State<GameScreen> {
     _buildGame();
     _startCountdown();
     _resetGhostHintTimer();
+    _startEasyHudTimer();
   }
 
   @override
@@ -93,6 +100,7 @@ class _GameScreenState extends State<GameScreen> {
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     _ghostHintTimer?.cancel();
+    _easyHudTimer?.cancel();
     unawaited(_audio.dispose());
     super.dispose();
   }
@@ -251,6 +259,7 @@ class _GameScreenState extends State<GameScreen> {
   // ── Navigation (all in one place, no race conditions) ─────────────────────
 
   void _handleUndo() {
+    if (_isPaused) return;
     if (_game.undo()) {
       _game.playSfx(GameSfx.uiTap);
       _resetGhostHintTimer();
@@ -265,7 +274,9 @@ class _GameScreenState extends State<GameScreen> {
     _autoAdvanceTimer?.cancel();
     _countdownTimer?.cancel();
     _ghostHintTimer?.cancel();
+    _easyHudTimer?.cancel();
     setState(() {
+      _isPaused = false;
       _livesRemaining = _maxLives;
       _hasWon = false;
       _removedNodes = 0;
@@ -276,10 +287,12 @@ class _GameScreenState extends State<GameScreen> {
         ..reset()
         ..start();
     });
+    _game.resumeEngine();
     _game.restart();
     _game.playSfx(GameSfx.restart);
     _startCountdown();
     _resetGhostHintTimer();
+    _startEasyHudTimer();
   }
 
   void _goNextLevel() {
@@ -311,7 +324,7 @@ class _GameScreenState extends State<GameScreen> {
     if (_timeLimitSec == null) return;
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _hasWon) return;
+      if (!mounted || _hasWon || _isPaused) return;
       setState(() {
         _timeLeftSec =
             ((_timeLeftSec ?? _timeLimitSec!) - 1).clamp(0, _timeLimitSec!);
@@ -321,6 +334,47 @@ class _GameScreenState extends State<GameScreen> {
         _handleTimeUp();
       }
     });
+  }
+
+  void _startEasyHudTimer() {
+    _easyHudTimer?.cancel();
+    if (widget.difficulty != DifficultyMode.easy) return;
+    _easyHudTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _isPaused || _hasWon) return;
+      setState(() {});
+    });
+  }
+
+  void _togglePause() {
+    if (_hasWon || _game.isGameOver) return;
+    _game.playSfx(GameSfx.uiTap);
+    if (_isPaused) {
+      setState(() => _isPaused = false);
+      _game.resumeEngine();
+      if (!_stopwatch.isRunning) _stopwatch.start();
+      _startCountdown();
+      _resetGhostHintTimer();
+      _startEasyHudTimer();
+    } else {
+      setState(() => _isPaused = true);
+      _game.pauseEngine();
+      _stopwatch.stop();
+      _countdownTimer?.cancel();
+      _ghostHintTimer?.cancel();
+      _easyHudTimer?.cancel();
+    }
+  }
+
+  void _restartFromPause() {
+    _game.playSfx(GameSfx.uiTap);
+    _resetForRetry();
+  }
+
+  void _menuFromPause() {
+    _game.playSfx(GameSfx.uiTap);
+    setState(() => _isPaused = false);
+    _game.resumeEngine();
+    _goMenu();
   }
 
   // ── Ghost hints (Easy only) ───────────────────────────────────────────────
@@ -334,6 +388,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   Future<void> _openSettings() async {
+    if (_isPaused) return;
     _game.playSfx(GameSfx.uiTap);
     if (!mounted) return;
     final accent = widget.difficulty.color;
@@ -541,15 +596,14 @@ class _GameScreenState extends State<GameScreen> {
                           ],
                         ),
                         const Spacer(),
-                        if (_timeLimitSec != null &&
-                            _timeLeftSec != null)
-                          _TimerBadge(
-                            timeLeftSec: _timeLeftSec!,
-                            timeLimitSec: _timeLimitSec!,
-                            color: accent,
-                          )
-                        else
-                          const SizedBox(width: 48),
+                        _TimerPauseChip(
+                          difficulty: widget.difficulty,
+                          timeLeftSec: _timeLeftSec,
+                          timeLimitSec: _timeLimitSec,
+                          elapsed: _stopwatch.elapsed,
+                          color: accent,
+                          onTap: _togglePause,
+                        ),
                       ],
                     ),
                   ),
@@ -575,6 +629,7 @@ class _GameScreenState extends State<GameScreen> {
                         accent: accent,
                         tooltip: 'Hint',
                         onPressed: () {
+                          if (_isPaused) return;
                           _game.showHint();
                           _resetGhostHintTimer();
                         },
@@ -588,6 +643,7 @@ class _GameScreenState extends State<GameScreen> {
                             : 'Show guides',
                         selected: _game.axisGuidesVisible,
                         onPressed: () {
+                          if (_isPaused) return;
                           _game.toggleAxisGuides();
                           setState(() {});
                         },
@@ -597,7 +653,10 @@ class _GameScreenState extends State<GameScreen> {
                         icon: Icons.zoom_out_map_rounded,
                         accent: accent,
                         tooltip: 'Reset view',
-                        onPressed: _game.resetView,
+                        onPressed: () {
+                          if (_isPaused) return;
+                          _game.resetView();
+                        },
                       ),
                       const SizedBox(width: 12),
                       _UndoRestartButton(
@@ -609,6 +668,134 @@ class _GameScreenState extends State<GameScreen> {
                     ],
                   ),
                 ),
+              ),
+            ),
+
+          // ── Pause overlay (blur; only timer / menu / restart) ────────────
+          if (_isPaused && !_hasWon)
+            Positioned.fill(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ClipRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                      child: Container(
+                        color: Colors.black.withOpacity(0.38),
+                      ),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: Listener(
+                      behavior: HitTestBehavior.opaque,
+                      onPointerDown: (_) {},
+                    ),
+                  ),
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _menuFromPause,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Icon(
+                                      Icons.chevron_left_rounded,
+                                      color: Colors.white,
+                                      size: 28,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              _TimerPauseChip(
+                                difficulty: widget.difficulty,
+                                timeLeftSec: _timeLeftSec,
+                                timeLimitSec: _timeLimitSec,
+                                elapsed: _stopwatch.elapsed,
+                                color: accent,
+                                onTap: _togglePause,
+                                emphasizeResume: true,
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          Text(
+                            'PAUSED',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.95),
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 4,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tap the timer to resume',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: accent.withOpacity(0.85),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: _restartFromPause,
+                                  icon: Icon(
+                                    Icons.refresh_rounded,
+                                    size: 20,
+                                    color: accent.withOpacity(0.9),
+                                  ),
+                                  label: Text(
+                                    'RESTART',
+                                    style: TextStyle(
+                                      color: accent.withOpacity(0.95),
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 20),
+                                TextButton.icon(
+                                  onPressed: _menuFromPause,
+                                  icon: const Icon(
+                                    Icons.home_rounded,
+                                    size: 20,
+                                    color: Colors.white54,
+                                  ),
+                                  label: const Text(
+                                    'MENU',
+                                    style: TextStyle(
+                                      color: Colors.white54,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 48),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -976,6 +1163,103 @@ class _TimerBadge extends StatelessWidget {
               fontWeight: FontWeight.w800,
               letterSpacing: 1)),
     ]);
+  }
+}
+
+/// Tappable timer (timed modes) or elapsed clock (Easy) — tap pauses / resumes.
+class _TimerPauseChip extends StatelessWidget {
+  final DifficultyMode difficulty;
+  final int? timeLeftSec;
+  final int? timeLimitSec;
+  final Duration elapsed;
+  final Color color;
+  final VoidCallback onTap;
+  final bool emphasizeResume;
+
+  const _TimerPauseChip({
+    required this.difficulty,
+    required this.timeLeftSec,
+    required this.timeLimitSec,
+    required this.elapsed,
+    required this.color,
+    required this.onTap,
+    this.emphasizeResume = false,
+  });
+
+  static String _fmtElapsed(Duration d) {
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasCountdown =
+        timeLimitSec != null && timeLeftSec != null;
+    final hint = emphasizeResume ? 'TAP TO RESUME' : 'TAP TO PAUSE';
+    final tooltip = emphasizeResume
+        ? 'Resume game'
+        : (hasCountdown
+            ? 'Pause — tap the timer'
+            : 'Pause — tap the clock');
+
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (hasCountdown)
+                  _TimerBadge(
+                    timeLeftSec: timeLeftSec!,
+                    timeLimitSec: timeLimitSec!,
+                    color: color,
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.schedule_rounded,
+                        size: 14,
+                        color: color.withOpacity(0.9),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _fmtElapsed(elapsed),
+                        style: TextStyle(
+                          color: color.withOpacity(0.95),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 3),
+                Text(
+                  hint,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(
+                        emphasizeResume ? 0.75 : 0.42),
+                    fontSize: 8,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.9,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

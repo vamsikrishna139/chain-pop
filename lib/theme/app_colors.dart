@@ -24,6 +24,34 @@ abstract final class AppColors {
     Color(0xFF4FACFE),
   ];
 
+  /// Okabe–Ito–inspired slots: strong luminance and hue separation for CVD.
+  static const nodePaletteColorblind = <Color>[
+    Color(0xFF56B4E9),
+    Color(0xFF009E73),
+    Color(0xFFD55E00),
+    Color(0xFFE69F00),
+    Color(0xFFCC79A7),
+    Color(0xFF0072B2),
+  ];
+
+  /// Maps a node color to the nearest [nodePalette] index (for legacy nodes).
+  static int matchNodePaletteIndex(Color c) {
+    double best = double.infinity;
+    var idx = 0;
+    for (var i = 0; i < nodePalette.length; i++) {
+      final p = nodePalette[i];
+      final dr = c.r - p.r;
+      final dg = c.g - p.g;
+      final db = c.b - p.b;
+      final d = dr * dr + dg * dg + db * db;
+      if (d < best) {
+        best = d;
+        idx = i;
+      }
+    }
+    return idx;
+  }
+
   // ── Difficulty accents ───────────────────────────────────────────────────
 
   static const accentEasy = Color(0xFF00F2FE);

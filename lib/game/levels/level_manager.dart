@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import 'level.dart';
 import 'generation/generation.dart';
@@ -42,6 +41,7 @@ class LevelManager {
           y: 3,
           dir: Direction.up,
           color: AppColors.nodeDefault,
+          colorSlot: 5,
         ),
       ],
     );
