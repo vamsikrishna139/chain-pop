@@ -11,7 +11,6 @@ import '../theme/app_colors.dart';
 import 'game_screen.dart';
 
 const int _pageSize = 20;
-const int _mediumPages = 5; // 100 levels
 
 /// How many level cards should be visible for a given unlock progress.
 int visibleLevelCardCount(int highestUnlocked) {
@@ -22,78 +21,75 @@ int visibleLevelCardCount(int highestUnlocked) {
 
 class NavGroup {
   final String label;
-  final int firstPage;
-  final int pageCount;
+  final int firstLevel;
+  final int lastLevel;
 
-  const NavGroup(this.label, this.firstPage, this.pageCount);
+  const NavGroup(this.label, this.firstLevel, this.lastLevel);
 
-  int get lastPage => firstPage + pageCount - 1;
+  int get firstPage => ((firstLevel - 1) / _pageSize).floor();
+  int get lastPage => ((lastLevel - 1) / _pageSize).floor();
+  int get pageCount => lastPage - firstPage + 1;
+  int get levelCount => lastLevel - firstLevel + 1;
   bool containsPage(int page) => page >= firstPage && page <= lastPage;
+  bool containsLevel(int level) => level >= firstLevel && level <= lastLevel;
 
-  /// A group is drillable when it spans more than 100 levels (> 5 pages).
-  /// Tapping it opens a sub-view of 100-level sub-groups.
-  bool get isDrillable => pageCount > _mediumPages;
+  /// Drill down hierarchy: 500 -> 100 -> 20 -> individual.
+  bool get isDrillable => levelCount > 1;
+  bool get isLeaf => levelCount == 1;
 }
 
-String _rangeLabel(int startPage, int pages, int visible) {
-  final s = startPage * _pageSize + 1;
-  final e = min((startPage + pages) * _pageSize, visible);
-  return '$s–$e';
+String _rangeLabel(int startLevel, int endLevel) {
+  if (startLevel == endLevel) return '$startLevel';
+  return '$startLevel–$endLevel';
 }
 
-/// Builds the top-level pill list. Groups telescope so the strip stays ≤ ~10.
-///
-/// Tiers (in pages): 5 = 100 lvls, 25 = 500 lvls, 50 = 1000 lvls.
-/// Groups with > 5 pages are [NavGroup.isDrillable] and expand on tap into
-/// 100-level sub-groups via [buildSubGroups].
+List<NavGroup> _buildChunkGroups(int start, int end, int chunkSize) {
+  final groups = <NavGroup>[];
+  for (int s = start; s <= end; s += chunkSize) {
+    final e = min(end, s + chunkSize - 1);
+    groups.add(NavGroup(_rangeLabel(s, e), s, e));
+  }
+  return groups;
+}
+
+/// Top level:
+/// - Keep compact summary grouped by 100s (e.g., 1-700).
+/// - Show remaining tail as small ranges.
 List<NavGroup> buildNavGroups(int highestUnlocked) {
   final visible = visibleLevelCardCount(highestUnlocked);
-  final totalPages = (visible / _pageSize).ceil().clamp(1, 99999);
-
-  if (totalPages <= 7) {
-    return List.generate(
-      totalPages,
-      (i) => NavGroup(_rangeLabel(i, 1, visible), i, 1),
-    );
+  if (visible <= 100) {
+    return _buildChunkGroups(1, visible, _pageSize);
   }
-
-  const recentCount = 5;
-  final oldPageCount = totalPages - recentCount;
-
-  // Jump from 5 straight to 25 so groups of 500 kick in right after 100s
-  // overflow. This avoids intermediate 200-level groups that don't align
-  // with the 3-tier drill-down (20 → 100 → 500).
-  const niceSizes = [5, 25, 50, 100];
-  final groupSize = niceSizes.firstWhere(
-    (s) => (oldPageCount / s).ceil() <= 5,
-    orElse: () => (oldPageCount / 5).ceil(),
-  );
 
   final groups = <NavGroup>[];
-
-  for (int p = 0; p < oldPageCount; p += groupSize) {
-    final pages = min(groupSize, oldPageCount - p);
-    groups.add(NavGroup(_rangeLabel(p, pages, visible), p, pages));
+  final completedHundreds = (highestUnlocked ~/ 100) * 100;
+  final summaryEnd = completedHundreds.clamp(100, visible);
+  if (summaryEnd >= 100) {
+    groups.add(NavGroup(_rangeLabel(1, summaryEnd), 1, summaryEnd));
   }
 
-  for (int p = oldPageCount; p < totalPages; p++) {
-    groups.add(NavGroup(_rangeLabel(p, 1, visible), p, 1));
+  if (summaryEnd < visible) {
+    groups.addAll(_buildChunkGroups(summaryEnd + 1, visible, 10));
   }
 
   return groups;
 }
 
-/// Builds 100-level sub-groups inside a drillable [parent] group.
+/// Drill-down hierarchy:
+/// - >500 levels: split by 500
+/// - >100 levels: split by 100
+/// - >20 levels: split by 20
+/// - <=20 levels: split to individual levels
 List<NavGroup> buildSubGroups(NavGroup parent, int highestUnlocked) {
   final visible = visibleLevelCardCount(highestUnlocked);
-  final groups = <NavGroup>[];
+  final start = parent.firstLevel.clamp(1, visible);
+  final end = parent.lastLevel.clamp(1, visible);
+  final span = end - start + 1;
 
-  for (int p = parent.firstPage; p <= parent.lastPage; p += _mediumPages) {
-    final pages = min(_mediumPages, parent.lastPage - p + 1);
-    groups.add(NavGroup(_rangeLabel(p, pages, visible), p, pages));
-  }
-
-  return groups;
+  if (span > 500) return _buildChunkGroups(start, end, 500);
+  if (span > 100) return _buildChunkGroups(start, end, 100);
+  if (span > 20) return _buildChunkGroups(start, end, 20);
+  return _buildChunkGroups(start, end, 1);
 }
 
 // ── Level Select Screen ─────────────────────────────────────────────────────
@@ -276,7 +272,8 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   late PageController _pageCtrl;
   late ScrollController _pillScrollCtrl;
   late int _currentPage;
-  NavGroup? _drillGroup;
+  final List<NavGroup> _drillPath = [];
+  int? _selectedLeafLevel;
 
   @override
   void initState() {
@@ -311,11 +308,15 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
       unawaited(widget.audio.play(GameSfx.uiTap, playbackRate: 1.05));
     }
     if (group.isDrillable) {
-      setState(() => _drillGroup = group);
+      setState(() {
+        _drillPath.add(group);
+        _selectedLeafLevel = null;
+      });
       _goToPage(group.firstPage);
       WidgetsBinding.instance
           .addPostFrameCallback((_) => _scrollPillIntoView());
     } else {
+      setState(() => _selectedLeafLevel = group.firstLevel);
       _goToPage(group.firstPage);
     }
   }
@@ -324,15 +325,30 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
     if (StorageService.gameSettings.soundEnabled) {
       unawaited(widget.audio.play(GameSfx.uiTap, playbackRate: 0.95));
     }
-    setState(() => _drillGroup = null);
+    if (_drillPath.isEmpty) return;
+    setState(() {
+      _drillPath.removeLast();
+      _selectedLeafLevel = null;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollPillIntoView());
   }
 
   List<NavGroup> _activePills(int highest) {
-    if (_drillGroup != null) {
-      return buildSubGroups(_drillGroup!, highest);
+    var groups = buildNavGroups(highest);
+    for (final selected in _drillPath) {
+      final stillVisible = groups.any((g) =>
+          g.firstLevel == selected.firstLevel && g.lastLevel == selected.lastLevel);
+      if (!stillVisible) break;
+      groups = buildSubGroups(selected, highest);
     }
-    return buildNavGroups(highest);
+    return groups;
+  }
+
+  bool _isCurrentGroup(NavGroup group) {
+    if (group.isLeaf && _selectedLeafLevel != null) {
+      return group.firstLevel == _selectedLeafLevel;
+    }
+    return group.containsPage(_currentPage);
   }
 
   void _scrollPillIntoView() {
@@ -343,7 +359,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
     if (activeIdx < 0) return;
 
     const estimatedPillWidth = 80.0;
-    final offset = _drillGroup != null ? 44.0 : 0.0;
+    final offset = _drillPath.isNotEmpty ? 44.0 : 0.0;
     final target = offset +
         (activeIdx * estimatedPillWidth) -
         (_pillScrollCtrl.position.viewportDimension / 2) +
@@ -358,8 +374,14 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   void _onPageChanged(int page) {
     setState(() {
       _currentPage = page;
-      if (_drillGroup != null && !_drillGroup!.containsPage(page)) {
-        _drillGroup = null;
+      while (_drillPath.isNotEmpty && !_drillPath.last.containsPage(page)) {
+        _drillPath.removeLast();
+      }
+      final pageStart = page * _pageSize + 1;
+      final pageEnd = pageStart + _pageSize - 1;
+      if (_selectedLeafLevel != null &&
+          (_selectedLeafLevel! < pageStart || _selectedLeafLevel! > pageEnd)) {
+        _selectedLeafLevel = null;
       }
     });
     _scrollPillIntoView();
@@ -374,12 +396,8 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
     final nextLevelPage =
         ((highest) / _pageSize).floor().clamp(0, totalPages - 1);
 
-    if (_drillGroup != null && !_drillGroup!.containsPage(_currentPage)) {
-      _drillGroup = null;
-    }
-
     final pills = _activePills(highest);
-    final activeIdx = pills.indexWhere((g) => g.containsPage(_currentPage));
+    final activeIdx = pills.indexWhere(_isCurrentGroup);
     final activeGroup = activeIdx >= 0 ? pills[activeIdx] : null;
 
     return Column(
@@ -389,7 +407,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
           height: 44,
           child: Row(
             children: [
-              if (_drillGroup != null)
+              if (_drillPath.isNotEmpty)
                 GestureDetector(
                   onTap: _closeDrill,
                   child: Container(
@@ -408,7 +426,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                             color: accent, size: 12),
                         const SizedBox(width: 4),
                         Text(
-                          _drillGroup!.label,
+                          _drillPath.last.label,
                           style: TextStyle(
                             color: accent,
                             fontSize: 11,
@@ -428,7 +446,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                   itemCount: pills.length,
                   itemBuilder: (_, i) {
                     final group = pills[i];
-                    final isCurrent = group.containsPage(_currentPage);
+                    final isCurrent = _isCurrentGroup(group);
 
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -614,7 +632,7 @@ class _ChapterGrid extends StatelessWidget {
           stars: starCount,
           isUnlocked: isUnlocked,
           isNext: isNext,
-          onTap: isUnlocked || isNext ? () => onTap(levelId) : null,
+          onTap: isUnlocked ? () => onTap(levelId) : null,
         );
       },
     );
@@ -643,14 +661,16 @@ class _LevelCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = mode.color;
-    final locked = !isUnlocked && !isNext;
+    final locked = !isUnlocked;
     final completed = isUnlocked && stars > 0;
 
     return Semantics(
       button: true,
       enabled: !locked,
       label: locked
-          ? 'Level $levelId, locked'
+          ? isNext
+              ? 'Level $levelId, next challenge, locked'
+              : 'Level $levelId, locked'
           : isNext
               ? 'Level $levelId, next challenge'
               : 'Level $levelId, $stars stars',
