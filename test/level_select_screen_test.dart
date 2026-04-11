@@ -11,142 +11,94 @@ void main() {
     expect(visibleLevelCardCount(205), 206);
   });
 
-  group('buildNavGroups — dynamic telescoping', () {
-    test('small progress gives individual pills (≤ 7)', () {
+  group('buildNavGroups — 100-based summary', () {
+    test('small progress still starts with first 20', () {
       final groups = buildNavGroups(1);
       expect(groups.length, 1);
       expect(groups.first.label, '1–20');
       expect(groups.first.pageCount, 1);
-      expect(groups.first.isDrillable, false);
+      expect(groups.first.isDrillable, true);
     });
 
-    test('100 unlocked gives 6 individual pills, none drillable', () {
+    test('100 unlocked shows 1-100 plus remainder', () {
       final groups = buildNavGroups(100);
-      expect(groups.length, 6);
-      expect(groups.first.label, '1–20');
-      for (final g in groups) {
-        expect(g.pageCount, 1);
-        expect(g.isDrillable, false);
-      }
+      expect(groups.length, 2);
+      expect(groups[0].label, '1–100');
+      expect(groups[1].label, '101');
     });
 
-    test('200 unlocked uses 100-level groups, not drillable', () {
+    test('200 unlocked shows single summary up to 200 plus remainder', () {
       final groups = buildNavGroups(200);
-      expect(groups.length, lessThanOrEqualTo(10));
-
-      final bigGroups = groups.where((g) => g.pageCount > 1).toList();
-      expect(bigGroups, isNotEmpty);
-      expect(bigGroups.first.label, '1–100');
-      for (final g in bigGroups) {
-        expect(g.isDrillable, false,
-            reason: '100-level groups (5 pages) are not drillable');
-      }
+      expect(groups[0].label, '1–200');
+      expect(groups[1].label, '201');
     });
 
-    test('500 unlocked stays under 10 pills, none drillable', () {
-      final groups = buildNavGroups(500);
-      expect(groups.length, lessThanOrEqualTo(10));
-
-      for (final g in groups) {
-        expect(g.isDrillable, false,
-            reason: 'at 500 levels groups are ≤ 100 lvls');
-      }
+    test('700 unlocked shows compact summary and tiny remainder', () {
+      final groups = buildNavGroups(700);
+      expect(groups[0].label, '1–700');
+      expect(groups[1].label, '701');
     });
 
-    test('600 unlocked creates drillable 500-level groups', () {
-      final groups = buildNavGroups(600);
-      expect(groups.length, lessThanOrEqualTo(10));
-
-      final drillable = groups.where((g) => g.isDrillable).toList();
-      expect(drillable, isNotEmpty,
-          reason: '500-level groups should appear once old pages > 25');
-      expect(drillable.first.label, '1–500');
-    });
-
-    test('1000 unlocked has drillable groups and ≤ 10 pills', () {
-      final groups = buildNavGroups(1000);
-      expect(groups.length, lessThanOrEqualTo(10));
-
-      final drillable = groups.where((g) => g.isDrillable).toList();
-      expect(drillable.length, greaterThanOrEqualTo(1));
-
-      final recent = groups.where((g) => g.pageCount == 1).toList();
-      expect(recent.length, 5);
-    });
-
-    test('2000 unlocked stays under 10 pills', () {
-      final groups = buildNavGroups(2000);
-      expect(groups.length, lessThanOrEqualTo(10));
-    });
-
-    test('all pages are covered without gaps or overlaps', () {
+    test('all levels are covered without gaps or overlaps', () {
       for (final h in [1, 50, 100, 200, 500, 600, 1000, 2000]) {
         final groups = buildNavGroups(h);
         final visible = visibleLevelCardCount(h);
-        final totalPages = (visible / 20).ceil();
 
-        expect(groups.first.firstPage, 0,
-            reason: 'h=$h: first group must start at page 0');
-        expect(groups.last.lastPage, totalPages - 1,
-            reason: 'h=$h: last group must end at final page');
+        expect(groups.first.firstLevel, 1,
+            reason: 'h=$h: first group must start at level 1');
+        expect(groups.last.lastLevel, visible,
+            reason: 'h=$h: last group must end at final visible level');
 
         for (int i = 1; i < groups.length; i++) {
-          expect(groups[i].firstPage, groups[i - 1].lastPage + 1,
+          expect(groups[i].firstLevel, groups[i - 1].lastLevel + 1,
               reason: 'h=$h: group $i must follow group ${i - 1}');
         }
       }
     });
   });
 
-  group('buildSubGroups — drill-down into 100-level sub-groups', () {
-    test('a 500-level drillable group splits into 5 sub-groups of 100', () {
-      final groups = buildNavGroups(600);
-      final drillable = groups.firstWhere((g) => g.isDrillable);
-      expect(drillable.label, '1–500');
+  group('buildSubGroups — 500 -> 100 -> 20 -> individual', () {
+    test('1-700 splits to 500 and 200 bands', () {
+      const parent = NavGroup('1–700', 1, 700);
+      final subs = buildSubGroups(parent, 700);
+      expect(subs.map((s) => s.label), ['1–500', '501–700']);
+    });
 
-      final subs = buildSubGroups(drillable, 600);
+    test('a 200-level band splits to 100-level bands', () {
+      const parent = NavGroup('501–700', 501, 700);
+      final subs = buildSubGroups(parent, 700);
+      expect(subs.map((s) => s.label), ['501–600', '601–700']);
+    });
+
+    test('a 100-level band splits to 20-level bands', () {
+      const parent = NavGroup('601–700', 601, 700);
+      final subs = buildSubGroups(parent, 700);
       expect(subs.length, 5);
-      expect(subs[0].label, '1–100');
-      expect(subs[1].label, '101–200');
-      expect(subs[2].label, '201–300');
-      expect(subs[3].label, '301–400');
-      expect(subs[4].label, '401–500');
-
-      for (final s in subs) {
-        expect(s.isDrillable, false);
-        expect(s.pageCount, 5);
-      }
+      expect(subs.first.label, '601–620');
+      expect(subs.last.label, '681–700');
     });
 
-    test('sub-groups cover exactly the parent range', () {
-      for (final h in [600, 1000, 2000]) {
-        final groups = buildNavGroups(h);
-        for (final parent in groups.where((g) => g.isDrillable)) {
-          final subs = buildSubGroups(parent, h);
-
-          expect(subs.first.firstPage, parent.firstPage,
-              reason: 'h=$h ${parent.label}: sub start must match parent');
-          expect(subs.last.lastPage, parent.lastPage,
-              reason: 'h=$h ${parent.label}: sub end must match parent');
-
-          for (int i = 1; i < subs.length; i++) {
-            expect(subs[i].firstPage, subs[i - 1].lastPage + 1,
-                reason:
-                    'h=$h ${parent.label}: sub $i must follow sub ${i - 1}');
-          }
-        }
-      }
+    test('a 20-level band splits to individual levels', () {
+      const parent = NavGroup('601–620', 601, 620);
+      final subs = buildSubGroups(parent, 700);
+      expect(subs.length, 20);
+      expect(subs.first.label, '601');
+      expect(subs.last.label, '620');
     });
 
-    test('sub-groups of a partial group (< 500 levels) are contiguous', () {
-      final groups = buildNavGroups(700);
-      final drillable = groups.where((g) => g.isDrillable).toList();
-
-      for (final parent in drillable) {
+    test('sub-groups always cover parent range contiguously', () {
+      for (final parent in const [
+        NavGroup('1–700', 1, 700),
+        NavGroup('501–700', 501, 700),
+        NavGroup('601–700', 601, 700),
+        NavGroup('601–620', 601, 620),
+      ]) {
         final subs = buildSubGroups(parent, 700);
-        expect(subs, isNotEmpty);
-        expect(subs.first.firstPage, parent.firstPage);
-        expect(subs.last.lastPage, parent.lastPage);
+        expect(subs.first.firstLevel, parent.firstLevel);
+        expect(subs.last.lastLevel, parent.lastLevel);
+        for (int i = 1; i < subs.length; i++) {
+          expect(subs[i].firstLevel, subs[i - 1].lastLevel + 1);
+        }
       }
     });
   });

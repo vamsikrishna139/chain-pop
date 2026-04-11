@@ -583,15 +583,7 @@ class _GameScreenState extends State<GameScreen> {
                         ),
                       ),
                       const Spacer(),
-                      Text(
-                        'LEVEL ${widget.level}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 2,
-                        ),
-                      ),
+                      const SizedBox.shrink(),
                       const Spacer(),
                       IconButton(
                         onPressed: _openSettings,
