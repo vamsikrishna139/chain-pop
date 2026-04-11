@@ -92,6 +92,20 @@ class StorageService {
     }
   }
 
+  /// Sum of stars for levels \[fromLevel, toLevel] inclusive (for UI bands).
+  static int totalStarsInRange(
+    DifficultyMode mode,
+    int fromLevel,
+    int toLevel,
+  ) {
+    if (toLevel < fromLevel || fromLevel < 1) return 0;
+    var sum = 0;
+    for (var i = fromLevel; i <= toLevel; i++) {
+      sum += stars(mode, i);
+    }
+    return sum;
+  }
+
   // ── Legacy compat (used by old code paths) ────────────────────────────────
 
   /// @deprecated Use [highestUnlocked] with an explicit [mode].

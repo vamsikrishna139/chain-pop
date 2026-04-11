@@ -406,11 +406,9 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     activeNodes.removeWhere((n) => n.id == data.id);
     _rebuildExtractableIds();
 
-    try {
-      final total = levelData.nodes.length;
-      final removed = total - activeNodes.length;
-      onNodeRemoved?.call(removed, total);
-    } catch (_) {}
+    final total = levelData.nodes.length;
+    final removed = total - activeNodes.length;
+    onNodeRemoved?.call(removed, total);
   }
 
   /// Restores the last removed node back onto the board.

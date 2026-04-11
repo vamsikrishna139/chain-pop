@@ -1,13 +1,21 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
 import '../services/game_audio.dart';
 import '../services/game_sfx.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/progress_format.dart';
 import 'level_select_screen.dart';
 
+/// Home hub: Material 3 surfaces, segmented difficulty, clear progression.
+///
+/// Progress model (unchanged in storage): [StorageService.highestUnlocked] is the
+/// highest **level index you may play** on that track; we surface it as the
+/// player's "frontier" and pair it with star mastery for motivation.
 class MainMenuScreen extends StatefulWidget {
   const MainMenuScreen({super.key});
 
@@ -15,11 +23,8 @@ class MainMenuScreen extends StatefulWidget {
   State<MainMenuScreen> createState() => _MainMenuScreenState();
 }
 
-class _MainMenuScreenState extends State<MainMenuScreen>
-    with SingleTickerProviderStateMixin {
+class _MainMenuScreenState extends State<MainMenuScreen> {
   late DifficultyMode _selected;
-  late AnimationController _pulseCtrl;
-  late Animation<double> _pulseAnim;
   late GameAudioController _audio;
 
   @override
@@ -27,20 +32,10 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     super.initState();
     _selected = StorageService.selectedDifficulty;
     _audio = GameAudioController(voiceCount: 2);
-
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-
-    _pulseAnim = Tween<double>(begin: 0.85, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
   }
 
   @override
   void dispose() {
-    _pulseCtrl.dispose();
     unawaited(_audio.dispose());
     super.dispose();
   }
@@ -60,7 +55,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     }
     Navigator.of(context)
         .push(
-          MaterialPageRoute(
+          MaterialPageRoute<void>(
             builder: (_) => LevelSelectScreen(initialDifficulty: _selected),
           ),
         )
@@ -72,240 +67,479 @@ class _MainMenuScreenState extends State<MainMenuScreen>
         });
   }
 
+  int _totalStarsForMode(DifficultyMode mode) {
+    final frontier = StorageService.highestUnlocked(mode);
+    var sum = 0;
+    for (var i = 1; i <= frontier; i++) {
+      sum += StorageService.stars(mode, i);
+    }
+    return sum;
+  }
+
+  Future<void> _confirmReset() async {
+    final scheme = Theme.of(context).colorScheme;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(Icons.restart_alt_rounded, color: scheme.error),
+        title: const Text('Reset all progress?'),
+        content: const Text(
+          'All stars, unlocks, and difficulty progress on this device will be cleared. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: scheme.error,
+              foregroundColor: scheme.onError,
+            ),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await StorageService.clearProgress();
+      if (!mounted) return;
+      setState(() => _selected = StorageService.selectedDifficulty);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final accent = _selected.color;
-    final width = MediaQuery.sizeOf(context).width;
-    final compact = width < 360;
-    final horizontalPad = compact ? 18.0 : 28.0;
-    final pillGutter = compact ? 2.0 : 4.0;
+    final scheme = ColorScheme.fromSeed(
+      seedColor: accent,
+      brightness: Brightness.dark,
+      surface: AppColors.background,
+    );
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Ambient background glow that follows difficulty color
-          Positioned(
-            top: -100,
-            left: -80,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 600),
-              width: 380,
-              height: 380,
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: scheme,
+        splashFactory: InkSparkle.splashFactory,
+      ),
+      child: Builder(
+        builder: (context) {
+          final cs = Theme.of(context).colorScheme;
+          return Scaffold(
+            backgroundColor: cs.surface,
+            body: Container(
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [accent.withOpacity(0.12), Colors.transparent],
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color.lerp(cs.surface, accent, 0.08)!,
+                    cs.surface,
+                    Color.lerp(cs.surface, cs.surfaceContainerHighest, 0.35)!,
+                  ],
+                  stops: const [0.0, 0.35, 1.0],
+                ),
+              ),
+              child: SafeArea(
+                child: CustomScrollView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
+                  ),
+                  slivers: [
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                      sliver: SliverList(
+                        delegate: SliverChildListDelegate([
+                          _MainMenuHero(accent: accent),
+                          const SizedBox(height: 28),
+                          Text(
+                            'Difficulty',
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                              color: cs.onSurfaceVariant,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _DifficultySegmented(
+                            selected: _selected,
+                            onChanged: _selectDifficulty,
+                          ),
+                          const SizedBox(height: 20),
+                          _ProgressionCard(
+                            mode: _selected,
+                            totalStars: _totalStarsForMode(_selected),
+                          ),
+                          const SizedBox(height: 12),
+                          _CrossTrackStarsRow(
+                            selected: _selected,
+                            totalStarsFor: _totalStarsForMode,
+                            onSelectMode: (m) => unawaited(_selectDifficulty(m)),
+                          ),
+                          const SizedBox(height: 28),
+                          FilledButton.icon(
+                            onPressed: _play,
+                            icon: const Icon(Icons.play_arrow_rounded, size: 26),
+                            label: const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 4),
+                              child: Text(
+                                'Play',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: accent,
+                              foregroundColor: Colors.black,
+                              elevation: 2,
+                              shadowColor: accent.withValues(alpha: 0.45),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 16,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: Semantics(
+                              button: true,
+                              label: 'Reset all progress',
+                              hint: 'Long press to confirm',
+                              child: InkWell(
+                                onLongPress: _confirmReset,
+                                borderRadius: BorderRadius.circular(10),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                    horizontal: 16,
+                                  ),
+                                  child: Text(
+                                    'Hold to reset all progress',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: cs.onSurfaceVariant
+                                          .withValues(alpha: 0.55),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ── Hero ─────────────────────────────────────────────────────────────────────
+
+class _MainMenuHero extends StatelessWidget {
+  final Color accent;
+
+  const _MainMenuHero({required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          'CHAIN POP',
+          style: tt.displaySmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.2,
+            height: 1.05,
+            color: accent,
           ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Clear the board in the right order.',
+          style: tt.titleMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Tap arrows. No jams. Chain the pops.',
+          style: tt.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
 
-          SafeArea(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPad),
+// ── Segmented difficulty (Material 3) ─────────────────────────────────────
+
+class _DifficultySegmented extends StatelessWidget {
+  final DifficultyMode selected;
+  final Future<void> Function(DifficultyMode) onChanged;
+
+  const _DifficultySegmented({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<DifficultyMode>(
+      segments: [
+        ButtonSegment<DifficultyMode>(
+          value: DifficultyMode.easy,
+          icon: Icon(DifficultyMode.easy.icon, size: 18),
+          label: const Text('Easy'),
+        ),
+        ButtonSegment<DifficultyMode>(
+          value: DifficultyMode.medium,
+          icon: Icon(DifficultyMode.medium.icon, size: 18),
+          label: const Text('Med'),
+        ),
+        ButtonSegment<DifficultyMode>(
+          value: DifficultyMode.hard,
+          icon: Icon(DifficultyMode.hard.icon, size: 18),
+          label: const Text('Hard'),
+        ),
+      ],
+      selected: {selected},
+      onSelectionChanged: (set) {
+        if (set.isNotEmpty) unawaited(onChanged(set.first));
+      },
+      multiSelectionEnabled: false,
+      emptySelectionAllowed: false,
+      showSelectedIcon: false,
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        padding: WidgetStateProperty.all(
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        ),
+        shape: WidgetStateProperty.resolveWith(
+          (states) => RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Progression card ───────────────────────────────────────────────────────
+//
+// High levels (1000+): show comma-separated frontier, stretch bar aligned to the
+// 20-level map pages, and compact lifetime stats — not "2847 / 3000" mastery.
+
+class _ProgressionCard extends StatelessWidget {
+  final DifficultyMode mode;
+  final int totalStars;
+
+  const _ProgressionCard({
+    required this.mode,
+    required this.totalStars,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final frontier = StorageService.highestUnlocked(mode);
+    final accent = mode.color;
+    final window = ProgressFormat.stretchWindow(frontier);
+    final stretch = ProgressFormat.stretchStars(mode, frontier);
+    final stretchFrac =
+        stretch.cap > 0 ? (stretch.earned / stretch.cap).clamp(0.0, 1.0) : 0.0;
+    final avg = ProgressFormat.avgStarsPerClearedStage(totalStars, frontier);
+
+    return Card(
+      elevation: 1,
+      shadowColor: Colors.black54,
+      color: cs.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(mode.icon, color: accent, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '${mode.label} track',
+                    style: tt.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              ProgressFormat.level(frontier),
+              style: tt.headlineLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                height: 1.05,
+                color: accent,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Deepest stage you can open',
+              style: tt.bodyMedium?.copyWith(
+                color: cs.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'The map groups levels in pages of 20 — same as this bar.',
+              style: tt.bodySmall?.copyWith(
+                color: cs.onSurfaceVariant.withValues(alpha: 0.85),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainer,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: cs.outline.withValues(alpha: 0.22),
+                ),
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Spacer(flex: 2),
-
-                  // ── Logo ────────────────────────────────────────────────
-                  AnimatedBuilder(
-                    animation: _pulseAnim,
-                    builder: (_, child) => Transform.scale(
-                      scale: _pulseAnim.value,
-                      child: child,
-                    ),
-                    child: ShaderMask(
-                      shaderCallback: (bounds) => LinearGradient(
-                        colors: [accent, accent.withOpacity(0.6)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ).createShader(bounds),
-                      child: const Text(
-                        'CHAIN\nPOP',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 64,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white, // masked by ShaderMask
-                          height: 0.9,
-                          letterSpacing: 6,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 10),
-                  Text.rich(
-                    TextSpan(
-                      style: TextStyle(
-                        fontSize: compact ? 12 : 13,
-                        letterSpacing: compact ? 2.5 : 3.5,
-                        fontWeight: FontWeight.w800,
-                        height: 1.25,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: 'POP · ',
-                          style: TextStyle(color: Colors.white.withOpacity(0.55)),
-                        ),
-                        TextSpan(
-                          text: 'CHAIN',
-                          style: TextStyle(
-                            color: accent,
-                            shadows: [
-                              Shadow(
-                                blurRadius: 12,
-                                color: accent.withOpacity(0.45),
-                              ),
-                            ],
-                          ),
-                        ),
-                        TextSpan(
-                          text: ' · REPEAT',
-                          style: TextStyle(color: Colors.white.withOpacity(0.55)),
-                        ),
-                      ],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: compact ? 4 : 6),
                   Text(
-                    'Sweet cascades. Big energy.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.28),
-                      fontSize: compact ? 10 : 11,
-                      letterSpacing: compact ? 1.2 : 2,
-                      fontWeight: FontWeight.w500,
+                    'This stretch',
+                    style: tt.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-
-                  const Spacer(flex: 2),
-
-                  // ── Difficulty selector ──────────────────────────────────
-                  const Text(
-                    'DIFFICULTY',
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 11,
-                      letterSpacing: 3,
+                  const SizedBox(height: 4),
+                  Text(
+                    'Levels ${ProgressFormat.level(window.start)} – ${ProgressFormat.level(window.end)}',
+                    style: tt.bodySmall?.copyWith(
+                      color: cs.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Row(
-                    children: DifficultyMode.values
-                        .map((mode) => Expanded(
-                              child: Padding(
-                                padding: EdgeInsets.symmetric(horizontal: pillGutter),
-                                child: _DifficultyPill(
-                                  mode: mode,
-                                  selected: _selected == mode,
-                                  compact: compact,
-                                  onTap: () => _selectDifficulty(mode),
-                                ),
-                              ),
-                            ))
-                        .toList(),
-                  ),
-
-                  const Spacer(),
-
-                  // ── Progress summary ─────────────────────────────────────
-                  _ProgressRow(difficulty: _selected),
-
-                  const SizedBox(height: 32),
-
-                  // ── Play button ──────────────────────────────────────────
-                  SizedBox(
-                    width: double.infinity,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 400),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: accent.withOpacity(0.4),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          )
-                        ],
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Stars here',
+                        style: tt.labelMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
-                      child: ElevatedButton.icon(
-                        onPressed: _play,
-                        icon: const Icon(Icons.play_arrow_rounded, size: 28),
-                        label: const Text(
-                          'PLAY',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 3,
-                          ),
+                      Text(
+                        '${ProgressFormat.starsCompact(stretch.earned)} / ${stretch.cap} ★',
+                        style: tt.labelMedium?.copyWith(
+                          color: AppColors.starGold,
+                          fontWeight: FontWeight.w800,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          elevation: 0,
-                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(
+                      value: stretchFrac,
+                      minHeight: 8,
+                      backgroundColor: cs.surfaceContainerHighest,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Color.lerp(AppColors.starGold, accent, 0.35)!,
                       ),
                     ),
                   ),
-
-                  const SizedBox(height: 16),
-
-                  // ── Reset (long-press required to prevent accidents) ───────
-                  Semantics(
-                    button: true,
-                    label: 'Reset all progress',
-                    hint: 'Long press to open confirmation',
-                    child: GestureDetector(
-                      onLongPress: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            backgroundColor: AppColors.surfaceDialog,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                            title: const Text('Reset all progress?',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                            content: const Text('This cannot be undone.',
-                                style: TextStyle(color: Colors.white54)),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(context, false),
-                                  child: const Text('CANCEL', style: TextStyle(color: Colors.white38))),
-                              ElevatedButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                                child: const Text('RESET', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          await StorageService.clearProgress();
-                          if (!mounted) return;
-                          setState(() => _selected = StorageService.selectedDifficulty);
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          'Hold to reset progress',
-                          style: TextStyle(color: Colors.white.withOpacity(0.15), fontSize: 11),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  const Spacer(),
                 ],
               ),
             ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatChip(
+                    label: 'Lifetime ★',
+                    value: ProgressFormat.starsCompact(totalStars),
+                    cs: cs,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatChip(
+                    label: 'Avg / stage',
+                    value: avg != null ? '${avg.toStringAsFixed(1)} ★' : '—',
+                    cs: cs,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final ColorScheme cs;
+
+  const _StatChip({
+    required this.label,
+    required this.value,
+    required this.cs,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
           ),
         ],
       ),
@@ -313,169 +547,84 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   }
 }
 
-// ── Difficulty pill ─────────────────────────────────────────────────────────
+// ── Other tracks at a glance ─────────────────────────────────────────────────
 
-class _DifficultyPill extends StatelessWidget {
-  final DifficultyMode mode;
-  final bool selected;
-  final bool compact;
-  final VoidCallback onTap;
+class _CrossTrackStarsRow extends StatelessWidget {
+  final DifficultyMode selected;
+  final int Function(DifficultyMode) totalStarsFor;
+  final void Function(DifficultyMode) onSelectMode;
 
-  const _DifficultyPill({
-    required this.mode,
+  const _CrossTrackStarsRow({
     required this.selected,
-    this.compact = false,
-    required this.onTap,
+    required this.totalStarsFor,
+    required this.onSelectMode,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = mode.color;
-    final radius = BorderRadius.circular(16);
-    final vPad = compact ? 11.0 : 14.0;
-    final iconSize = compact ? 20.0 : 22.0;
-    final labelSize = compact ? 9.5 : 11.0;
+    final cs = Theme.of(context).colorScheme;
 
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '${mode.label} difficulty',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: radius,
-          splashColor: color.withOpacity(0.22),
-          highlightColor: color.withOpacity(0.08),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            padding: EdgeInsets.symmetric(vertical: vPad),
-            decoration: BoxDecoration(
-              color: selected ? color.withOpacity(0.18) : Colors.white.withOpacity(0.05),
-              borderRadius: radius,
-              border: Border.all(
-                color: selected ? color.withOpacity(0.7) : Colors.white12,
-                width: selected ? 1.5 : 1,
-              ),
-              boxShadow: selected
-                  ? [BoxShadow(color: color.withOpacity(0.3), blurRadius: 16)]
-                  : [],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(mode.icon, color: selected ? color : Colors.white38, size: iconSize),
-                SizedBox(height: compact ? 5 : 6),
-                Text(
-                  mode.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: selected ? color : Colors.white38,
-                    fontSize: labelSize,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: compact ? 0.6 : 1.2,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Progress + star summary row ────────────────────────────────────────────
-
-class _ProgressRow extends StatelessWidget {
-  final DifficultyMode difficulty;
-  const _ProgressRow({required this.difficulty});
-
-  int _totalStars(DifficultyMode mode) {
-    final highest = StorageService.highestUnlocked(mode);
-    int sum = 0;
-    for (int i = 1; i <= highest; i++) {
-      sum += StorageService.stars(mode, i);
-    }
-    return sum;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final highest = StorageService.highestUnlocked(difficulty);
-    final accent = difficulty.color;
-
-    return Column(
-      children: [
-        // Current difficulty progress
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(difficulty.icon, color: accent, size: 16),
-              const SizedBox(width: 8),
-              Text(
-                '${difficulty.label}  ·  Lvl $highest unlocked',
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        // Star totals across all difficulties
-        Row(
-          children: DifficultyMode.values.map((m) {
-            final stars = _totalStars(m);
-            return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
+    return Row(
+      children: DifficultyMode.values.map((m) {
+        final stars = totalStarsFor(m);
+        final isSel = m == selected;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Material(
+              color: isSel
+                  ? m.color.withValues(alpha: 0.14)
+                  : cs.surfaceContainer,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                onTap: () => onSelectMode(m),
+                borderRadius: BorderRadius.circular(14),
+                splashColor: m.color.withValues(alpha: 0.2),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.04),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: m == difficulty ? m.color.withOpacity(0.4) : Colors.white12,
+                      color: isSel
+                          ? m.color.withValues(alpha: 0.45)
+                          : cs.outline.withValues(alpha: 0.25),
                     ),
                   ),
                   child: Column(
                     children: [
-                      Icon(Icons.star_rounded,
-                          size: 14, color: stars > 0 ? AppColors.starGold : Colors.white24),
-                      const SizedBox(height: 2),
+                      Icon(
+                        Icons.star_rounded,
+                        size: 18,
+                        color: stars > 0 ? AppColors.starGold : cs.outline,
+                      ),
+                      const SizedBox(height: 4),
                       Text(
-                        '$stars',
+                        ProgressFormat.starsCompact(stars),
                         style: TextStyle(
-                          color: stars > 0 ? Colors.white70 : Colors.white24,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: isSel ? m.color : cs.onSurface,
                         ),
                       ),
                       Text(
                         m.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: m == difficulty ? m.color : Colors.white24,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
+                          color: cs.onSurfaceVariant,
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-            );
-          }).toList(),
-        ),
-      ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }

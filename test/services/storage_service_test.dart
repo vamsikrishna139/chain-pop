@@ -51,6 +51,15 @@ void main() {
       expect(StorageService.stars(DifficultyMode.medium, 1), 3);
     });
 
+    test('totalStarsInRange sums inclusive', () async {
+      await StorageService.saveStars(DifficultyMode.easy, 1, 3);
+      await StorageService.saveStars(DifficultyMode.easy, 2, 2);
+      await StorageService.saveStars(DifficultyMode.easy, 3, 1);
+      expect(StorageService.totalStarsInRange(DifficultyMode.easy, 1, 3), 6);
+      expect(StorageService.totalStarsInRange(DifficultyMode.easy, 2, 2), 2);
+      expect(StorageService.totalStarsInRange(DifficultyMode.easy, 5, 3), 0);
+    });
+
     test('per-mode isolation for unlock and stars', () async {
       await StorageService.unlockLevel(DifficultyMode.hard, 10);
       await StorageService.saveStars(DifficultyMode.hard, 2, 3);

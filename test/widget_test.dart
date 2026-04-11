@@ -53,7 +53,7 @@ void main() {
     await tester.pump(const Duration(seconds: 6));
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('LEVEL 1'), findsWidgets);
+    expect(find.textContaining('LEVEL 1'), findsWidgets);
     expect(find.text('LEVEL 2'), findsNothing);
     expect(find.byIcon(Icons.undo_rounded), findsWidgets);
 
@@ -106,7 +106,7 @@ void main() {
     await tester.pump(const Duration(seconds: 6));
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('LEVEL 1'), findsWidgets);
+    expect(find.textContaining('LEVEL 1'), findsWidgets);
     expect(find.text('LEVEL 2'), findsNothing);
     expect(find.byIcon(Icons.undo_rounded), findsWidgets);
 
