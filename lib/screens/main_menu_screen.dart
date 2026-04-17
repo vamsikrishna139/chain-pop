@@ -7,10 +7,12 @@ import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
 import '../services/game_audio.dart';
 import '../services/game_sfx.dart';
+import '../game/levels/tutorial_levels.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/progress_format.dart';
 import 'daily_challenge_calendar_screen.dart';
+import 'game_screen.dart';
 import 'level_select_screen.dart';
 
 /// Home hub: Material 3 surfaces, segmented difficulty, clear progression.
@@ -66,6 +68,28 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           setState(() {
             _selected = StorageService.selectedDifficulty;
           });
+        });
+  }
+
+  void _openTutorial() {
+    if (StorageService.gameSettings.soundEnabled) {
+      unawaited(_audio.play(GameSfx.uiTap));
+    }
+    Navigator.of(context)
+        .push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => GameScreen(
+              level: 1,
+              difficulty: DifficultyMode.easy,
+              fixedLevel: tutorialLevels.first,
+              isTutorial: true,
+              tutorialIndex: 0,
+            ),
+          ),
+        )
+        .then((_) {
+          if (!mounted) return;
+          setState(() {});
         });
   }
 
@@ -204,6 +228,78 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                             onTap: _openDailyChallenge,
                           ),
                           const SizedBox(height: 28),
+                          if (!StorageService.tutorialCompleted) ...[
+                            FilledButton.icon(
+                              onPressed: _openTutorial,
+                              icon: const Icon(Icons.school_rounded, size: 26),
+                              label: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 4),
+                                child: Text(
+                                  'Tutorial',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: cs.tertiary,
+                                foregroundColor: cs.onTertiary,
+                                elevation: 2,
+                                shadowColor: cs.tertiary.withValues(alpha: 0.4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 16,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ] else ...[
+                            Semantics(
+                              button: true,
+                              label: 'Replay tutorial',
+                              excludeSemantics: true,
+                              child: OutlinedButton.icon(
+                                onPressed: _openTutorial,
+                                icon: Icon(
+                                  Icons.school_outlined,
+                                  size: 22,
+                                  color: cs.onSurfaceVariant,
+                                ),
+                                label: Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 2),
+                                  child: Text(
+                                    'Replay tutorial',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.4,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: cs.onSurfaceVariant,
+                                  side: BorderSide(
+                                    color: cs.outline.withValues(alpha: 0.65),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           FilledButton.icon(
                             onPressed: _play,
                             icon: const Icon(Icons.play_arrow_rounded, size: 26),

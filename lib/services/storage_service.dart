@@ -16,6 +16,7 @@ import '../models/game_settings.dart';
 /// stars_hard_<levelId>         → 0-3
 /// daily_stars_<YYYYMMDD>       → 0-3 (best result that local calendar day)
 /// daily_ad_unlock_<YYYYMMDD>   → true after rewarded ad (older / off-window days)
+/// tutorial_completed           → true after finishing the 5-step onboarding track
 /// ```
 class StorageService {
   static const String _boxName = 'chain_pop_storage';
@@ -24,6 +25,7 @@ class StorageService {
   static const String _starsPrefix = 'stars_';
   static const String _dailyStarsPrefix = 'daily_stars_';
   static const String _dailyAdUnlockPrefix = 'daily_ad_unlock_';
+  static const String _tutorialCompletedKey = 'tutorial_completed';
   static const String _settingsSoundKey = 'settings_sound';
   static const String _settingsHapticsKey = 'settings_haptics';
   static const String _settingsColorblindKey = 'settings_colorblind';
@@ -134,6 +136,16 @@ class StorageService {
     await _box.put('$_dailyAdUnlockPrefix$dayKey', true);
   }
 
+  // ── Onboarding tutorial ───────────────────────────────────────────────────
+
+  /// Whether the player finished the fixed 5-level tutorial track.
+  static bool get tutorialCompleted =>
+      _box.get(_tutorialCompletedKey, defaultValue: false) as bool;
+
+  static Future<void> setTutorialCompleted(bool value) async {
+    await _box.put(_tutorialCompletedKey, value);
+  }
+
   // ── Legacy compat (used by old code paths) ────────────────────────────────
 
   /// @deprecated Use [highestUnlocked] with an explicit [mode].
@@ -146,6 +158,8 @@ class StorageService {
   // ── Reset ─────────────────────────────────────────────────────────────────
 
   /// Clears all progress (useful for testing / debug).
+  ///
+  /// Includes [tutorialCompleted] and all other Hive keys in this box.
   static Future<void> clearProgress() async {
     await _box.clear();
   }

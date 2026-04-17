@@ -8,6 +8,7 @@ import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
+import '../game/levels/tutorial_levels.dart';
 import '../models/difficulty.dart';
 import '../models/game_settings.dart';
 import '../services/game_audio.dart';
@@ -21,6 +22,7 @@ import 'game/widgets/game_dialogs.dart';
 import 'game/widgets/game_header_hud.dart';
 import 'game/widgets/game_pause_overlay.dart';
 import 'game/widgets/game_settings_sheet.dart';
+import 'game/widgets/win_celebration_overlay.dart';
 import 'game/widgets/win_panel.dart';
 
 /// Full-screen game view for a single level.
@@ -29,13 +31,15 @@ import 'game/widgets/win_panel.dart';
 /// modal route), which eliminates all Navigator-pop race conditions.
 /// Auto-advances to the next level after a countdown ([GameScreenConstants]),
 /// except for [isDailyChallenge] runs (no auto-next; stars go to
-/// [StorageService.saveDailyStars]).
+/// [StorageService.saveDailyStars]) and the last step of [isTutorial].
 class GameScreen extends StatefulWidget {
   final int level;
   final DifficultyMode difficulty;
   final LevelData? fixedLevel;
   final bool isDailyChallenge;
   final int? dailyDayKey;
+  final bool isTutorial;
+  final int tutorialIndex;
 
   const GameScreen({
     super.key,
@@ -44,9 +48,14 @@ class GameScreen extends StatefulWidget {
     this.fixedLevel,
     this.isDailyChallenge = false,
     this.dailyDayKey,
+    this.isTutorial = false,
+    this.tutorialIndex = 0,
   }) : assert(
           !isDailyChallenge || (dailyDayKey != null && fixedLevel != null),
-        );
+        ),
+        assert(!isTutorial || fixedLevel != null),
+        assert(!isTutorial || !isDailyChallenge),
+        assert(!isTutorial || (tutorialIndex >= 0 && tutorialIndex < 5));
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -74,6 +83,7 @@ class _GameScreenState extends State<GameScreen> {
   Timer? _ghostHintTimer;
 
   Timer? _easyHudTimer;
+  Timer? _tutorialExitTimer;
 
   bool _isPaused = false;
 
@@ -97,6 +107,14 @@ class _GameScreenState extends State<GameScreen> {
       _levelData = widget.fixedLevel!;
       _totalNodes = _levelData.nodes.length;
       _timeLimitSec = computeDailyChallengeTimeLimit(_totalNodes);
+    } else if (widget.isTutorial) {
+      _levelData = widget.fixedLevel!;
+      _totalNodes = _levelData.nodes.length;
+      _timeLimitSec = computeGameTimeLimit(
+        widget.difficulty,
+        _totalNodes,
+        widget.level,
+      );
     } else {
       _levelData = widget.fixedLevel ??
           LevelManager.getLevel(widget.level, mode: widget.difficulty);
@@ -113,6 +131,7 @@ class _GameScreenState extends State<GameScreen> {
     _startCountdown();
     _resetGhostHintTimer();
     _startEasyHudTimer();
+    unawaited(_audio.startAmbientIfEnabled(_settings.soundEnabled));
   }
 
   @override
@@ -122,6 +141,7 @@ class _GameScreenState extends State<GameScreen> {
     _autoAdvanceTimer?.cancel();
     _ghostHintTimer?.cancel();
     _easyHudTimer?.cancel();
+    _tutorialExitTimer?.cancel();
     unawaited(_audio.dispose());
     super.dispose();
   }
@@ -136,7 +156,9 @@ class _GameScreenState extends State<GameScreen> {
 
   void _buildGame() {
     _game = ChainPopGame(
-      levelId: widget.isDailyChallenge ? widget.dailyDayKey! : widget.level,
+      levelId: widget.isDailyChallenge
+          ? widget.dailyDayKey!
+          : (widget.isTutorial ? widget.tutorialIndex : widget.level),
       difficulty: widget.difficulty,
       onWin: _handleWin,
       onJam: _handleFoul,
@@ -233,7 +255,11 @@ class _GameScreenState extends State<GameScreen> {
     final earned = widget.difficulty.starsForJams(
       GameScreenConstants.maxLives - _livesRemaining,
     );
-    if (widget.isDailyChallenge) {
+    if (widget.isTutorial) {
+      if (widget.tutorialIndex == 4) {
+        await StorageService.setTutorialCompleted(true);
+      }
+    } else if (widget.isDailyChallenge) {
       await StorageService.saveDailyStars(widget.dailyDayKey!, earned);
     } else {
       await StorageService.saveStars(widget.difficulty, widget.level, earned);
@@ -248,6 +274,14 @@ class _GameScreenState extends State<GameScreen> {
     });
 
     if (widget.isDailyChallenge) {
+      return;
+    }
+
+    if (widget.isTutorial && widget.tutorialIndex == 4) {
+      _tutorialExitTimer?.cancel();
+      _tutorialExitTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) _goMenu();
+      });
       return;
     }
 
@@ -302,6 +336,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _resetForRetry() {
+    _tutorialExitTimer?.cancel();
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     _countdownTimer?.cancel();
@@ -320,6 +355,9 @@ class _GameScreenState extends State<GameScreen> {
         ..start();
     });
     _game.resumeEngine();
+    unawaited(
+      _audio.setAmbientGameplayPaused(false, _settings.soundEnabled),
+    );
     _game.restart();
     _game.playSfx(GameSfx.restart);
     _startCountdown();
@@ -329,6 +367,27 @@ class _GameScreenState extends State<GameScreen> {
 
   void _goNextLevel() {
     if (!mounted || widget.isDailyChallenge) return;
+    if (widget.isTutorial) {
+      final next = widget.tutorialIndex + 1;
+      if (next >= tutorialLevels.length) return;
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => GameScreen(
+            level: next + 1,
+            difficulty: DifficultyMode.easy,
+            fixedLevel: tutorialLevels[next],
+            isTutorial: true,
+            tutorialIndex: next,
+          ),
+          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+            opacity: anim,
+            child: child,
+          ),
+          transitionDuration: const Duration(milliseconds: 350),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => GameScreen(
@@ -345,6 +404,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _goMenu() {
+    _tutorialExitTimer?.cancel();
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     Navigator.of(context).popUntil((r) => r.isFirst);
@@ -382,6 +442,9 @@ class _GameScreenState extends State<GameScreen> {
       setState(() => _isPaused = false);
       _game.resumeEngine();
       if (!_stopwatch.isRunning) _stopwatch.start();
+      unawaited(
+        _audio.setAmbientGameplayPaused(false, _settings.soundEnabled),
+      );
       _startCountdown();
       _resetGhostHintTimer();
       _startEasyHudTimer();
@@ -389,6 +452,9 @@ class _GameScreenState extends State<GameScreen> {
       setState(() => _isPaused = true);
       _game.pauseEngine();
       _stopwatch.stop();
+      unawaited(
+        _audio.setAmbientGameplayPaused(true, _settings.soundEnabled),
+      );
       _countdownTimer?.cancel();
       _ghostHintTimer?.cancel();
       _easyHudTimer?.cancel();
@@ -430,6 +496,7 @@ class _GameScreenState extends State<GameScreen> {
       onSettingsChanged: (next) async {
         setState(() => _settings = next);
         _pushFeedbackToGame();
+        await _audio.setAmbientEnabled(_settings.soundEnabled);
         await StorageService.saveGameSettings(_settings);
       },
     );
@@ -456,14 +523,23 @@ class _GameScreenState extends State<GameScreen> {
             ),
           ),
           Positioned.fill(child: GameWidget(game: _game)),
+          if (_hasWon)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: WinCelebrationOverlay(accent: accent),
+              ),
+            ),
           GameHeaderHud(
             measureKey: _headerHudKey,
             onBack: _goMenu,
             onOpenSettings: _openSettings,
             livesRemaining: _livesRemaining,
             difficulty: widget.difficulty,
-            headerModeLabel:
-                widget.isDailyChallenge ? 'DAILY CHALLENGE' : null,
+            headerModeLabel: widget.isDailyChallenge
+                ? 'DAILY CHALLENGE'
+                : (widget.isTutorial
+                    ? 'TUTORIAL ${widget.tutorialIndex + 1}/5'
+                    : null),
             removedNodes: _removedNodes,
             totalNodes: _totalNodes,
             timeLeftSec: _timeLeftSec,
@@ -525,10 +601,13 @@ class _GameScreenState extends State<GameScreen> {
                   onMenu: _goMenu,
                   onRetry: _resetForRetry,
                   onNext: _goNextLevel,
-                  showNextAndAutoAdvance: !widget.isDailyChallenge,
+                  showNextAndAutoAdvance: !widget.isDailyChallenge &&
+                      (!widget.isTutorial || widget.tutorialIndex < 4),
                   titleLine: widget.isDailyChallenge
                       ? 'DAILY CHALLENGE · ${DailyChallenge.compactDateLabelFromKey(widget.dailyDayKey!)}'
-                      : null,
+                      : (widget.isTutorial
+                          ? 'TUTORIAL · STEP ${widget.tutorialIndex + 1} / 5'
+                          : null),
                 ),
               ),
             ),

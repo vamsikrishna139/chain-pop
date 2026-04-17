@@ -7,5 +7,6 @@ In-game audio (CC0 — Kenney.nl)
 - hint.wav    — Kenney UI Audio, rollover2 (mirror: Calinou/kenney-ui-audio)
 - ui_tap.wav  — Kenney Interface Sounds, click_002
 - restart.wav — Kenney Interface Sounds, open_002
+- ambient_loop.wav — bundled soft sine tone (FFmpeg lavfi), mono 2s @ 44100 Hz, ~220 Hz, heavily attenuated; replace with a proper ambient bed if desired (royalty-free / CC0).
 
 License copies: KENNEY_UI_AUDIO_LICENSE.txt, KENNEY_INTERFACE_SOUNDS_LICENSE.txt

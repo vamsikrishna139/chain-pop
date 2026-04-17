@@ -11,4 +11,10 @@ abstract final class GameScreenConstants {
   static const int winStarAnimationMs = 450;
   static const int winStarStaggerBaseMs = 200;
   static const int winStarStaggerStepMs = 150;
+
+  /// Confetti burst on level clear ([WinCelebrationOverlay]).
+  static const Duration winConfettiDuration = Duration(milliseconds: 2900);
+  static const int winConfettiParticleCount = 88;
+  /// Gravity scale multiplied by min(screen width, height) px/s².
+  static const double winConfettiGravity = 1.05;
 }
