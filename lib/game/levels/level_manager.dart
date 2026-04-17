@@ -1,4 +1,5 @@
 import '../../theme/app_colors.dart';
+import '../daily_challenge.dart';
 import 'level.dart';
 import 'generation/generation.dart';
 
@@ -29,6 +30,24 @@ class LevelManager {
     // solvable and prevents any crash from reaching the player).
     assert(false, 'Level generation failed: ${result.error}');
     return _emergencyFallback(levelId);
+  }
+
+  /// One solvable board per local calendar day; same layout for every player
+  /// on that date. Star progress uses [StorageService.saveDailyStars].
+  static LevelData getDailyChallenge([DateTime? date]) {
+    final when = date ?? DateTime.now();
+    final dayKey = DailyChallenge.dateKeyLocal(when);
+    final result = _generator.generateDailyChallenge(dayKey);
+
+    if (result.isSuccess) {
+      final level = result.value;
+      final layoutMsg = LevelData.layoutValidationMessage(level);
+      assert(layoutMsg == null, 'Invalid daily layout: $layoutMsg');
+      return level;
+    }
+
+    assert(false, 'Daily generation failed: ${result.error}');
+    return _emergencyFallback(dayKey);
   }
 
   /// An absolute last-resort fallback: one node pointing up in an empty grid.

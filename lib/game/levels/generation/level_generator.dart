@@ -79,7 +79,24 @@ class LevelGenerator {
     DifficultyMode? mode,
   }) {
     final config = LevelConfiguration.fromLevelId(levelId, mode: mode);
+    return generateFromConfiguration(
+      config,
+      primarySeed: levelId,
+      applyMilestones: true,
+    );
+  }
 
+  /// Deterministic [LevelData] from an explicit [config] (daily puzzles, tests).
+  ///
+  /// [primarySeed] drives RNG streams; it should differ per puzzle when
+  /// [config.levelId] is reused. [applyMilestones] is off for dailies so
+  /// campaign milestone layouts never hijack the date key.
+  Result<LevelData, GenerationError> generateFromConfiguration(
+    LevelConfiguration config, {
+    required int primarySeed,
+    bool applyMilestones = true,
+    int maxAttempts = 16,
+  }) {
     final validation = config.validate();
     if (!validation.isValid) {
       return Result.error(
@@ -88,41 +105,53 @@ class LevelGenerator {
     }
 
     // ── Milestone levels (every 25th, Medium/Hard only) ───────────────
-    final milestone = _getMilestoneType(config);
-    if (milestone != null) {
-      final rng = Random(levelId * 31337);
-      final result = _generateMilestone(milestone, config, rng);
-      if (result.isSuccess) {
-        final level = result.value;
-        final validationResult = _validator.validate(level);
-        if (validationResult.isValid) {
-          _assertGeneratedLayout(level);
-          return result;
+    if (applyMilestones) {
+      final milestone = _getMilestoneType(config);
+      if (milestone != null) {
+        final rng = Random(primarySeed * 31337);
+        final result = _generateMilestone(milestone, config, rng);
+        if (result.isSuccess) {
+          final level = result.value;
+          final validationResult = _validator.validate(level);
+          if (validationResult.isValid) {
+            _assertGeneratedLayout(level);
+            return result;
+          }
         }
       }
-      // If milestone generation failed, fall through to normal generation.
     }
 
     // ── Normal generation with retries ────────────────────────────────
-    for (int attempt = 0; attempt < 16; attempt++) {
-      final rng = Random(levelId * 31337 + attempt * 999983);
+    for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      final rng = Random(primarySeed * 31337 + attempt * 999983);
 
       final nodeCountScale = 1.0 - (attempt ~/ 2) * 0.15;
       final scaledConfig = attempt < 2
           ? config
-          : LevelConfiguration(
+          : () {
+            var scaledTarget = (config.targetNodeCount * nodeCountScale)
+                .round()
+                .clamp(
+                  config.difficulty.minNodes,
+                  config.targetNodeCount,
+                );
+            final minFloor = config.minimumTargetNodeCount;
+            if (minFloor != null && scaledTarget < minFloor) {
+              scaledTarget = minFloor;
+            }
+            return LevelConfiguration(
               levelId: config.levelId,
               gridWidth: config.gridWidth,
               gridHeight: config.gridHeight,
-              targetNodeCount:
-                  (config.targetNodeCount * nodeCountScale).round().clamp(
-                        config.difficulty.minNodes,
-                        config.targetNodeCount,
-                      ),
+              targetNodeCount: scaledTarget,
               difficulty: config.difficulty,
               archetype: config.archetype,
               directionBias: config.directionBias,
+              irregularMaskProbability: config.irregularMaskProbability,
+              irregularLayoutExtraTries: config.irregularLayoutExtraTries,
+              minimumTargetNodeCount: config.minimumTargetNodeCount,
             );
+          }();
 
       final result = _attemptGeneration(scaledConfig, rng);
       if (result.isSuccess) {
@@ -145,6 +174,20 @@ class LevelGenerator {
     return Result.success(fallback);
   }
 
+  /// Same puzzle for every player on a given local calendar day.
+  ///
+  /// Builds on [LevelConfiguration.forDailyChallenge] (medium grid + baseline
+  /// density + irregular-mask bias). Milestones stay off for date keys.
+  Result<LevelData, GenerationError> generateDailyChallenge(int dayKey) {
+    final config = LevelConfiguration.forDailyChallenge(dayKey);
+    return generateFromConfiguration(
+      config,
+      primarySeed: dayKey,
+      applyMilestones: false,
+      maxAttempts: 24,
+    );
+  }
+
   // ────────────────────────────────────────────────────────────────────────
   // Core backward-generation
   // ────────────────────────────────────────────────────────────────────────
@@ -157,8 +200,7 @@ class LevelGenerator {
     try {
       Set<String>? playCells;
 
-      final irregProb = _irregularProbability(config);
-      if (random.nextDouble() < irregProb) {
+      Set<String>? tryBuildIrregularMask() {
         final shapes = _preferredShapes(config.archetype);
         final kind = pickIrregularKind(random, preferred: shapes);
         final mask = buildLayoutMask(
@@ -170,8 +212,19 @@ class LevelGenerator {
         if (mask != null &&
             mask.length >= config.targetNodeCount &&
             mask.length >= config.difficulty.minNodes) {
-          playCells = mask;
+          return mask;
         }
+        return null;
+      }
+
+      final irregProb = _irregularProbability(config);
+      if (random.nextDouble() < irregProb) {
+        playCells = tryBuildIrregularMask();
+      }
+      for (var i = 0;
+          i < config.irregularLayoutExtraTries && playCells == null;
+          i++) {
+        playCells = tryBuildIrregularMask();
       }
 
       final positions = _selectUniquePositions(
@@ -225,6 +278,8 @@ class LevelGenerator {
 
   /// Probability of rolling an irregular layout based on archetype + mode.
   static double _irregularProbability(LevelConfiguration config) {
+    final o = config.irregularMaskProbability;
+    if (o != null) return o;
     return switch (config.archetype) {
       LevelArchetype.fortress => 0.92,
       LevelArchetype.chaos => 0.95,
@@ -623,6 +678,9 @@ class LevelGenerator {
       difficulty: config.difficulty,
       archetype: config.archetype,
       directionBias: DirectionBiasType.uniform,
+      irregularMaskProbability: config.irregularMaskProbability,
+      irregularLayoutExtraTries: config.irregularLayoutExtraTries,
+      minimumTargetNodeCount: config.minimumTargetNodeCount,
     );
     return _attemptGeneration(denseConfig, random);
   }
@@ -692,6 +750,9 @@ class LevelGenerator {
       difficulty: config.difficulty,
       archetype: config.archetype,
       directionBias: DirectionBiasType.uniform,
+      irregularMaskProbability: config.irregularMaskProbability,
+      irregularLayoutExtraTries: config.irregularLayoutExtraTries,
+      minimumTargetNodeCount: config.minimumTargetNodeCount,
     );
     return _attemptGeneration(sparseConfig, random);
   }

@@ -1,4 +1,5 @@
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_manager.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -58,6 +59,46 @@ void main() {
         assertLevelInvariants(25, mode);
         assertLevelInvariants(50, mode);
       }
+    });
+  });
+
+  group('LevelManager.getDailyChallenge', () {
+    test('same date yields identical layout and solvable board', () {
+      final day = DateTime(2026, 6, 15);
+      final a = LevelManager.getDailyChallenge(day);
+      final b = LevelManager.getDailyChallenge(day);
+      expect(a.levelId, 20260615);
+      expect(b.levelId, 20260615);
+      expect(a.gridWidth, b.gridWidth);
+      expect(a.gridHeight, b.gridHeight);
+      expect(a.nodes.length, b.nodes.length);
+
+      String sig(LevelData l) {
+        final parts = l.nodes
+            .map((n) => '${n.x},${n.y},${n.dir.name}')
+            .toList()
+          ..sort();
+        return parts.join('|');
+      }
+
+      expect(sig(a), sig(b));
+      expect(LevelSolver.isSolvable(a), isTrue);
+    });
+
+    test('distinct calendar days produce distinct layouts (not fallback strip)', () {
+      final d1 = LevelManager.getDailyChallenge(DateTime(2026, 4, 1));
+      final d2 = LevelManager.getDailyChallenge(DateTime(2026, 4, 2));
+      String sig(LevelData l) {
+        final parts = l.nodes
+            .map((n) => '${n.x},${n.y},${n.dir.name}')
+            .toList()
+          ..sort();
+        return '${l.nodes.length}|${parts.join('|')}';
+      }
+
+      expect(sig(d1), isNot(sig(d2)));
+      expect(LevelSolver.isSolvable(d1), isTrue);
+      expect(LevelSolver.isSolvable(d2), isTrue);
     });
   });
 }

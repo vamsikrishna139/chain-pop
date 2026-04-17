@@ -3,14 +3,16 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import '../game/levels/generation/difficulty_mode.dart';
+import '../game/levels/level_grid_config.dart';
 import '../models/difficulty.dart';
 import '../services/game_audio.dart';
 import '../services/game_sfx.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/progress_format.dart';
 import 'game_screen.dart';
 
-const int _pageSize = 20;
+const int _pageSize = kLevelsPerGridPage;
 
 /// How many level cards should be visible for a given unlock progress.
 int visibleLevelCardCount(int highestUnlocked) {
@@ -150,39 +152,83 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildTabBar(),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: _modes
-                    .map((mode) => _ChapteredLevelView(
-                          mode: mode,
-                          audio: _audio,
-                          onTap: (id) => _openLevel(id, mode),
-                        ))
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: _tabController,
+      builder: (context, _) {
+        final mode = _modes[_tabController.index];
+        final accent = mode.color;
+        final scheme = ColorScheme.fromSeed(
+          seedColor: accent,
+          brightness: Brightness.dark,
+          surface: AppColors.background,
+        );
+
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: scheme,
+            splashFactory: InkSparkle.splashFactory,
+          ),
+          child: Builder(
+            builder: (context) {
+              final cs = Theme.of(context).colorScheme;
+              return Scaffold(
+                backgroundColor: cs.surface,
+                body: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color.lerp(cs.surface, accent, 0.08)!,
+                        cs.surface,
+                        Color.lerp(
+                              cs.surface,
+                              cs.surfaceContainerHighest,
+                              0.35,
+                            )!,
+                      ],
+                      stops: const [0.0, 0.35, 1.0],
+                    ),
+                  ),
+                  child: SafeArea(
+                    child: Column(
+                      children: [
+                        _buildHeader(context, cs),
+                        _buildTabBar(context, cs),
+                        Expanded(
+                          child: TabBarView(
+                            controller: _tabController,
+                            children: _modes
+                                .map(
+                                  (m) => _ChapteredLevelView(
+                                    mode: m,
+                                    audio: _audio,
+                                    onTap: (id) => _openLevel(id, m),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(BuildContext context, ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 20, 4),
       child: Row(
         children: [
           IconButton(
-            icon:
-                const Icon(Icons.arrow_back_ios_rounded, color: Colors.white70),
+            tooltip: 'Back',
+            icon: Icon(Icons.arrow_back_rounded, color: cs.onSurface),
             onPressed: () {
               if (StorageService.gameSettings.soundEnabled) {
                 unawaited(_audio.play(GameSfx.uiTap, playbackRate: 0.9));
@@ -190,14 +236,24 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
               Navigator.of(context).pop();
             },
           ),
-          const SizedBox(width: 8),
-          const Text(
-            'SELECT LEVEL',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Levels',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.2,
+                      ),
+                ),
+                Text(
+                  'Pick a stage · Stars save per level',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                ),
+              ],
             ),
           ),
         ],
@@ -205,46 +261,70 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
     );
   }
 
-  Widget _buildTabBar() {
+  Widget _buildTabBar(BuildContext context, ColorScheme cs) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: TabBar(
-          controller: _tabController,
-          indicator: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            color: _modes[_tabController.index].color.withOpacity(0.20),
-            border: Border.all(
-              color: _modes[_tabController.index].color.withOpacity(0.5),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+      child: Material(
+        color: cs.surfaceContainerHigh,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: TabBar(
+            controller: _tabController,
+            splashBorderRadius: BorderRadius.circular(12),
+            indicator: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: cs.primary.withValues(alpha: 0.22),
+              border: Border.all(
+                color: cs.primary.withValues(alpha: 0.45),
+              ),
             ),
-          ),
-          dividerColor: Colors.transparent,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white38,
-          labelStyle: const TextStyle(
-              fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1),
-          tabs: _modes
-              .map((m) => Tab(
+            indicatorSize: TabBarIndicatorSize.tab,
+            dividerColor: Colors.transparent,
+            labelColor: cs.onSurface,
+            unselectedLabelColor:
+                cs.onSurfaceVariant.withValues(alpha: 0.75),
+            labelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+            ),
+            tabs: _modes
+                .map(
+                  (m) => Tab(
+                    height: 40,
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(m.icon, size: 14),
+                        Icon(m.icon, size: 16),
                         const SizedBox(width: 6),
-                        Text(m.label),
+                        Flexible(
+                          child: Text(
+                            m.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
-                  ))
-              .toList(),
-          onTap: (_) {
-            if (StorageService.gameSettings.soundEnabled) {
-              unawaited(_audio.play(GameSfx.uiTap, playbackRate: 1.1));
-            }
-            setState(() {});
-          },
+                  ),
+                )
+                .toList(),
+            onTap: (_) {
+              if (StorageService.gameSettings.soundEnabled) {
+                unawaited(_audio.play(GameSfx.uiTap, playbackRate: 1.1));
+              }
+              setState(() {});
+            },
+          ),
         ),
       ),
     );
@@ -389,10 +469,10 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final highest = StorageService.highestUnlocked(widget.mode);
     final visible = visibleLevelCardCount(highest);
     final totalPages = (visible / _pageSize).ceil().clamp(1, 99999);
-    final accent = widget.mode.color;
     final nextLevelPage =
         ((highest) / _pageSize).floor().clamp(0, totalPages - 1);
 
@@ -402,129 +482,146 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
     return Column(
       children: [
-        // ── Pill strip ─────────────────────────────────────────────
-        SizedBox(
-          height: 44,
-          child: Row(
-            children: [
-              if (_drillPath.isNotEmpty)
-                GestureDetector(
-                  onTap: _closeDrill,
-                  child: Container(
-                    margin: const EdgeInsets.only(left: 12),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: accent.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: accent.withOpacity(0.4)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.arrow_back_ios_rounded,
-                            color: accent, size: 12),
-                        const SizedBox(width: 4),
-                        Text(
-                          _drillPath.last.label,
-                          style: TextStyle(
-                            color: accent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              Expanded(
-                child: ListView.builder(
-                  controller: _pillScrollCtrl,
-                  scrollDirection: Axis.horizontal,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  itemCount: pills.length,
-                  itemBuilder: (_, i) {
-                    final group = pills[i];
-                    final isCurrent = _isCurrentGroup(group);
-
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 3),
-                      child: GestureDetector(
-                        onTap: () => _onPillTap(group),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isCurrent
-                                ? accent.withOpacity(0.20)
-                                : Colors.white.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: isCurrent
-                                  ? accent.withOpacity(0.6)
-                                  : Colors.white12,
-                              width: isCurrent ? 1.5 : 1,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Material(
+            color: cs.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(14),
+            child: SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  if (_drillPath.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: Material(
+                        color: cs.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        child: InkWell(
+                          onTap: _closeDrill,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
                             ),
-                          ),
-                          child: Center(
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                Icon(
+                                  Icons.arrow_back_rounded,
+                                  color: cs.primary,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 4),
                                 Text(
-                                  group.label,
+                                  _drillPath.last.label,
                                   style: TextStyle(
-                                    color:
-                                        isCurrent ? accent : Colors.white38,
-                                    fontSize: 12,
+                                    color: cs.primary,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.5,
                                   ),
                                 ),
-                                if (group.isDrillable) ...[
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    Icons.chevron_right_rounded,
-                                    size: 14,
-                                    color: isCurrent
-                                        ? accent
-                                        : Colors.white24,
-                                  ),
-                                ],
                               ],
                             ),
                           ),
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: _pillScrollCtrl,
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      itemCount: pills.length,
+                      itemBuilder: (_, i) {
+                        final group = pills[i];
+                        final isCurrent = _isCurrentGroup(group);
+
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          child: Material(
+                            color: isCurrent
+                                ? cs.primary.withValues(alpha: 0.18)
+                                : cs.surfaceContainer,
+                            borderRadius: BorderRadius.circular(10),
+                            child: InkWell(
+                              onTap: () => _onPillTap(group),
+                              borderRadius: BorderRadius.circular(10),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isCurrent
+                                        ? cs.primary.withValues(alpha: 0.55)
+                                        : cs.outline.withValues(alpha: 0.28),
+                                    width: isCurrent ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Center(
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        group.label,
+                                        style: TextStyle(
+                                          color: isCurrent
+                                              ? cs.onSurface
+                                              : cs.onSurfaceVariant,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                      if (group.isDrillable) ...[
+                                        const SizedBox(width: 2),
+                                        Icon(
+                                          Icons.chevron_right_rounded,
+                                          size: 16,
+                                          color: isCurrent
+                                              ? cs.primary
+                                              : cs.onSurfaceVariant
+                                                  .withValues(alpha: 0.6),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
 
-        const SizedBox(height: 2),
-
-        // ── Sub-page indicator ─────────────────────────────────────
         if (activeGroup != null && activeGroup.pageCount > 1)
           Padding(
-            padding: const EdgeInsets.only(bottom: 2),
+            padding: const EdgeInsets.only(top: 6, bottom: 4),
             child: Text(
-              '${_currentPage - activeGroup.firstPage + 1} / ${activeGroup.pageCount}',
-              style: TextStyle(
-                color: accent.withOpacity(0.5),
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1,
-              ),
+              'Page ${_currentPage - activeGroup.firstPage + 1} of ${activeGroup.pageCount}',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
             ),
           )
         else
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
 
-        // ── Page view ──────────────────────────────────────────────
         Expanded(
           child: Stack(
             children: [
@@ -541,38 +638,24 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                   );
                 },
               ),
-
               if (_currentPage != nextLevelPage)
                 Positioned(
                   right: 16,
                   bottom: 16,
-                  child: Material(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(16),
-                    elevation: 6,
-                    shadowColor: accent.withOpacity(0.4),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => _goToPage(nextLevelPage),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.flag_rounded,
-                                color: Colors.black87, size: 16),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Lvl ${highest + 1}',
-                              style: const TextStyle(
-                                color: Colors.black87,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
+                  child: FilledButton.tonalIcon(
+                    onPressed: () => _goToPage(nextLevelPage),
+                    icon: const Icon(Icons.flag_rounded, size: 18),
+                    label: Text(
+                      'Level ${ProgressFormat.level(highest + 1)}',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
                   ),
@@ -607,12 +690,12 @@ class _ChapterGrid extends StatelessWidget {
 
     return GridView.builder(
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.9,
+        childAspectRatio: 0.92,
       ),
       itemCount: _pageSize,
       itemBuilder: (_, index) {
@@ -660,9 +743,22 @@ class _LevelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final accent = mode.color;
     final locked = !isUnlocked;
     final completed = isUnlocked && stars > 0;
+
+    final fillColor = locked
+        ? cs.surfaceContainerLow
+        : completed
+            ? Color.lerp(cs.surfaceContainer, accent, 0.12)!
+            : cs.surfaceContainer;
+
+    final borderColor = isNext
+        ? cs.primary
+        : completed
+            ? cs.primary.withValues(alpha: 0.35)
+            : cs.outline.withValues(alpha: 0.35);
 
     return Semantics(
       button: true,
@@ -675,56 +771,50 @@ class _LevelCard extends StatelessWidget {
               ? 'Level $levelId, next challenge'
               : 'Level $levelId, $stars stars',
       child: Material(
-        color: Colors.transparent,
+        color: fillColor,
+        elevation: isNext ? 1 : 0,
+        shadowColor: isNext ? accent.withValues(alpha: 0.35) : null,
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(14),
-          splashColor: accent.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(16),
+          splashColor: accent.withValues(alpha: 0.2),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
-              color: locked
-                  ? Colors.white.withOpacity(0.04)
-                  : completed
-                      ? accent.withOpacity(0.12)
-                      : Colors.white.withOpacity(0.07),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: isNext
-                    ? accent.withOpacity(0.7)
-                    : completed
-                        ? accent.withOpacity(0.3)
-                        : Colors.white12,
-                width: isNext ? 1.5 : 1,
+                color: borderColor,
+                width: isNext ? 2 : 1,
               ),
-              boxShadow: isNext
-                  ? [
-                      BoxShadow(
-                          color: accent.withOpacity(0.25), blurRadius: 12)
-                    ]
-                  : [],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (locked)
-                  const Icon(Icons.lock_rounded,
-                      color: Colors.white24, size: 20)
+                  Icon(
+                    Icons.lock_rounded,
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                    size: 20,
+                  )
                 else
                   Text(
-                    '$levelId',
-                    style: TextStyle(
-                      color: isNext ? accent : Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    ProgressFormat.level(levelId),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: isNext ? cs.primary : cs.onSurface,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
                   ),
                 const SizedBox(height: 4),
                 if (completed)
                   _MiniStars(stars: stars, color: AppColors.starGold)
                 else if (isNext)
-                  Icon(Icons.play_circle_outline_rounded,
-                      color: accent, size: 16)
+                  Icon(
+                    Icons.play_circle_outline_rounded,
+                    color: cs.primary,
+                    size: 16,
+                  )
                 else
                   const SizedBox(height: 16),
               ],
@@ -745,15 +835,20 @@ class _MiniStars extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dim = Theme.of(context)
+        .colorScheme
+        .outline
+        .withValues(alpha: 0.45);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(
-          3,
-          (i) => Icon(
-                i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
-                size: 12,
-                color: i < stars ? color : Colors.white24,
-              )),
+        3,
+        (i) => Icon(
+          i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
+          size: 12,
+          color: i < stars ? color : dim,
+        ),
+      ),
     );
   }
 }

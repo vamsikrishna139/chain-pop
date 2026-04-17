@@ -51,6 +51,20 @@ enum DirectionBiasType {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Daily challenge tuning (see [LevelConfiguration.forDailyChallenge])
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Minimum fraction of the grid that must hold nodes (clamped by medium caps).
+/// Kept moderate so generation still succeeds unlike the earlier ~0.78 floor.
+const double kDailyChallengeMinFillRatio = 0.60;
+
+/// First-roll chance to attempt an irregular [playCells] mask (blobs, zigzag, etc.).
+const double kDailyChallengeIrregularProbability = 0.78;
+
+/// Extra guaranteed mask attempts if the first roll misses or the mask is too small.
+const int kDailyChallengeIrregularExtraTries = 10;
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LevelConfiguration
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -75,6 +89,15 @@ class LevelConfiguration {
   /// How the backward generator should weight direction selection.
   final DirectionBiasType directionBias;
 
+  /// Overrides archetype-based irregular-mask probability when non-null (dailies).
+  final double? irregularMaskProbability;
+
+  /// Additional irregular-mask attempts after the probabilistic roll ([LevelGenerator]).
+  final int irregularLayoutExtraTries;
+
+  /// Floor for scaled retry target counts; null = campaign default.
+  final int? minimumTargetNodeCount;
+
   const LevelConfiguration({
     required this.levelId,
     required this.gridWidth,
@@ -83,6 +106,9 @@ class LevelConfiguration {
     required this.difficulty,
     this.archetype = LevelArchetype.standard,
     this.directionBias = DirectionBiasType.uniform,
+    this.irregularMaskProbability,
+    this.irregularLayoutExtraTries = 0,
+    this.minimumTargetNodeCount,
   });
 
   /// Factory constructor that derives configuration from level ID.
@@ -114,6 +140,36 @@ class LevelConfiguration {
     return LevelConfiguration.fromLevelId(levelId, mode: mode);
   }
 
+  /// Daily puzzle: starts from [fromLevelId] (medium) for grid, archetype, and
+  /// chain bounds, then enforces [kDailyChallengeMinFillRatio] and biased
+  /// irregular silhouettes without replacing the whole generator.
+  factory LevelConfiguration.forDailyChallenge(int dayKey) {
+    final base = LevelConfiguration.fromLevelId(dayKey, mode: DifficultyMode.medium);
+    final area = base.gridWidth * base.gridHeight;
+    final cap = min(base.difficulty.maxNodes, area - 1);
+    final minByFill = max(
+      base.difficulty.minNodes,
+      (area * kDailyChallengeMinFillRatio).ceil(),
+    ).clamp(base.difficulty.minNodes, cap);
+    final target = max(base.targetNodeCount, minByFill).clamp(
+      base.difficulty.minNodes,
+      cap,
+    );
+
+    return LevelConfiguration(
+      levelId: dayKey,
+      gridWidth: base.gridWidth,
+      gridHeight: base.gridHeight,
+      targetNodeCount: target,
+      difficulty: base.difficulty,
+      archetype: base.archetype,
+      directionBias: base.directionBias,
+      irregularMaskProbability: kDailyChallengeIrregularProbability,
+      irregularLayoutExtraTries: kDailyChallengeIrregularExtraTries,
+      minimumTargetNodeCount: minByFill,
+    );
+  }
+
   /// Validates that configuration parameters are within acceptable ranges.
   ValidationResult validate() {
     if (levelId < 0) {
@@ -133,6 +189,26 @@ class LevelConfiguration {
     }
     if (targetNodeCount > 400) {
       return ValidationResult.error('Node count must not exceed 400');
+    }
+    final minFloor = minimumTargetNodeCount;
+    if (minFloor != null) {
+      if (minFloor > gridWidth * gridHeight) {
+        return ValidationResult.error(
+          'minimumTargetNodeCount exceeds grid capacity',
+        );
+      }
+      if (targetNodeCount < minFloor) {
+        return ValidationResult.error(
+          'targetNodeCount below minimumTargetNodeCount',
+        );
+      }
+    }
+    final irp = irregularMaskProbability;
+    if (irp != null && (irp < 0 || irp > 1)) {
+      return ValidationResult.error('irregularMaskProbability must be 0–1');
+    }
+    if (irregularLayoutExtraTries < 0 || irregularLayoutExtraTries > 24) {
+      return ValidationResult.error('irregularLayoutExtraTries out of range');
     }
     return ValidationResult.success();
   }
