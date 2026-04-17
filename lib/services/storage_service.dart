@@ -14,12 +14,16 @@ import '../models/game_settings.dart';
 /// stars_easy_<levelId>         → 0-3
 /// stars_medium_<levelId>       → 0-3
 /// stars_hard_<levelId>         → 0-3
+/// daily_stars_<YYYYMMDD>       → 0-3 (best result that local calendar day)
+/// daily_ad_unlock_<YYYYMMDD>   → true after rewarded ad (older / off-window days)
 /// ```
 class StorageService {
   static const String _boxName = 'chain_pop_storage';
   static const String _difficultyKey = 'selected_difficulty';
   static const String _unlockedPrefix = 'unlocked_';
   static const String _starsPrefix = 'stars_';
+  static const String _dailyStarsPrefix = 'daily_stars_';
+  static const String _dailyAdUnlockPrefix = 'daily_ad_unlock_';
   static const String _settingsSoundKey = 'settings_sound';
   static const String _settingsHapticsKey = 'settings_haptics';
   static const String _settingsColorblindKey = 'settings_colorblind';
@@ -104,6 +108,30 @@ class StorageService {
       sum += stars(mode, i);
     }
     return sum;
+  }
+
+  // ── Daily challenge (local calendar [dayKey] = YYYYMMDD) ───────────────────
+
+  /// Best stars (0–3) saved for the daily puzzle on [dayKey].
+  static int dailyStarsForDayKey(int dayKey) {
+    return _box.get('$_dailyStarsPrefix$dayKey', defaultValue: 0) as int;
+  }
+
+  /// Stores [newStars] for [dayKey] only when higher than the saved value.
+  static Future<void> saveDailyStars(int dayKey, int newStars) async {
+    final current = dailyStarsForDayKey(dayKey);
+    if (newStars > current) {
+      await _box.put('$_dailyStarsPrefix$dayKey', newStars);
+    }
+  }
+
+  /// Rewarded-ad unlock for playing a daily outside the free calendar window.
+  static bool isDailyUnlockedViaAd(int dayKey) {
+    return _box.get('$_dailyAdUnlockPrefix$dayKey', defaultValue: false) as bool;
+  }
+
+  static Future<void> markDailyUnlockedViaAd(int dayKey) async {
+    await _box.put('$_dailyAdUnlockPrefix$dayKey', true);
   }
 
   // ── Legacy compat (used by old code paths) ────────────────────────────────

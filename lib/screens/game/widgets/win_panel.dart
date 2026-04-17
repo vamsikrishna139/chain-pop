@@ -18,6 +18,10 @@ class WinPanel extends StatefulWidget {
   final VoidCallback onMenu;
   final VoidCallback onRetry;
   final VoidCallback onNext;
+  /// When false, hides auto-advance copy and the Next button (daily puzzle).
+  final bool showNextAndAutoAdvance;
+  /// Replaces the default `LEVEL … · MODE` caption when non-null.
+  final String? titleLine;
 
   const WinPanel({
     super.key,
@@ -30,6 +34,8 @@ class WinPanel extends StatefulWidget {
     required this.onMenu,
     required this.onRetry,
     required this.onNext,
+    this.showNextAndAutoAdvance = true,
+    this.titleLine,
   });
 
   @override
@@ -115,7 +121,9 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'LEVEL ${ProgressFormat.level(widget.levelId)} · ${widget.difficulty.label}',
+              widget.titleLine ??
+                  'LEVEL ${ProgressFormat.level(widget.levelId)} · ${widget.difficulty.label}',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: accent,
                 fontSize: 11,
@@ -170,42 +178,44 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.skip_next_rounded,
-                      size: 14,
-                      color: Colors.white38,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Next level in ${widget.autoAdvanceSec}s',
-                      style: const TextStyle(
+            if (widget.showNextAndAutoAdvance) ...[
+              const SizedBox(height: 20),
+              Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.skip_next_rounded,
+                        size: 14,
                         color: Colors.white38,
-                        fontSize: 12,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: frac.clamp(0.0, 1.0),
-                    backgroundColor: Colors.white12,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      accent.withOpacity(0.6),
-                    ),
-                    minHeight: 3,
+                      const SizedBox(width: 4),
+                      Text(
+                        'Next level in ${widget.autoAdvanceSec}s',
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: frac.clamp(0.0, 1.0),
+                      backgroundColor: Colors.white12,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        accent.withOpacity(0.6),
+                      ),
+                      minHeight: 3,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            SizedBox(height: widget.showNextAndAutoAdvance ? 20 : 8),
             Row(
               children: [
                 Expanded(
@@ -223,16 +233,18 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
                     onPressed: widget.onRetry,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: _WinPrimaryButton(
-                    label: 'NEXT',
-                    icon: Icons.arrow_forward_rounded,
-                    color: accent,
-                    onPressed: widget.onNext,
+                if (widget.showNextAndAutoAdvance) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: _WinPrimaryButton(
+                      label: 'NEXT',
+                      icon: Icons.arrow_forward_rounded,
+                      color: accent,
+                      onPressed: widget.onNext,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ],

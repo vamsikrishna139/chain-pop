@@ -13,6 +13,8 @@ class GameHeaderHud extends StatelessWidget {
   final VoidCallback onOpenSettings;
   final int livesRemaining;
   final DifficultyMode difficulty;
+  /// When non-null, shown instead of [DifficultyLabel] (e.g. daily challenge).
+  final String? headerModeLabel;
   final int removedNodes;
   final int totalNodes;
   final int? timeLeftSec;
@@ -27,6 +29,7 @@ class GameHeaderHud extends StatelessWidget {
     required this.onOpenSettings,
     required this.livesRemaining,
     required this.difficulty,
+    this.headerModeLabel,
     required this.removedNodes,
     required this.totalNodes,
     required this.timeLeftSec,
@@ -83,7 +86,18 @@ class GameHeaderHud extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Row(
                 children: [
-                  DifficultyLabel(difficulty: difficulty),
+                  if (headerModeLabel != null)
+                    Text(
+                      headerModeLabel!,
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    )
+                  else
+                    DifficultyLabel(difficulty: difficulty),
                   const Spacer(),
                   Column(
                     mainAxisSize: MainAxisSize.min,

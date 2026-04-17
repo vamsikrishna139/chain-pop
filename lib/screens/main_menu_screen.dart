@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
 import '../services/game_audio.dart';
@@ -9,6 +10,7 @@ import '../services/game_sfx.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/progress_format.dart';
+import 'daily_challenge_calendar_screen.dart';
 import 'level_select_screen.dart';
 
 /// Home hub: Material 3 surfaces, segmented difficulty, clear progression.
@@ -65,6 +67,22 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
             _selected = StorageService.selectedDifficulty;
           });
         });
+  }
+
+  void _openDailyChallenge() {
+    if (StorageService.gameSettings.soundEnabled) {
+      unawaited(_audio.play(GameSfx.uiTap));
+    }
+    Navigator.of(context)
+        .push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const DailyChallengeCalendarScreen(),
+      ),
+    )
+        .then((_) {
+      if (!mounted) return;
+      setState(() {});
+    });
   }
 
   int _totalStarsForMode(DifficultyMode mode) {
@@ -177,6 +195,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                             totalStarsFor: _totalStarsForMode,
                             onSelectMode: (m) => unawaited(_selectDifficulty(m)),
                           ),
+                          const SizedBox(height: 20),
+                          _DailyChallengeCard(
+                            dayKey: DailyChallenge.dateKeyLocal(DateTime.now()),
+                            starsToday: StorageService.dailyStarsForDayKey(
+                              DailyChallenge.dateKeyLocal(DateTime.now()),
+                            ),
+                            onTap: _openDailyChallenge,
+                          ),
                           const SizedBox(height: 28),
                           FilledButton.icon(
                             onPressed: _play,
@@ -286,6 +312,101 @@ class _MainMenuHero extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── Daily challenge (compact grid, global daily seed; leaderboard TBD) ─────
+
+class _DailyChallengeCard extends StatelessWidget {
+  final int dayKey;
+  final int starsToday;
+  final VoidCallback onTap;
+
+  const _DailyChallengeCard({
+    required this.dayKey,
+    required this.starsToday,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final accent = DifficultyMode.medium.color;
+
+    return Card(
+      elevation: 1,
+      shadowColor: Colors.black54,
+      color: cs.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: accent.withValues(alpha: 0.35), width: 1),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  Icons.calendar_today_rounded,
+                  color: accent,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Daily challenge',
+                      style: tt.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      DailyChallenge.compactDateLabelFromKey(dayKey),
+                      style: tt.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: List.generate(3, (i) {
+                        final on = i < starsToday;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: Icon(
+                            on
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            size: 20,
+                            color: on ? AppColors.starGold : Colors.white24,
+                          ),
+                        );
+                      }),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

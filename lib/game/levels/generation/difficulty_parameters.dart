@@ -72,7 +72,7 @@ class DifficultyParameters {
         );
     }
   }
-  
+
   /// Derives difficulty mode from level ID
   /// - Levels 0-9: Easy
   /// - Levels 10-29: Medium

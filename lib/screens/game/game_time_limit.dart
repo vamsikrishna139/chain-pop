@@ -25,3 +25,9 @@ int? computeGameTimeLimit(
       return (base * learning).round().clamp(25, 150);
   }
 }
+
+/// Daily puzzles use medium pacing with a fixed virtual level index so the
+/// timer does not shrink as [dayKey] grows.
+int? computeDailyChallengeTimeLimit(int nodeCount) {
+  return computeGameTimeLimit(DifficultyMode.medium, nodeCount, 40);
+}

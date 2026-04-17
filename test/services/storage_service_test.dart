@@ -51,6 +51,24 @@ void main() {
       expect(StorageService.stars(DifficultyMode.medium, 1), 3);
     });
 
+    test('dailyStarsForDayKey and saveDailyStars only increase', () async {
+      const k = 20260412;
+      expect(StorageService.dailyStarsForDayKey(k), 0);
+      await StorageService.saveDailyStars(k, 2);
+      expect(StorageService.dailyStarsForDayKey(k), 2);
+      await StorageService.saveDailyStars(k, 1);
+      expect(StorageService.dailyStarsForDayKey(k), 2);
+      await StorageService.saveDailyStars(k, 3);
+      expect(StorageService.dailyStarsForDayKey(k), 3);
+    });
+
+    test('daily ad unlock persists', () async {
+      const k = 20250301;
+      expect(StorageService.isDailyUnlockedViaAd(k), isFalse);
+      await StorageService.markDailyUnlockedViaAd(k);
+      expect(StorageService.isDailyUnlockedViaAd(k), isTrue);
+    });
+
     test('totalStarsInRange sums inclusive', () async {
       await StorageService.saveStars(DifficultyMode.easy, 1, 3);
       await StorageService.saveStars(DifficultyMode.easy, 2, 2);

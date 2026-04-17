@@ -4,6 +4,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
 import '../game/chain_pop_game.dart';
+import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
@@ -26,16 +27,26 @@ import 'game/widgets/win_panel.dart';
 ///
 /// Win overlay is rendered **inside this screen's own Stack** (not as a
 /// modal route), which eliminates all Navigator-pop race conditions.
-/// Auto-advances to the next level after a countdown ([GameScreenConstants]).
+/// Auto-advances to the next level after a countdown ([GameScreenConstants]),
+/// except for [isDailyChallenge] runs (no auto-next; stars go to
+/// [StorageService.saveDailyStars]).
 class GameScreen extends StatefulWidget {
   final int level;
   final DifficultyMode difficulty;
+  final LevelData? fixedLevel;
+  final bool isDailyChallenge;
+  final int? dailyDayKey;
 
   const GameScreen({
     super.key,
     required this.level,
     required this.difficulty,
-  });
+    this.fixedLevel,
+    this.isDailyChallenge = false,
+    this.dailyDayKey,
+  }) : assert(
+          !isDailyChallenge || (dailyDayKey != null && fixedLevel != null),
+        );
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -82,14 +93,20 @@ class _GameScreenState extends State<GameScreen> {
     _settings = StorageService.gameSettings;
     _audio = GameAudioController();
 
-    _levelData = LevelManager.getLevel(widget.level, mode: widget.difficulty);
-    _totalNodes = _levelData.nodes.length;
-
-    _timeLimitSec = computeGameTimeLimit(
-      widget.difficulty,
-      _totalNodes,
-      widget.level,
-    );
+    if (widget.isDailyChallenge) {
+      _levelData = widget.fixedLevel!;
+      _totalNodes = _levelData.nodes.length;
+      _timeLimitSec = computeDailyChallengeTimeLimit(_totalNodes);
+    } else {
+      _levelData = widget.fixedLevel ??
+          LevelManager.getLevel(widget.level, mode: widget.difficulty);
+      _totalNodes = _levelData.nodes.length;
+      _timeLimitSec = computeGameTimeLimit(
+        widget.difficulty,
+        _totalNodes,
+        widget.level,
+      );
+    }
     _timeLeftSec = _timeLimitSec;
 
     _buildGame();
@@ -119,7 +136,7 @@ class _GameScreenState extends State<GameScreen> {
 
   void _buildGame() {
     _game = ChainPopGame(
-      levelId: widget.level,
+      levelId: widget.isDailyChallenge ? widget.dailyDayKey! : widget.level,
       difficulty: widget.difficulty,
       onWin: _handleWin,
       onJam: _handleFoul,
@@ -216,8 +233,12 @@ class _GameScreenState extends State<GameScreen> {
     final earned = widget.difficulty.starsForJams(
       GameScreenConstants.maxLives - _livesRemaining,
     );
-    await StorageService.saveStars(widget.difficulty, widget.level, earned);
-    await StorageService.unlockLevel(widget.difficulty, widget.level + 1);
+    if (widget.isDailyChallenge) {
+      await StorageService.saveDailyStars(widget.dailyDayKey!, earned);
+    } else {
+      await StorageService.saveStars(widget.difficulty, widget.level, earned);
+      await StorageService.unlockLevel(widget.difficulty, widget.level + 1);
+    }
 
     if (!mounted) return;
     setState(() {
@@ -225,6 +246,10 @@ class _GameScreenState extends State<GameScreen> {
       _earnedStars = earned;
       _autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
     });
+
+    if (widget.isDailyChallenge) {
+      return;
+    }
 
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
@@ -303,7 +328,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _goNextLevel() {
-    if (!mounted) return;
+    if (!mounted || widget.isDailyChallenge) return;
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => GameScreen(
@@ -437,6 +462,8 @@ class _GameScreenState extends State<GameScreen> {
             onOpenSettings: _openSettings,
             livesRemaining: _livesRemaining,
             difficulty: widget.difficulty,
+            headerModeLabel:
+                widget.isDailyChallenge ? 'DAILY CHALLENGE' : null,
             removedNodes: _removedNodes,
             totalNodes: _totalNodes,
             timeLeftSec: _timeLeftSec,
@@ -487,7 +514,9 @@ class _GameScreenState extends State<GameScreen> {
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: WinPanel(
-                  levelId: widget.level,
+                  levelId: widget.isDailyChallenge
+                      ? widget.dailyDayKey!
+                      : widget.level,
                   difficulty: widget.difficulty,
                   stars: _earnedStars,
                   foulCount: GameScreenConstants.maxLives - _livesRemaining,
@@ -496,6 +525,10 @@ class _GameScreenState extends State<GameScreen> {
                   onMenu: _goMenu,
                   onRetry: _resetForRetry,
                   onNext: _goNextLevel,
+                  showNextAndAutoAdvance: !widget.isDailyChallenge,
+                  titleLine: widget.isDailyChallenge
+                      ? 'DAILY CHALLENGE · ${DailyChallenge.compactDateLabelFromKey(widget.dailyDayKey!)}'
+                      : null,
                 ),
               ),
             ),
