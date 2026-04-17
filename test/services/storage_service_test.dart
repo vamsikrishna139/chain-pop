@@ -124,5 +124,20 @@ void main() {
       expect(s.hapticsEnabled, isFalse);
       expect(s.colorblindFriendly, isTrue);
     });
+
+    test('tutorialCompleted defaults and clears with clearProgress', () async {
+      expect(StorageService.tutorialCompleted, isFalse);
+      await StorageService.setTutorialCompleted(true);
+      expect(StorageService.tutorialCompleted, isTrue);
+      await StorageService.clearProgress();
+      expect(StorageService.tutorialCompleted, isFalse);
+    });
+
+    test('setTutorialCompleted false persists after true', () async {
+      await StorageService.setTutorialCompleted(true);
+      expect(StorageService.tutorialCompleted, isTrue);
+      await StorageService.setTutorialCompleted(false);
+      expect(StorageService.tutorialCompleted, isFalse);
+    });
   });
 }
