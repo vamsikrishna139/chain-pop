@@ -707,17 +707,87 @@ class _ChapterGrid extends StatelessWidget {
 
         final isUnlocked = levelId <= highestUnlocked;
         final isNext = levelId == highestUnlocked + 1;
+        final isFrontier = isUnlocked && levelId == highestUnlocked;
         final starCount = StorageService.stars(mode, levelId);
 
-        return _LevelCard(
+        final card = _LevelCard(
           levelId: levelId,
           mode: mode,
           stars: starCount,
           isUnlocked: isUnlocked,
           isNext: isNext,
+          isFrontier: isFrontier,
           onTap: isUnlocked ? () => onTap(levelId) : null,
         );
+
+        if (isFrontier) {
+          return _FrontierLevelPulse(accent: mode.color, child: card);
+        }
+        return card;
       },
+    );
+  }
+}
+
+/// Soft repeating glow around the **per-mode** frontier: the level index equal
+/// to [StorageService.highestUnlocked] for this grid's [DifficultyMode] (each
+/// difficulty tab has its own unlock track).
+class _FrontierLevelPulse extends StatefulWidget {
+  final Color accent;
+  final Widget child;
+
+  const _FrontierLevelPulse({
+    required this.accent,
+    required this.child,
+  });
+
+  @override
+  State<_FrontierLevelPulse> createState() => _FrontierLevelPulseState();
+}
+
+class _FrontierLevelPulseState extends State<_FrontierLevelPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1700),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        final t = Curves.easeInOut.transform(_ctrl.value);
+        final spread = 1.0 + t * 2.4;
+        final blur = 8.0 + t * 14.0;
+        final a = 0.2 + t * 0.42;
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: widget.accent.withValues(alpha: a),
+                blurRadius: blur,
+                spreadRadius: spread,
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }
@@ -730,6 +800,7 @@ class _LevelCard extends StatelessWidget {
   final int stars;
   final bool isUnlocked;
   final bool isNext;
+  final bool isFrontier;
   final VoidCallback? onTap;
 
   const _LevelCard({
@@ -738,6 +809,7 @@ class _LevelCard extends StatelessWidget {
     required this.stars,
     required this.isUnlocked,
     required this.isNext,
+    this.isFrontier = false,
     this.onTap,
   });
 
@@ -769,7 +841,9 @@ class _LevelCard extends StatelessWidget {
               : 'Level $levelId, locked'
           : isNext
               ? 'Level $levelId, next challenge'
-              : 'Level $levelId, $stars stars',
+              : isFrontier
+                  ? 'Level $levelId, current goal, $stars stars'
+                  : 'Level $levelId, $stars stars',
       child: Material(
         color: fillColor,
         elevation: isNext ? 1 : 0,

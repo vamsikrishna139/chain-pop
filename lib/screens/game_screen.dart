@@ -94,7 +94,11 @@ class _GameScreenState extends State<GameScreen> {
 
   final GlobalKey _headerHudKey = GlobalKey();
   final GlobalKey _footerHudKey = GlobalKey();
+  final GlobalKey _bodyStackKey = GlobalKey();
   bool _playfieldInsetFrameScheduled = false;
+
+  /// Stack-local Y for tutorial hint banner (below measured [GameHeaderHud]).
+  double _tutorialHintTop = 118;
 
   @override
   void initState() {
@@ -110,11 +114,7 @@ class _GameScreenState extends State<GameScreen> {
     } else if (widget.isTutorial) {
       _levelData = widget.fixedLevel!;
       _totalNodes = _levelData.nodes.length;
-      _timeLimitSec = computeGameTimeLimit(
-        widget.difficulty,
-        _totalNodes,
-        widget.level,
-      );
+      _timeLimitSec = computeTutorialCountdownSec(widget.tutorialIndex);
     } else {
       _levelData = widget.fixedLevel ??
           LevelManager.getLevel(widget.level, mode: widget.difficulty);
@@ -186,10 +186,26 @@ class _GameScreenState extends State<GameScreen> {
     double topReserved = mq.padding.top + 128;
     final headerBox =
         _headerHudKey.currentContext?.findRenderObject() as RenderBox?;
+    final stackBox =
+        _bodyStackKey.currentContext?.findRenderObject() as RenderBox?;
     if (headerBox != null && headerBox.hasSize) {
       final headerBottom =
           headerBox.localToGlobal(Offset(0, headerBox.size.height)).dy;
       topReserved = headerBottom + 20;
+
+      if (widget.isTutorial &&
+          stackBox != null &&
+          stackBox.hasSize) {
+        final hintTop = stackBox
+            .globalToLocal(
+              headerBox.localToGlobal(Offset(0, headerBox.size.height)),
+            )
+            .dy;
+        final next = (hintTop + 8).clamp(72.0, h * 0.4);
+        if ((_tutorialHintTop - next).abs() > 0.5) {
+          setState(() => _tutorialHintTop = next);
+        }
+      }
     }
 
     double bottomReserved = mq.padding.bottom + 88;
@@ -429,6 +445,9 @@ class _GameScreenState extends State<GameScreen> {
   void _startEasyHudTimer() {
     _easyHudTimer?.cancel();
     if (widget.difficulty != DifficultyMode.easy) return;
+    // Elapsed clock only when Easy is **untimed** (no countdown). Timed Easy
+    // uses [_countdownTimer] for HUD updates.
+    if (_timeLimitSec != null) return;
     _easyHudTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _isPaused || _hasWon) return;
       setState(() {});
@@ -505,15 +524,15 @@ class _GameScreenState extends State<GameScreen> {
   String _tutorialHintText() {
     switch (widget.tutorialIndex) {
       case 0:
-        return 'Tap the glowing arrow. Finish before the timer runs out.';
+        return 'Tap the glowing arrow. Clear the board before the countdown reaches zero.';
       case 1:
-        return 'Arrows block each other. Clear the open one first, and watch the timer.';
+        return 'Arrows block each other. Clear a free exit first—keep an eye on the countdown.';
       case 2:
-        return 'Try quick chains: each correct pop buys time safety.';
+        return 'Chain good pops in a safe order. The timer only counts down; pops do not add time.';
       case 3:
-        return 'Larger board now. Prioritize exits and keep an eye on time.';
+        return 'Bigger board: plan clears and watch the countdown.';
       default:
-        return 'Final recap: 8 arrows. Solve efficiently before the timer hits 0.';
+        return 'Final recap: 8 arrows. Clear every piece before the 45s countdown hits zero.';
     }
   }
 
@@ -525,6 +544,7 @@ class _GameScreenState extends State<GameScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
+        key: _bodyStackKey,
         children: [
           Positioned.fill(
             child: DecoratedBox(
@@ -564,19 +584,19 @@ class _GameScreenState extends State<GameScreen> {
           ),
           if (widget.isTutorial && !_hasWon)
             Positioned(
-              top: 92,
-              left: 14,
-              right: 14,
+              top: _tutorialHintTop,
+              left: 12,
+              right: 12,
               child: IgnorePointer(
                 child: AnimatedOpacity(
                   opacity: _isPaused ? 0.0 : 1.0,
                   duration: const Duration(milliseconds: 220),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.28),
+                      color: Colors.black.withValues(alpha: 0.42),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: accent.withValues(alpha: 0.45),
+                        color: accent.withValues(alpha: 0.55),
                       ),
                     ),
                     child: Padding(
@@ -587,10 +607,14 @@ class _GameScreenState extends State<GameScreen> {
                       child: Text(
                         _tutorialHintText(),
                         textAlign: TextAlign.center,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: true,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
+                          color: Colors.white.withValues(alpha: 0.92),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
+                          height: 1.25,
                         ),
                       ),
                     ),
