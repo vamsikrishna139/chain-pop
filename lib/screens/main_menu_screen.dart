@@ -261,7 +261,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                           ] else ...[
                             Semantics(
                               button: true,
-                              label: 'Replay tutorial',
+                              label: 'Tutorial',
                               excludeSemantics: true,
                               child: OutlinedButton.icon(
                                 onPressed: _openTutorial,
@@ -274,7 +274,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 2),
                                   child: Text(
-                                    'Replay tutorial',
+                                    'Tutorial',
                                     style: TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.w700,

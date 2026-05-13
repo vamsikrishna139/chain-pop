@@ -39,10 +39,10 @@ extension DifficultyExt on DifficultyMode {
   }
 
   /// Dimmed version of the accent (30 % opacity) for backgrounds/borders.
-  Color get dimColor => color.withOpacity(0.30);
+  Color get dimColor => color.withValues(alpha: 0.30);
 
   /// Very subtle tint used on the game board background.
-  Color get boardTint => color.withOpacity(0.04);
+  Color get boardTint => color.withValues(alpha: 0.04);
 
   // ── Icons ────────────────────────────────────────────────────────────────
 

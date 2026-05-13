@@ -63,7 +63,8 @@ void main() {
       );
     });
 
-    testWidgets('shows Replay tutorial when onboarding is completed', (tester) async {
+    testWidgets('shows de-emphasized Tutorial when onboarding is completed',
+        (tester) async {
       await storageForWidgetTest(tester, () async {
         await StorageService.setTutorialCompleted(true);
       });
@@ -71,17 +72,17 @@ void main() {
 
       await pumpMenu(tester);
 
-      expect(find.text('Replay tutorial'), findsOneWidget);
-      expect(find.text('Tutorial'), findsNothing);
+      expect(find.text('Tutorial'), findsOneWidget);
+      expect(find.text('Replay tutorial'), findsNothing);
 
       expect(
         find.descendant(
           of: find.byType(OutlinedButton),
-          matching: find.text('Replay tutorial'),
+          matching: find.text('Tutorial'),
         ),
         findsOneWidget,
       );
-      expect(find.bySemanticsLabel('Replay tutorial'), findsOneWidget);
+      expect(find.bySemanticsLabel('Tutorial'), findsOneWidget);
     });
 
     testWidgets('Tutorial tap opens GameScreen in tutorial mode', (tester) async {
@@ -98,14 +99,15 @@ void main() {
       expect(screen.level, 1);
     });
 
-    testWidgets('Replay tutorial tap opens same GameScreen tutorial mode', (tester) async {
+    testWidgets('completed-state Tutorial tap opens GameScreen tutorial mode',
+        (tester) async {
       await storageForWidgetTest(tester, () async {
         await StorageService.setTutorialCompleted(true);
       });
 
       await pumpMenu(tester);
 
-      await tester.tap(find.text('Replay tutorial'));
+      await tester.tap(find.text('Tutorial'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 

@@ -30,8 +30,8 @@ void main() {
     });
 
     test('dimColor and boardTint are derived from color', () {
-      expect(DifficultyMode.medium.dimColor.opacity, closeTo(0.30, 0.01));
-      expect(DifficultyMode.hard.boardTint.opacity, closeTo(0.04, 0.01));
+      expect(DifficultyMode.medium.dimColor.a, closeTo(0.30, 0.01));
+      expect(DifficultyMode.hard.boardTint.a, closeTo(0.04, 0.01));
     });
   });
 }

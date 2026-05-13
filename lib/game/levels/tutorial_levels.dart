@@ -135,7 +135,8 @@ final LevelData _tutorial3 = LevelData(
   ],
 );
 
-/// 6×6: two small column stories plus row-2 ordering at the top edge.
+/// 6×6 recap with 8 arrows: layered row/column dependencies while remaining
+/// approachable for a final tutorial board.
 final LevelData _tutorial4 = LevelData(
   levelId: 9004,
   gridWidth: 6,
@@ -188,6 +189,22 @@ final LevelData _tutorial4 = LevelData(
       dir: Direction.left,
       color: _c(5),
       colorSlot: 5,
+    ),
+    NodeData(
+      id: 6,
+      x: 2,
+      y: 5,
+      dir: Direction.right,
+      color: _c(0),
+      colorSlot: 0,
+    ),
+    NodeData(
+      id: 7,
+      x: 5,
+      y: 4,
+      dir: Direction.up,
+      color: _c(1),
+      colorSlot: 1,
     ),
   ],
 );

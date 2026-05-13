@@ -502,6 +502,21 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  String _tutorialHintText() {
+    switch (widget.tutorialIndex) {
+      case 0:
+        return 'Tap the glowing arrow. Finish before the timer runs out.';
+      case 1:
+        return 'Arrows block each other. Clear the open one first, and watch the timer.';
+      case 2:
+        return 'Try quick chains: each correct pop buys time safety.';
+      case 3:
+        return 'Larger board now. Prioritize exits and keep an eye on time.';
+      default:
+        return 'Final recap: 8 arrows. Solve efficiently before the timer hits 0.';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     _schedulePlayfieldInsetSync();
@@ -517,7 +532,7 @@ class _GameScreenState extends State<GameScreen> {
                 gradient: RadialGradient(
                   center: Alignment.center,
                   radius: 1.0,
-                  colors: [accent.withOpacity(0.05), Colors.transparent],
+                  colors: [accent.withValues(alpha: 0.05), Colors.transparent],
                 ),
               ),
             ),
@@ -547,6 +562,42 @@ class _GameScreenState extends State<GameScreen> {
             elapsed: _stopwatch.elapsed,
             onTogglePause: _togglePause,
           ),
+          if (widget.isTutorial && !_hasWon)
+            Positioned(
+              top: 92,
+              left: 14,
+              right: 14,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _isPaused ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 220),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.28),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: accent.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        _tutorialHintText(),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           if (!_hasWon)
             GameBottomToolbar(
               measureKey: _footerHudKey,

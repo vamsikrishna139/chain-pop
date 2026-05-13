@@ -16,4 +16,8 @@ void main() {
   test('first tutorial level is solvable', () {
     expect(LevelSolver.isSolvable(tutorialLevels.first), isTrue);
   });
+
+  test('final tutorial level has at least 6 arrows', () {
+    expect(tutorialLevels.last.nodes.length, greaterThanOrEqualTo(6));
+  });
 }
