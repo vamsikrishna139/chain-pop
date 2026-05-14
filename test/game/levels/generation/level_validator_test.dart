@@ -1,6 +1,5 @@
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/generation/level_validator.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -3,10 +3,43 @@ import 'package:flutter/foundation.dart';
 
 import 'game_sfx.dart';
 
+/// Contract used by [GameScreen] so tests can inject audio without platform plugins.
+abstract interface class GameAudioHandle {
+  Future<void> play(GameSfx sfx, {double playbackRate = 1.0});
+
+  Future<void> startAmbientIfEnabled(bool soundEnabled);
+
+  Future<void> setAmbientEnabled(bool on);
+
+  Future<void> setAmbientGameplayPaused(bool paused, bool soundEnabled);
+
+  Future<void> dispose();
+}
+
+/// No-op audio for widget tests (no `audioplayers` method channels).
+final class SilentGameAudioHandle implements GameAudioHandle {
+  const SilentGameAudioHandle();
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> play(GameSfx sfx, {double playbackRate = 1.0}) async {}
+
+  @override
+  Future<void> setAmbientEnabled(bool on) async {}
+
+  @override
+  Future<void> setAmbientGameplayPaused(bool paused, bool soundEnabled) async {}
+
+  @override
+  Future<void> startAmbientIfEnabled(bool soundEnabled) async {}
+}
+
 /// SFX pool for overlapping taps. Uses [PlayerMode.mediaPlayer] on all
 /// platforms: Android [PlayerMode.lowLatency] (SoundPool) is unreliable with
 /// some `.ogg`/devices; [mediaPlayer] matches [AssetSource] playback best.
-class GameAudioController {
+class GameAudioController implements GameAudioHandle {
   GameAudioController({int voiceCount = 4})
       : _players = List.generate(
           voiceCount,
@@ -62,6 +95,7 @@ class GameAudioController {
   static bool _isBoardGameplaySfx(GameSfx sfx) =>
       sfx == GameSfx.pop || sfx == GameSfx.jam;
 
+  @override
   Future<void> play(GameSfx sfx, {double playbackRate = 1.0}) async {
     final path = _paths[sfx];
     if (path == null) return;
@@ -91,6 +125,7 @@ class GameAudioController {
   /// Starts the gameplay ambient bed when [soundEnabled] is true; otherwise stops
   /// it. Idempotent; arms the controller for [setAmbientEnabled] while [dispose]
   /// has not run.
+  @override
   Future<void> startAmbientIfEnabled(bool soundEnabled) async {
     _gameplayAmbientArmed = true;
     if (!soundEnabled) {
@@ -132,6 +167,7 @@ class GameAudioController {
   /// Applies the sound toggle while a gameplay session may still be active:
   /// stops when `false`; when `true`, restarts the bed only if the session was
   /// armed via [startAmbientIfEnabled] (i.e. still on [GameScreen]).
+  @override
   Future<void> setAmbientEnabled(bool on) async {
     if (!on) {
       await stopAmbient();
@@ -142,6 +178,7 @@ class GameAudioController {
   }
 
   /// Pauses or resumes the ambient bed with the in-game pause overlay.
+  @override
   Future<void> setAmbientGameplayPaused(
     bool paused,
     bool soundEnabled,
@@ -179,6 +216,7 @@ class GameAudioController {
     }
   }
 
+  @override
   Future<void> dispose() async {
     _gameplayAmbientArmed = false;
     await stopAmbient();
