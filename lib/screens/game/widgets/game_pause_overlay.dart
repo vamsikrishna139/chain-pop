@@ -15,6 +15,9 @@ class GamePauseOverlay extends StatelessWidget {
   final VoidCallback onTogglePause;
   final VoidCallback onRestartFromPause;
 
+  /// Bottom banner slot from [AdService.buildGamePauseBanner]; use [SizedBox.shrink] when absent.
+  final Widget pauseBanner;
+
   const GamePauseOverlay({
     super.key,
     required this.difficulty,
@@ -24,6 +27,7 @@ class GamePauseOverlay extends StatelessWidget {
     required this.onMenuFromPause,
     required this.onTogglePause,
     required this.onRestartFromPause,
+    this.pauseBanner = const SizedBox.shrink(),
   });
 
   @override
@@ -146,7 +150,9 @@ class GamePauseOverlay extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 16),
+                  ClipRect(child: pauseBanner),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),

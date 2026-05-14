@@ -16,6 +16,7 @@ dependencies:
   haptic_feedback: ^0.5.1
   google_fonts: ^8.0.2
   audioplayers: ^6.6.0
+  google_mobile_ads: ^8.0.0
   # Mocked logic for later integrations
   # applovin_max: ^...
   # firebase_remote_config: ^...
@@ -23,6 +24,8 @@ dependencies:
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   flutter_lints: ^3.0.0
 

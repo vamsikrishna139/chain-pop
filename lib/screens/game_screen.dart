@@ -11,8 +11,16 @@ import '../game/levels/level_manager.dart';
 import '../game/levels/tutorial_levels.dart';
 import '../models/difficulty.dart';
 import '../models/game_settings.dart';
+import '../services/ads/ad_placements.dart';
+import '../services/ads/campaign_between_levels_ads.dart';
+import '../services/ads/campaign_interstitial_frustration_gate.dart';
+import '../services/ads/ads_locator.dart';
+import '../services/ads/ad_service.dart';
+import '../services/ads/hint_ad_policy.dart';
+import '../services/ads/undo_ad_policy.dart';
 import '../services/game_audio.dart';
 import '../services/game_sfx.dart';
+import '../services/session_campaign_streak.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
 import 'game/game_screen_constants.dart';
@@ -26,6 +34,10 @@ import 'game/widgets/win_celebration_overlay.dart';
 import 'game/widgets/win_panel.dart';
 
 /// Full-screen game view for a single level.
+///
+/// **Lifetime ad engagement:** [StorageService.accumulateLifetimeGameplaySeconds] is fed
+/// via delta flushes from [_flushLifetimeGameplayDelta] (pause, app background, win,
+/// lifecycle) so OS kills only lose at most a tiny window — not an entire level.
 ///
 /// Win overlay is rendered **inside this screen's own Stack** (not as a
 /// modal route), which eliminates all Navigator-pop race conditions.
@@ -41,6 +53,12 @@ class GameScreen extends StatefulWidget {
   final bool isTutorial;
   final int tutorialIndex;
 
+  /// Overrides [AdsLocator] for tests (`NoOpAdService`).
+  final AdService? adService;
+
+  /// Widget tests: avoids `audioplayers` platform channels.
+  final GameAudioHandle Function()? audioHandleFactory;
+
   const GameScreen({
     super.key,
     required this.level,
@@ -50,6 +68,8 @@ class GameScreen extends StatefulWidget {
     this.dailyDayKey,
     this.isTutorial = false,
     this.tutorialIndex = 0,
+    this.adService,
+    this.audioHandleFactory,
   }) : assert(
           !isDailyChallenge || (dailyDayKey != null && fixedLevel != null),
         ),
@@ -58,10 +78,13 @@ class GameScreen extends StatefulWidget {
         assert(!isTutorial || (tutorialIndex >= 0 && tutorialIndex < 5));
 
   @override
-  State<GameScreen> createState() => _GameScreenState();
+  State<GameScreen> createState() => GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
+  /// Elapsed gameplay already persisted from this route (prevents duplicate adds).
+  Duration _lifetimeGameplaySyncedUpTo = Duration.zero;
+
   late ChainPopGame _game;
 
   int _totalNodes = 0;
@@ -90,12 +113,30 @@ class _GameScreenState extends State<GameScreen> {
   late LevelData _levelData;
 
   late GameSettings _settings;
-  late final GameAudioController _audio;
+  late final GameAudioHandle _audio;
+
+  AdService get _ads => widget.adService ?? AdsLocator.instance;
+
+  final UndoAdPolicy _undoAdPolicy = UndoAdPolicy();
+  late final HintAdPolicy _hintAdPolicy;
+
+  bool get _gateHintsWithAds => !widget.isTutorial;
+
+  /// Hard campaign + daily (non-tutorial): rewarded continue after lives/time out; hints are rewarded-first (no free hint budget).
+  bool get _hardOrDailyFeatures =>
+      !widget.isTutorial &&
+      (widget.isDailyChallenge || widget.difficulty == DifficultyMode.hard);
+
+  /// Rewarded “continue” after lives or time run out: **hard campaign** and **daily challenge** (not tutorial; easy/medium campaign has no offer).
+  bool get _offerRewardedContinue => _hardOrDailyFeatures;
 
   final GlobalKey _headerHudKey = GlobalKey();
   final GlobalKey _footerHudKey = GlobalKey();
   final GlobalKey _bodyStackKey = GlobalKey();
   bool _playfieldInsetFrameScheduled = false;
+
+  /// Suppresses concurrent [_goNextLevel] (timer + Next tap, or rapid taps).
+  bool _goingNext = false;
 
   /// Stack-local Y for tutorial hint banner (below measured [GameHeaderHud]).
   double _tutorialHintTop = 118;
@@ -103,9 +144,14 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
+    _hintAdPolicy = HintAdPolicy(
+      freeBudget: _hardOrDailyFeatures ? 0 : 2,
+    );
+    WidgetsBinding.instance.addObserver(this);
+
     _stopwatch = Stopwatch()..start();
     _settings = StorageService.gameSettings;
-    _audio = GameAudioController();
+    _audio = widget.audioHandleFactory?.call() ?? GameAudioController();
 
     if (widget.isDailyChallenge) {
       _levelData = widget.fixedLevel!;
@@ -132,18 +178,60 @@ class _GameScreenState extends State<GameScreen> {
     _resetGhostHintTimer();
     _startEasyHudTimer();
     unawaited(_audio.startAmbientIfEnabled(_settings.soundEnabled));
+
+    if (_offerRewardedContinue) {
+      unawaited(_ads.preloadRewarded(AdPlacements.continueAfterLives));
+    }
+    if (!widget.isTutorial) {
+      unawaited(_ads.preloadRewarded(AdPlacements.hint));
+    }
+    if (!widget.isTutorial) {
+      unawaited(_ads.preloadRewarded(AdPlacements.undo));
+    }
+    if (!widget.isDailyChallenge && !widget.isTutorial) {
+      unawaited(_ads.preloadInterstitial());
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _goingNext = false;
+    _flushLifetimeGameplayDelta(clearTrackedAfter: true);
     _countdownTimer?.cancel();
-    _autoAdvanceDelayTimer?.cancel();
-    _autoAdvanceTimer?.cancel();
+    _cancelWinAdvanceTimers();
     _ghostHintTimer?.cancel();
     _easyHudTimer?.cancel();
     _tutorialExitTimer?.cancel();
     unawaited(_audio.dispose());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        _flushLifetimeGameplayDelta();
+      case AppLifecycleState.resumed:
+        break;
+    }
+  }
+
+  void _flushLifetimeGameplayDelta({bool clearTrackedAfter = false}) {
+    if (widget.isTutorial) return;
+    final elapsed = _stopwatch.elapsed;
+    final delta = elapsed - _lifetimeGameplaySyncedUpTo;
+    final secs = delta.inSeconds.clamp(0, 8 * 3600);
+    if (secs <= 0) {
+      if (clearTrackedAfter) _lifetimeGameplaySyncedUpTo = Duration.zero;
+      return;
+    }
+    unawaited(StorageService.accumulateLifetimeGameplaySeconds(secs));
+    _lifetimeGameplaySyncedUpTo =
+        clearTrackedAfter ? Duration.zero : elapsed;
   }
 
   void _pushFeedbackToGame() {
@@ -238,19 +326,46 @@ class _GameScreenState extends State<GameScreen> {
     _ghostHintTimer?.cancel();
     _game.isGameOver = true;
     _game.playSfx(GameSfx.gameOver);
+    if (!widget.isTutorial && !widget.isDailyChallenge) {
+      CampaignInterstitialFrustrationGate.noteFailedRunEnded();
+    }
 
-    showDialog(
+    final offer = _offerRewardedContinue;
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => GameOverDialog(
+      builder: (dialogContext) => GameOverDialog(
         difficulty: widget.difficulty,
+        showRewardedContinue: offer,
+        rewardedAdReady:
+            offer && _ads.isRewardedReady(AdPlacements.continueAfterLives),
+        onWatchAdContinue: !offer
+            ? null
+            : () async {
+                final ok = await _ads.showRewarded(
+                  placement: AdPlacements.continueAfterLives,
+                );
+                if (!dialogContext.mounted || !mounted || !ok) return;
+                Navigator.of(dialogContext).pop();
+                _resumeAfterRewardedContinueFromLives();
+              },
         onRetry: () {
           Navigator.of(context).pop();
           _resetForRetry();
         },
-        onMenu: () => Navigator.of(context).popUntil((r) => r.isFirst),
+        onMenu: _goMenu,
       ),
     );
+  }
+
+  void _resumeAfterRewardedContinueFromLives() {
+    setState(() {
+      _livesRemaining = 1;
+    });
+    _game.isGameOver = false;
+    _game.resumeEngine();
+    _startCountdown();
+    unawaited(_ads.preloadRewarded(AdPlacements.continueAfterLives));
   }
 
   void _handleNodeRemoved(int removed, int total) {
@@ -262,7 +377,16 @@ class _GameScreenState extends State<GameScreen> {
     _resetGhostHintTimer();
   }
 
+  /// Invokes the same path as the win rail **Next** control (for automated tests).
+  @visibleForTesting
+  Future<void> debugGoNextLevelForTest() => _goNextLevel();
+
+  /// Drives the win overlay without clearing the board (for automated tests).
+  @visibleForTesting
+  Future<void> debugSimulateWinForTest() => _handleWin();
+
   Future<void> _handleWin() async {
+    _flushLifetimeGameplayDelta();
     _stopwatch.stop();
     _countdownTimer?.cancel();
     _ghostHintTimer?.cancel();
@@ -278,6 +402,9 @@ class _GameScreenState extends State<GameScreen> {
     } else if (widget.isDailyChallenge) {
       await StorageService.saveDailyStars(widget.dailyDayKey!, earned);
     } else {
+      SessionCampaignStreak.onWin();
+      await StorageService.incrementLifetimeCampaignClears();
+      CampaignInterstitialFrustrationGate.noteCampaignWin();
       await StorageService.saveStars(widget.difficulty, widget.level, earned);
       await StorageService.unlockLevel(widget.difficulty, widget.level + 1);
     }
@@ -304,18 +431,18 @@ class _GameScreenState extends State<GameScreen> {
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     _autoAdvanceDelayTimer = Timer(
-      Duration(milliseconds: GameScreenConstants.winAutoAdvanceDelayMs),
+      const Duration(milliseconds: GameScreenConstants.winAutoAdvanceDelayMs),
       () {
-        if (!mounted || !_hasWon) return;
+        if (!mounted || !_hasWon || _goingNext) return;
         _autoAdvanceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-          if (!mounted || !_hasWon) {
+          if (!mounted || !_hasWon || _goingNext) {
             t.cancel();
             return;
           }
           setState(() => _autoAdvanceSec--);
           if (_autoAdvanceSec <= 0) {
             t.cancel();
-            _goNextLevel();
+            unawaited(_goNextLevel());
           }
         });
       },
@@ -327,37 +454,153 @@ class _GameScreenState extends State<GameScreen> {
     _ghostHintTimer?.cancel();
     if (_hasWon || !mounted) return;
 
+    _game.isGameOver = true;
     _game.playSfx(GameSfx.gameOver);
-    showDialog(
+    if (!widget.isTutorial && !widget.isDailyChallenge) {
+      CampaignInterstitialFrustrationGate.noteFailedRunEnded();
+    }
+    final offer = _offerRewardedContinue;
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => TimeUpDialog(
+      builder: (dialogContext) => TimeUpDialog(
         difficulty: widget.difficulty,
+        showRewardedContinue: offer,
+        rewardedAdReady:
+            offer && _ads.isRewardedReady(AdPlacements.continueAfterLives),
+        onWatchAdContinue: !offer
+            ? null
+            : () async {
+                final ok = await _ads.showRewarded(
+                  placement: AdPlacements.continueAfterLives,
+                );
+                if (!dialogContext.mounted || !mounted || !ok) return;
+                Navigator.of(dialogContext).pop();
+                _resumeAfterRewardedContinueFromTimeUp();
+              },
         onRetry: () {
           Navigator.of(context).pop();
           _resetForRetry();
         },
-        onMenu: () => Navigator.of(context).popUntil((r) => r.isFirst),
+        onMenu: _goMenu,
       ),
     );
   }
 
-  void _handleUndo() {
+  void _resumeAfterRewardedContinueFromTimeUp() {
+    _game.isGameOver = false;
+    _game.resumeEngine();
+    final lim = _timeLimitSec;
+    if (lim != null) {
+      final bonus = (lim * 0.35).round().clamp(15, lim);
+      setState(() {
+        _timeLeftSec = bonus;
+      });
+    }
+    _startCountdown();
+    unawaited(_ads.preloadRewarded(AdPlacements.continueAfterLives));
+  }
+
+  Future<void> _handleUndo() async {
     if (_isPaused) return;
+    final needsAd = _undoAdPolicy.needsRewardedForNextUndo();
+    if (needsAd) {
+      final cooldown = _undoAdPolicy.remainingCooldownIfBlocked();
+      if (cooldown != null) {
+        final secs = cooldown.inSeconds.clamp(1, 9999);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text('Undo via ad unlocks in ${secs}s')),
+        );
+        _game.playSfx(GameSfx.uiTap);
+        return;
+      }
+      if (!_ads.isRewardedReady(AdPlacements.undo)) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Ad loading… try again in a moment')),
+        );
+        _game.playSfx(GameSfx.uiTap);
+        return;
+      }
+      final ok = await _ads.showRewarded(placement: AdPlacements.undo);
+      if (!mounted || !ok) return;
+      if (!_game.undo()) return;
+      _undoAdPolicy.recordRewardedUndo();
+      _game.playSfx(GameSfx.uiTap);
+      _resetGhostHintTimer();
+      setState(() {});
+      unawaited(_ads.preloadRewarded(AdPlacements.undo));
+      return;
+    }
+
     if (_game.undo()) {
+      _undoAdPolicy.recordFreeUndo();
       _game.playSfx(GameSfx.uiTap);
       _resetGhostHintTimer();
       setState(() {});
     }
   }
 
+  Future<void> _handleHint() async {
+    if (_isPaused) return;
+    if (!_game.hasAvailableHint()) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('No hint available right now.')),
+      );
+      _game.playSfx(GameSfx.uiTap);
+      return;
+    }
+
+    if (!_gateHintsWithAds) {
+      _game.showHint();
+      _resetGhostHintTimer();
+      return;
+    }
+
+    final needsAd = _hintAdPolicy.needsRewardedForNextHint();
+    if (needsAd) {
+      final cooldown = _hintAdPolicy.remainingCooldownIfBlocked();
+      if (cooldown != null) {
+        final secs = cooldown.inSeconds.clamp(1, 9999);
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text('Hint via ad unlocks in ${secs}s')),
+        );
+        _game.playSfx(GameSfx.uiTap);
+        return;
+      }
+      if (!_ads.isRewardedReady(AdPlacements.hint)) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Ad loading… try again in a moment')),
+        );
+        _game.playSfx(GameSfx.uiTap);
+        return;
+      }
+      final ok = await _ads.showRewarded(placement: AdPlacements.hint);
+      if (!mounted || !ok) return;
+      if (!_game.showHint()) return;
+      _hintAdPolicy.recordRewardedHint();
+      _resetGhostHintTimer();
+      setState(() {});
+      unawaited(_ads.preloadRewarded(AdPlacements.hint));
+      return;
+    }
+
+    if (!_game.showHint()) return;
+    _hintAdPolicy.recordFreeHint();
+    _resetGhostHintTimer();
+    setState(() {});
+  }
+
   void _resetForRetry() {
+    _flushLifetimeGameplayDelta();
+    _lifetimeGameplaySyncedUpTo = Duration.zero;
     _tutorialExitTimer?.cancel();
-    _autoAdvanceDelayTimer?.cancel();
-    _autoAdvanceTimer?.cancel();
+    _cancelWinAdvanceTimers();
+    _goingNext = false;
     _countdownTimer?.cancel();
     _ghostHintTimer?.cancel();
     _easyHudTimer?.cancel();
+    _undoAdPolicy.resetForNewAttempt();
+    _hintAdPolicy.resetForNewAttempt();
     setState(() {
       _isPaused = false;
       _livesRemaining = GameScreenConstants.maxLives;
@@ -381,19 +624,61 @@ class _GameScreenState extends State<GameScreen> {
     _startEasyHudTimer();
   }
 
-  void _goNextLevel() {
+  void _cancelWinAdvanceTimers() {
+    _autoAdvanceDelayTimer?.cancel();
+    _autoAdvanceDelayTimer = null;
+    _autoAdvanceTimer?.cancel();
+    _autoAdvanceTimer = null;
+  }
+
+  Future<void> _goNextLevel() async {
     if (!mounted || widget.isDailyChallenge) return;
-    if (widget.isTutorial) {
-      final next = widget.tutorialIndex + 1;
-      if (next >= tutorialLevels.length) return;
+    if (_goingNext) return;
+    _goingNext = true;
+    _cancelWinAdvanceTimers();
+
+    try {
+      await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
+        ads: _ads,
+        difficulty: widget.difficulty,
+        isTutorial: widget.isTutorial,
+        isDailyChallenge: widget.isDailyChallenge,
+      );
+
+      if (!mounted) return;
+
+      if (widget.isTutorial) {
+        final next = widget.tutorialIndex + 1;
+        if (next >= tutorialLevels.length) return;
+        // Do not await: [Navigator.pushReplacement]'s future completes when this
+        // new route is popped, not when the transition finishes (would pin state).
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (_, __, ___) => GameScreen(
+              level: next + 1,
+              difficulty: DifficultyMode.easy,
+              fixedLevel: tutorialLevels[next],
+              isTutorial: true,
+              tutorialIndex: next,
+              adService: widget.adService,
+              audioHandleFactory: widget.audioHandleFactory,
+            ),
+            transitionsBuilder: (_, anim, __, child) => FadeTransition(
+              opacity: anim,
+              child: child,
+            ),
+            transitionDuration: const Duration(milliseconds: 350),
+          ),
+        );
+        return;
+      }
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (_, __, ___) => GameScreen(
-            level: next + 1,
-            difficulty: DifficultyMode.easy,
-            fixedLevel: tutorialLevels[next],
-            isTutorial: true,
-            tutorialIndex: next,
+            level: widget.level + 1,
+            difficulty: widget.difficulty,
+            adService: widget.adService,
+            audioHandleFactory: widget.audioHandleFactory,
           ),
           transitionsBuilder: (_, anim, __, child) => FadeTransition(
             opacity: anim,
@@ -402,27 +687,16 @@ class _GameScreenState extends State<GameScreen> {
           transitionDuration: const Duration(milliseconds: 350),
         ),
       );
-      return;
+    } finally {
+      if (mounted) _goingNext = false;
     }
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => GameScreen(
-          level: widget.level + 1,
-          difficulty: widget.difficulty,
-        ),
-        transitionsBuilder: (_, anim, __, child) => FadeTransition(
-          opacity: anim,
-          child: child,
-        ),
-        transitionDuration: const Duration(milliseconds: 350),
-      ),
-    );
   }
 
   void _goMenu() {
+    SessionCampaignStreak.reset();
     _tutorialExitTimer?.cancel();
-    _autoAdvanceDelayTimer?.cancel();
-    _autoAdvanceTimer?.cancel();
+    _cancelWinAdvanceTimers();
+    _goingNext = false;
     Navigator.of(context).popUntil((r) => r.isFirst);
   }
 
@@ -468,9 +742,10 @@ class _GameScreenState extends State<GameScreen> {
       _resetGhostHintTimer();
       _startEasyHudTimer();
     } else {
-      setState(() => _isPaused = true);
       _game.pauseEngine();
       _stopwatch.stop();
+      _flushLifetimeGameplayDelta();
+      setState(() => _isPaused = true);
       unawaited(
         _audio.setAmbientGameplayPaused(true, _settings.soundEnabled),
       );
@@ -496,9 +771,15 @@ class _GameScreenState extends State<GameScreen> {
     if (widget.difficulty != DifficultyMode.easy) return;
     _ghostHintTimer?.cancel();
     _ghostHintTimer = Timer(
-      Duration(seconds: GameScreenConstants.ghostHintDelaySeconds),
+      const Duration(seconds: GameScreenConstants.ghostHintDelaySeconds),
       () {
-        if (!_hasWon && mounted) _game.showHint();
+        if (_hasWon || !mounted) return;
+        if (_gateHintsWithAds && _hintAdPolicy.needsRewardedForNextHint()) {
+          return;
+        }
+        final showed = _game.showHint();
+        if (!showed) return;
+        if (_gateHintsWithAds) _hintAdPolicy.recordFreeHint();
       },
     );
   }
@@ -626,23 +907,26 @@ class _GameScreenState extends State<GameScreen> {
             GameBottomToolbar(
               measureKey: _footerHudKey,
               accent: accent,
+              showHintAdBadge: _hardOrDailyFeatures,
               axisGuidesVisible: _game.axisGuidesVisible,
               canUndo: _game.canUndo,
-              onHint: () {
-                if (_isPaused) return;
-                _game.showHint();
-                _resetGhostHintTimer();
-              },
+              onHint: () => unawaited(_handleHint()),
               onToggleGuides: () {
                 if (_isPaused) return;
                 _game.toggleAxisGuides();
                 setState(() {});
               },
+              onZoomIn: widget.isTutorial
+                  ? () {
+                      if (_isPaused) return;
+                      _game.zoomInStep();
+                    }
+                  : null,
               onResetView: () {
                 if (_isPaused) return;
                 _game.resetView();
               },
-              onUndo: _handleUndo,
+              onUndo: () => unawaited(_handleUndo()),
               onRestart: _resetForRetry,
             ),
           if (_isPaused && !_hasWon)
@@ -654,6 +938,9 @@ class _GameScreenState extends State<GameScreen> {
               onMenuFromPause: _menuFromPause,
               onTogglePause: _togglePause,
               onRestartFromPause: _restartFromPause,
+              pauseBanner: widget.isTutorial
+                  ? const SizedBox.shrink()
+                  : _ads.buildGamePauseBanner(context),
             ),
           AnimatedSlide(
             offset: _hasWon ? Offset.zero : const Offset(0, 1),
@@ -674,8 +961,8 @@ class _GameScreenState extends State<GameScreen> {
                   timeTaken: _stopwatch.elapsed,
                   autoAdvanceSec: _autoAdvanceSec,
                   onMenu: _goMenu,
-                  onRetry: _resetForRetry,
-                  onNext: _goNextLevel,
+                  onRetry: () => _resetForRetry(),
+                  onNext: () => unawaited(_goNextLevel()),
                   showNextAndAutoAdvance: !widget.isDailyChallenge &&
                       (!widget.isTutorial || widget.tutorialIndex < 4),
                   titleLine: widget.isDailyChallenge

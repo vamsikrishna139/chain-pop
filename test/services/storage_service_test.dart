@@ -149,5 +149,34 @@ void main() {
       await box.put('tutorial_completed', 1);
       expect(StorageService.tutorialCompleted, isTrue);
     });
+
+    group('lifetime campaign engagement (interstitial gate)', () {
+      test('gate false by default; satisfied via clears or gameplay seconds', () async {
+        expect(StorageService.lifetimeCampaignClears, 0);
+        expect(StorageService.lifetimeGameplaySeconds, 0);
+        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isFalse);
+
+        for (var i = 0;
+            i < StorageService.campaignInterstitialMinLifetimeClears;
+            i++) {
+          await StorageService.incrementLifetimeCampaignClears();
+        }
+        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isTrue);
+
+        await StorageService.clearProgress();
+        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isFalse);
+
+        await StorageService.accumulateLifetimeGameplaySeconds(
+          StorageService.campaignInterstitialMinGameplaySeconds,
+        );
+        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isTrue);
+      });
+
+      test('accumulateLifetimeGameplaySeconds ignores non-positive delta', () async {
+        await StorageService.accumulateLifetimeGameplaySeconds(0);
+        await StorageService.accumulateLifetimeGameplaySeconds(-10);
+        expect(StorageService.lifetimeGameplaySeconds, 0);
+      });
+    });
   });
 }

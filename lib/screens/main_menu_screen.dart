@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
+import '../services/ads/ad_service_factory.dart';
 import '../services/game_audio.dart';
 import '../services/game_sfx.dart';
 import '../game/levels/tutorial_levels.dart';
@@ -100,7 +101,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     Navigator.of(context)
         .push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => const DailyChallengeCalendarScreen(),
+        builder: (_) => DailyChallengeCalendarScreen(
+          policy: createDailyChallengePlayPolicy(),
+        ),
       ),
     )
         .then((_) {

@@ -385,6 +385,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _pinchActive = false;
   }
 
+  /// Discrete zoom in from the toolbar (pinch / scroll still apply elsewhere).
+  void zoomInStep() {
+    _targetZoom = (_targetZoom * 1.12).clamp(_minZoom, _maxZoom);
+  }
+
   /// Toggles row/column alignment guides (see [axisGuidesVisible]).
   void toggleAxisGuides() {
     _axisGuidesVisible = !_axisGuidesVisible;
@@ -442,9 +447,14 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     }
   }
 
-  void showHint() {
+  /// Whether [showHint] would currently highlight a removable node.
+  bool hasAvailableHint() =>
+      LevelSolver.getHint(activeNodes, levelData) != null;
+
+  /// Highlights a valid hint node. Returns `false` if none exists.
+  bool showHint() {
     final hintNode = LevelSolver.getHint(activeNodes, levelData);
-    if (hintNode == null) return;
+    if (hintNode == null) return false;
     playSfx(GameSfx.hint);
     for (final comp in board.children.whereType<NodeComponent>()) {
       if (comp.data.id == hintNode.id) {
@@ -452,6 +462,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
         break;
       }
     }
+    return true;
   }
 
   void restart() {

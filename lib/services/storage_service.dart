@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import '../game/levels/generation/difficulty_mode.dart';
@@ -24,6 +25,8 @@ import '../utils/safe_hive_values.dart';
 /// daily_stars_<YYYYMMDD>       → 0-3 (best result that local calendar day)
 /// daily_ad_unlock_<YYYYMMDD>   → true after rewarded ad (older / off-window days)
 /// tutorial_completed           → true after finishing the 5-step onboarding track
+/// lifetime_campaign_level_clears → count of cleared campaign wins (lifetime)
+/// lifetime_gameplay_seconds    → non-tutorial gameplay time from [GameScreen] disposes
 /// ```
 class StorageService {
   static const String _boxName = 'chain_pop_storage';
@@ -36,6 +39,16 @@ class StorageService {
   static const String _dailyStarsPrefix = 'daily_stars_';
   static const String _dailyAdUnlockPrefix = 'daily_ad_unlock_';
   static const String _tutorialCompletedKey = 'tutorial_completed';
+
+  /// At least one of [#lifetimeCampaignClears] / [#lifetimeGameplaySeconds] must
+  /// reach these before between-level campaign interstitials engage (first-player protection).
+  static const int campaignInterstitialMinLifetimeClears = 5;
+
+  /// ~10 minutes; pairs with clears gate under OR semantics.
+  static const int campaignInterstitialMinGameplaySeconds = 600;
+
+  static const String _lifetimeCampaignClearsKey = 'lifetime_campaign_level_clears';
+  static const String _lifetimeGameplaySecondsKey = 'lifetime_gameplay_seconds';
   static const String _settingsSoundKey = 'settings_sound';
   static const String _settingsHapticsKey = 'settings_haptics';
   static const String _settingsColorblindKey = 'settings_colorblind';
@@ -202,6 +215,55 @@ class StorageService {
 
   static Future<void> setTutorialCompleted(bool value) async {
     await _box.put(_tutorialCompletedKey, value);
+  }
+
+  // ── Monetization lifetime engagement signals (device-local aggregates) ────
+
+  /// Cleared campaign levels (tutorial / daily excluded), monotonic lifetime count.
+  static int get lifetimeCampaignClears => coerceHiveInt(
+        _box.get(_lifetimeCampaignClearsKey),
+        fallback: 0,
+        min: 0,
+        max: 1 << 28,
+      );
+
+  /// Seconds of non-tutorial [GameScreen] time accumulated from screen disposals.
+  static int get lifetimeGameplaySeconds => coerceHiveInt(
+        _box.get(_lifetimeGameplaySecondsKey),
+        fallback: 0,
+        min: 0,
+        max: 1 << 30,
+      );
+
+  /// OR gate: qualifies the player for between-level campaign interstitials beyond streak rules.
+  static bool get campaignInterstitialLifetimeGateSatisfied =>
+      lifetimeCampaignClears >= campaignInterstitialMinLifetimeClears ||
+      lifetimeGameplaySeconds >= campaignInterstitialMinGameplaySeconds;
+
+  /// Called once per cleared campaign win (mirror [StorageService.unlockLevel] intent).
+  static Future<void> incrementLifetimeCampaignClears() async {
+    final next =
+        coerceHiveInt(lifetimeCampaignClears + 1, fallback: 0, min: 0, max: 1 << 28);
+    await _box.put(_lifetimeCampaignClearsKey, next);
+  }
+
+  /// Accumulates guarded seconds when a gameplay screen is disposed (non-tutorial only).
+  static Future<void> accumulateLifetimeGameplaySeconds(int delta) async {
+    if (delta <= 0) return;
+    final safe = coerceHiveInt(delta, fallback: 0, min: 0, max: 8 * 3600);
+    final sum = coerceHiveInt(
+      lifetimeGameplaySeconds + safe,
+      fallback: 0,
+      min: 0,
+      max: 1 << 30,
+    );
+    await _box.put(_lifetimeGameplaySecondsKey, sum);
+  }
+
+  /// Bypasses onboarding protection for deterministic interstitial regressions only.
+  @visibleForTesting
+  static Future<void> seedLifetimeEngagementGateForTests() async {
+    await _box.put(_lifetimeCampaignClearsKey, campaignInterstitialMinLifetimeClears);
   }
 
   // ── Legacy compat (used by old code paths) ────────────────────────────────
