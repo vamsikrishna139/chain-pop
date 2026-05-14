@@ -1,17 +1,22 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../game/levels/level_manager.dart';
 import '../models/difficulty.dart';
+import '../services/ads/ad_placements.dart';
+import '../services/ads/ads_locator.dart';
 import '../services/daily_challenge_play_policy.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
+import 'game/widgets/game_dialogs.dart';
 import 'game_screen.dart';
 
-/// Month grid for the **current local month**: days 1 → last, with days after today
-/// locked. In-range days use [DailyChallengePlayPolicy] (free through today;
-/// older days later via rewarded ads + [StorageService.isDailyUnlockedViaAd]).
+/// Month grid for the **current local month**: future days are locked; **today** is
+/// free. Earlier days replay after a one-time rewarded unlock per day when
+/// [DailyChallengePlayPolicy.showRewardedAd] is set ([StorageService.isDailyUnlockedViaAd]).
 class DailyChallengeCalendarScreen extends StatefulWidget {
   final DailyChallengePlayPolicy policy;
 
@@ -27,15 +32,44 @@ class DailyChallengeCalendarScreen extends StatefulWidget {
 
 class _DailyChallengeCalendarScreenState
     extends State<DailyChallengeCalendarScreen> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.policy.showRewardedAd != null) {
+      unawaited(
+        AdsLocator.instance.preloadRewarded(AdPlacements.dailyUnlockPast),
+      );
+    }
+  }
+
   Future<void> _openDay(DateTime day) async {
     final now = DateTime.now();
+
+    if (widget.policy.needsRewardedUnlockBeforePlay(day, now)) {
+      final accent = DifficultyMode.medium.color;
+      final dateLabel =
+          DailyChallenge.compactDateLabelFromKey(DailyChallenge.dateKeyLocal(day));
+      final watch = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => PastDailyUnlockDialog(
+          accent: accent,
+          puzzleDateLabel: dateLabel,
+          onCancel: () => Navigator.of(dialogContext).pop(false),
+          onWatchAd: () => Navigator.of(dialogContext).pop(true),
+        ),
+      );
+      if (!mounted || watch != true) return;
+    }
+
     final allowed = await widget.policy.ensureCanStart(day, now);
     if (!mounted) return;
     if (!allowed) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'This puzzle needs a rewarded ad to unlock — hook up ads here.',
+            widget.policy.showRewardedAd == null
+                ? 'This day is locked.'
+                : 'Watch the full ad to unlock this day, or try again if the ad did not load.',
           ),
         ),
       );
@@ -87,73 +121,95 @@ class _DailyChallengeCalendarScreenState
         ),
         centerTitle: true,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        children: [
-          Text(
-            'Daily challenges',
-            style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: weekLabels
-                .map(
-                  (w) => Expanded(
-                    child: Center(
-                      child: Text(
-                        w,
-                        style: tt.labelSmall?.copyWith(
-                          color: cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                children: [
+                  Text(
+                    'Daily challenges',
+                    style:
+                        tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
                   ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 8),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 7,
-              mainAxisSpacing: 8,
-              crossAxisSpacing: 8,
-              childAspectRatio: 0.92,
-            ),
-            itemCount: totalCells,
-            itemBuilder: (context, index) {
-              final dayNum = index - leading + 1;
-              if (index < leading || dayNum < 1 || dayNum > daysInMonth) {
-                return const SizedBox.shrink();
-              }
-              final day = DateTime(y, m, dayNum);
-              final isFuture = day.isAfter(today);
-              final stars = StorageService.dailyStarsForDayKey(
-                DailyChallenge.dateKeyLocal(day),
-              );
-              final isToday = day == today;
-              final inFree = widget.policy.isInFreeCalendarWindow(day, now);
-              final adOk = StorageService.isDailyUnlockedViaAd(
-                DailyChallenge.dateKeyLocal(day),
-              );
-              final lockedOutside = !inFree && !adOk;
+                  const SizedBox(height: 8),
+                  Text(
+                    'Today is free. Tap any earlier day to replay—after you confirm, a short ad unlocks that date once.',
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: weekLabels
+                        .map(
+                          (w) => Expanded(
+                            child: Center(
+                              child: Text(
+                                w,
+                                style: tt.labelSmall?.copyWith(
+                                  color: cs.onSurfaceVariant,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 8),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 7,
+                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8,
+                      childAspectRatio: 0.92,
+                    ),
+                    itemCount: totalCells,
+                    itemBuilder: (context, index) {
+                      final dayNum = index - leading + 1;
+                      if (index < leading ||
+                          dayNum < 1 ||
+                          dayNum > daysInMonth) {
+                        return const SizedBox.shrink();
+                      }
+                      final day = DateTime(y, m, dayNum);
+                      final isFuture = day.isAfter(today);
+                      final stars = StorageService.dailyStarsForDayKey(
+                        DailyChallenge.dateKeyLocal(day),
+                      );
+                      final isToday = day == today;
+                      final inFree =
+                          widget.policy.isInFreeCalendarWindow(day, now);
+                      final adOk = StorageService.isDailyUnlockedViaAd(
+                        DailyChallenge.dateKeyLocal(day),
+                      );
+                      final playable = widget.policy.mayBePlayable(day, now);
+                      final needsVideoBadge =
+                          playable && !isFuture && !inFree && !adOk;
 
-              return _DayCell(
-                day: dayNum,
-                accent: accent,
-                stars: stars,
-                isToday: isToday,
-                isFuture: isFuture,
-                lockedOutside: lockedOutside,
-                onTap: (isFuture || lockedOutside)
-                    ? null
-                    : () => _openDay(day),
-              );
-            },
-          ),
-        ],
+                      return _DayCell(
+                        day: dayNum,
+                        accent: accent,
+                        stars: stars,
+                        isToday: isToday,
+                        isFuture: isFuture,
+                        needsVideoBadge: needsVideoBadge,
+                        dimmed: isFuture || !playable,
+                        onTap:
+                            playable && !isFuture ? () => _openDay(day) : null,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            AdsLocator.instance.buildDailyChallengeBanner(context),
+          ],
+        ),
       ),
     );
   }
@@ -165,7 +221,8 @@ class _DayCell extends StatelessWidget {
   final int stars;
   final bool isToday;
   final bool isFuture;
-  final bool lockedOutside;
+  final bool needsVideoBadge;
+  final bool dimmed;
   final VoidCallback? onTap;
 
   const _DayCell({
@@ -174,7 +231,8 @@ class _DayCell extends StatelessWidget {
     required this.stars,
     required this.isToday,
     required this.isFuture,
-    required this.lockedOutside,
+    required this.needsVideoBadge,
+    required this.dimmed,
     required this.onTap,
   });
 
@@ -199,7 +257,7 @@ class _DayCell extends StatelessWidget {
             border: border,
           ),
           child: Opacity(
-            opacity: isFuture || lockedOutside ? 0.45 : 1,
+            opacity: dimmed ? 0.45 : 1,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
               child: Column(
@@ -219,9 +277,16 @@ class _DayCell extends StatelessWidget {
                       if (isFuture) ...[
                         const SizedBox(width: 2),
                         Icon(Icons.lock_outline, size: 12, color: accent),
-                      ] else if (lockedOutside) ...[
+                      ] else if (needsVideoBadge) ...[
                         const SizedBox(width: 2),
-                        Icon(Icons.ondemand_video_rounded, size: 12, color: accent),
+                        Tooltip(
+                          message: 'Unlock with a short ad',
+                          child: Icon(
+                            Icons.schedule_rounded,
+                            size: 13,
+                            color: accent.withValues(alpha: 0.95),
+                          ),
+                        ),
                       ],
                     ],
                   ),

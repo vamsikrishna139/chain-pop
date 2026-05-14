@@ -3,10 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'screens/main_menu_screen.dart';
+import 'services/ads/ad_service_factory.dart';
+import 'services/ads/ads_locator.dart';
 import 'services/storage_service.dart';
 import 'theme/app_colors.dart';
 
-void main() async {
+/// Hive, storage, ads SDK — call before [runApp] or before pumping [ChainPopApp]
+/// (e.g. integration tests).
+Future<void> bootstrapChainPop() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterError.onError = (details) {
@@ -26,13 +30,15 @@ void main() async {
   await Hive.initFlutter();
   await StorageService.init();
 
-  await _bootstrapThirdPartySdks();
-  runApp(const ChainPopApp());
+  final ads = createDefaultAdService();
+  AdsLocator.install(ads);
+  await ads.bootstrap();
 }
 
-/// Hook point for analytics, ads, crash reporting, etc. Keep async work bounded
-/// so cold start stays responsive.
-Future<void> _bootstrapThirdPartySdks() async {}
+Future<void> main() async {
+  await bootstrapChainPop();
+  runApp(const ChainPopApp());
+}
 
 class ChainPopApp extends StatelessWidget {
   const ChainPopApp({super.key});
