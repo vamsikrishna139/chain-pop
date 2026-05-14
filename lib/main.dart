@@ -30,14 +30,20 @@ Future<void> bootstrapChainPop() async {
   await Hive.initFlutter();
   await StorageService.init();
 
-  final ads = createDefaultAdService();
-  AdsLocator.install(ads);
-  await ads.bootstrap();
+  await _bootstrapThirdPartySdks();
 }
 
 Future<void> main() async {
   await bootstrapChainPop();
   runApp(const ChainPopApp());
+}
+
+/// Hook point for analytics, ads, crash reporting, etc. Keep async work bounded
+/// so cold start stays responsive.
+Future<void> _bootstrapThirdPartySdks() async {
+  final ads = createDefaultAdService();
+  AdsLocator.install(ads);
+  await ads.bootstrap();
 }
 
 class ChainPopApp extends StatelessWidget {

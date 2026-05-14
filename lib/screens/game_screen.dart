@@ -961,8 +961,7 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   timeTaken: _stopwatch.elapsed,
                   autoAdvanceSec: _autoAdvanceSec,
                   onMenu: _goMenu,
-                  onRetry: () =>
-                      _resetForRetry(),
+                  onRetry: () => _resetForRetry(),
                   onNext: () => unawaited(_goNextLevel()),
                   showNextAndAutoAdvance: !widget.isDailyChallenge &&
                       (!widget.isTutorial || widget.tutorialIndex < 4),
