@@ -6,6 +6,9 @@ import 'package:chain_pop/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
+/// Must match [StorageService] private box name for legacy-type migration tests.
+const _storageBoxName = 'chain_pop_storage';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -123,6 +126,28 @@ void main() {
       expect(s.soundEnabled, isFalse);
       expect(s.hapticsEnabled, isFalse);
       expect(s.colorblindFriendly, isTrue);
+    });
+
+    test('tutorialCompleted defaults and clears with clearProgress', () async {
+      expect(StorageService.tutorialCompleted, isFalse);
+      await StorageService.setTutorialCompleted(true);
+      expect(StorageService.tutorialCompleted, isTrue);
+      await StorageService.clearProgress();
+      expect(StorageService.tutorialCompleted, isFalse);
+    });
+
+    test('setTutorialCompleted false persists after true', () async {
+      await StorageService.setTutorialCompleted(true);
+      expect(StorageService.tutorialCompleted, isTrue);
+      await StorageService.setTutorialCompleted(false);
+      expect(StorageService.tutorialCompleted, isFalse);
+    });
+
+    test('tutorialCompleted reads int 1 as true (legacy / corrupt cell)', () async {
+      await StorageService.clearProgress();
+      final box = Hive.box<dynamic>(_storageBoxName);
+      await box.put('tutorial_completed', 1);
+      expect(StorageService.tutorialCompleted, isTrue);
     });
   });
 }

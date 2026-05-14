@@ -1,12 +1,19 @@
 import 'package:hive/hive.dart';
+
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
 import '../models/game_settings.dart';
+import '../utils/safe_hive_values.dart';
 
 /// Persistent storage for all game progress using Hive.
 ///
+/// **Scope:** device-local, unencrypted game state only. Do not store secrets,
+/// tokens, or PII here — treat the box as untrusted input on read (see
+/// [coerceHiveBool] / [coerceHiveInt]).
+///
 /// Keys layout:
 /// ```
+/// _chain_pop_storage_schema    → int migration marker (see [_schemaVersion])
 /// selected_difficulty          → 'easy' | 'medium' | 'hard'
 /// unlocked_easy                → highest unlocked level (easy)
 /// unlocked_medium              → highest unlocked level (medium)
@@ -16,30 +23,52 @@ import '../models/game_settings.dart';
 /// stars_hard_<levelId>         → 0-3
 /// daily_stars_<YYYYMMDD>       → 0-3 (best result that local calendar day)
 /// daily_ad_unlock_<YYYYMMDD>   → true after rewarded ad (older / off-window days)
+/// tutorial_completed           → true after finishing the 5-step onboarding track
 /// ```
 class StorageService {
   static const String _boxName = 'chain_pop_storage';
+  static const String _schemaKey = '_chain_pop_storage_schema';
+  static const int _schemaVersion = 1;
+
   static const String _difficultyKey = 'selected_difficulty';
   static const String _unlockedPrefix = 'unlocked_';
   static const String _starsPrefix = 'stars_';
   static const String _dailyStarsPrefix = 'daily_stars_';
   static const String _dailyAdUnlockPrefix = 'daily_ad_unlock_';
+  static const String _tutorialCompletedKey = 'tutorial_completed';
   static const String _settingsSoundKey = 'settings_sound';
   static const String _settingsHapticsKey = 'settings_haptics';
   static const String _settingsColorblindKey = 'settings_colorblind';
 
-  static late Box _box;
+  static late Box<dynamic> _box;
 
   static Future<void> init() async {
-    _box = await Hive.openBox(_boxName);
+    _box = await Hive.openBox<dynamic>(_boxName);
+    await _ensureSchemaAndMigrate();
+  }
+
+  /// Reserved for forward-compatible one-time transforms when [_schemaVersion]
+  /// bumps (key renames, value normalizations). Keep migrations idempotent.
+  static Future<void> _ensureSchemaAndMigrate() async {
+    final stored = coerceHiveInt(
+      _box.get(_schemaKey),
+      fallback: 0,
+      min: 0,
+      max: 999,
+    );
+    if (stored >= _schemaVersion) return;
+
+    // Example: if (stored < 1) { await _migrateToV1(); }
+    await _box.put(_schemaKey, _schemaVersion);
   }
 
   // ── Difficulty preference ─────────────────────────────────────────────────
 
   /// Returns the player's globally selected difficulty. Defaults to easy.
   static DifficultyMode get selectedDifficulty {
-    final key = _box.get(_difficultyKey, defaultValue: 'easy') as String;
-    return DifficultyExt.fromKey(key);
+    final raw = _box.get(_difficultyKey, defaultValue: 'easy');
+    if (raw is! String) return DifficultyMode.easy;
+    return DifficultyExt.fromKey(raw);
   }
 
   /// Persists the player's difficulty selection.
@@ -50,10 +79,18 @@ class StorageService {
   // ── Gameplay / accessibility preferences ─────────────────────────────────
 
   static GameSettings get gameSettings => GameSettings(
-        soundEnabled: _box.get(_settingsSoundKey, defaultValue: true) as bool,
-        hapticsEnabled: _box.get(_settingsHapticsKey, defaultValue: true) as bool,
-        colorblindFriendly:
-            _box.get(_settingsColorblindKey, defaultValue: false) as bool,
+        soundEnabled: coerceHiveBool(
+          _box.get(_settingsSoundKey),
+          fallback: true,
+        ),
+        hapticsEnabled: coerceHiveBool(
+          _box.get(_settingsHapticsKey),
+          fallback: true,
+        ),
+        colorblindFriendly: coerceHiveBool(
+          _box.get(_settingsColorblindKey),
+          fallback: false,
+        ),
       );
 
   static Future<void> saveGameSettings(GameSettings settings) async {
@@ -66,14 +103,20 @@ class StorageService {
 
   /// Highest unlocked level for [mode]. Defaults to 1.
   static int highestUnlocked(DifficultyMode mode) {
-    return _box.get('$_unlockedPrefix${mode.key}', defaultValue: 1) as int;
+    return coerceHiveInt(
+      _box.get('$_unlockedPrefix${mode.key}'),
+      fallback: 1,
+      min: 1,
+      max: 1 << 20,
+    );
   }
 
   /// Unlocks [level] for [mode] if it is higher than the current maximum.
   static Future<void> unlockLevel(DifficultyMode mode, int level) async {
+    final sanitized = coerceHiveInt(level, fallback: 1, min: 1, max: 1 << 20);
     final current = highestUnlocked(mode);
-    if (level > current) {
-      await _box.put('$_unlockedPrefix${mode.key}', level);
+    if (sanitized > current) {
+      await _box.put('$_unlockedPrefix${mode.key}', sanitized);
     }
   }
 
@@ -81,7 +124,12 @@ class StorageService {
 
   /// Returns stars earned (0–3) for [levelId] on [mode].
   static int stars(DifficultyMode mode, int levelId) {
-    return _box.get('$_starsPrefix${mode.key}_$levelId', defaultValue: 0) as int;
+    return coerceHiveInt(
+      _box.get('$_starsPrefix${mode.key}_$levelId'),
+      fallback: 0,
+      min: 0,
+      max: 3,
+    );
   }
 
   /// Records [newStars] for [levelId] on [mode], only updating if higher.
@@ -90,9 +138,10 @@ class StorageService {
     int levelId,
     int newStars,
   ) async {
+    final capped = coerceHiveInt(newStars, fallback: 0, min: 0, max: 3);
     final current = stars(mode, levelId);
-    if (newStars > current) {
-      await _box.put('$_starsPrefix${mode.key}_$levelId', newStars);
+    if (capped > current) {
+      await _box.put('$_starsPrefix${mode.key}_$levelId', capped);
     }
   }
 
@@ -114,24 +163,45 @@ class StorageService {
 
   /// Best stars (0–3) saved for the daily puzzle on [dayKey].
   static int dailyStarsForDayKey(int dayKey) {
-    return _box.get('$_dailyStarsPrefix$dayKey', defaultValue: 0) as int;
+    return coerceHiveInt(
+      _box.get('$_dailyStarsPrefix$dayKey'),
+      fallback: 0,
+      min: 0,
+      max: 3,
+    );
   }
 
   /// Stores [newStars] for [dayKey] only when higher than the saved value.
   static Future<void> saveDailyStars(int dayKey, int newStars) async {
+    final capped = coerceHiveInt(newStars, fallback: 0, min: 0, max: 3);
     final current = dailyStarsForDayKey(dayKey);
-    if (newStars > current) {
-      await _box.put('$_dailyStarsPrefix$dayKey', newStars);
+    if (capped > current) {
+      await _box.put('$_dailyStarsPrefix$dayKey', capped);
     }
   }
 
   /// Rewarded-ad unlock for playing a daily outside the free calendar window.
   static bool isDailyUnlockedViaAd(int dayKey) {
-    return _box.get('$_dailyAdUnlockPrefix$dayKey', defaultValue: false) as bool;
+    return coerceHiveBool(
+      _box.get('$_dailyAdUnlockPrefix$dayKey'),
+      fallback: false,
+    );
   }
 
   static Future<void> markDailyUnlockedViaAd(int dayKey) async {
     await _box.put('$_dailyAdUnlockPrefix$dayKey', true);
+  }
+
+  // ── Onboarding tutorial ───────────────────────────────────────────────────
+
+  /// Whether the player finished the fixed 5-level tutorial track.
+  static bool get tutorialCompleted => coerceHiveBool(
+        _box.get(_tutorialCompletedKey),
+        fallback: false,
+      );
+
+  static Future<void> setTutorialCompleted(bool value) async {
+    await _box.put(_tutorialCompletedKey, value);
   }
 
   // ── Legacy compat (used by old code paths) ────────────────────────────────
@@ -146,8 +216,11 @@ class StorageService {
   // ── Reset ─────────────────────────────────────────────────────────────────
 
   /// Clears all progress (useful for testing / debug).
+  ///
+  /// Includes [tutorialCompleted] and all other Hive keys in this box.
   static Future<void> clearProgress() async {
     await _box.clear();
+    await _box.put(_schemaKey, _schemaVersion);
   }
 
   /// Clears progress only for [mode].

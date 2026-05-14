@@ -8,6 +8,7 @@ import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
+import '../game/levels/tutorial_levels.dart';
 import '../models/difficulty.dart';
 import '../models/game_settings.dart';
 import '../services/game_audio.dart';
@@ -21,6 +22,7 @@ import 'game/widgets/game_dialogs.dart';
 import 'game/widgets/game_header_hud.dart';
 import 'game/widgets/game_pause_overlay.dart';
 import 'game/widgets/game_settings_sheet.dart';
+import 'game/widgets/win_celebration_overlay.dart';
 import 'game/widgets/win_panel.dart';
 
 /// Full-screen game view for a single level.
@@ -29,13 +31,15 @@ import 'game/widgets/win_panel.dart';
 /// modal route), which eliminates all Navigator-pop race conditions.
 /// Auto-advances to the next level after a countdown ([GameScreenConstants]),
 /// except for [isDailyChallenge] runs (no auto-next; stars go to
-/// [StorageService.saveDailyStars]).
+/// [StorageService.saveDailyStars]) and the last step of [isTutorial].
 class GameScreen extends StatefulWidget {
   final int level;
   final DifficultyMode difficulty;
   final LevelData? fixedLevel;
   final bool isDailyChallenge;
   final int? dailyDayKey;
+  final bool isTutorial;
+  final int tutorialIndex;
 
   const GameScreen({
     super.key,
@@ -44,9 +48,14 @@ class GameScreen extends StatefulWidget {
     this.fixedLevel,
     this.isDailyChallenge = false,
     this.dailyDayKey,
+    this.isTutorial = false,
+    this.tutorialIndex = 0,
   }) : assert(
           !isDailyChallenge || (dailyDayKey != null && fixedLevel != null),
-        );
+        ),
+        assert(!isTutorial || fixedLevel != null),
+        assert(!isTutorial || !isDailyChallenge),
+        assert(!isTutorial || (tutorialIndex >= 0 && tutorialIndex < 5));
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -74,6 +83,7 @@ class _GameScreenState extends State<GameScreen> {
   Timer? _ghostHintTimer;
 
   Timer? _easyHudTimer;
+  Timer? _tutorialExitTimer;
 
   bool _isPaused = false;
 
@@ -84,7 +94,11 @@ class _GameScreenState extends State<GameScreen> {
 
   final GlobalKey _headerHudKey = GlobalKey();
   final GlobalKey _footerHudKey = GlobalKey();
+  final GlobalKey _bodyStackKey = GlobalKey();
   bool _playfieldInsetFrameScheduled = false;
+
+  /// Stack-local Y for tutorial hint banner (below measured [GameHeaderHud]).
+  double _tutorialHintTop = 118;
 
   @override
   void initState() {
@@ -97,6 +111,10 @@ class _GameScreenState extends State<GameScreen> {
       _levelData = widget.fixedLevel!;
       _totalNodes = _levelData.nodes.length;
       _timeLimitSec = computeDailyChallengeTimeLimit(_totalNodes);
+    } else if (widget.isTutorial) {
+      _levelData = widget.fixedLevel!;
+      _totalNodes = _levelData.nodes.length;
+      _timeLimitSec = computeTutorialCountdownSec(widget.tutorialIndex);
     } else {
       _levelData = widget.fixedLevel ??
           LevelManager.getLevel(widget.level, mode: widget.difficulty);
@@ -113,6 +131,7 @@ class _GameScreenState extends State<GameScreen> {
     _startCountdown();
     _resetGhostHintTimer();
     _startEasyHudTimer();
+    unawaited(_audio.startAmbientIfEnabled(_settings.soundEnabled));
   }
 
   @override
@@ -122,6 +141,7 @@ class _GameScreenState extends State<GameScreen> {
     _autoAdvanceTimer?.cancel();
     _ghostHintTimer?.cancel();
     _easyHudTimer?.cancel();
+    _tutorialExitTimer?.cancel();
     unawaited(_audio.dispose());
     super.dispose();
   }
@@ -136,7 +156,9 @@ class _GameScreenState extends State<GameScreen> {
 
   void _buildGame() {
     _game = ChainPopGame(
-      levelId: widget.isDailyChallenge ? widget.dailyDayKey! : widget.level,
+      levelId: widget.isDailyChallenge
+          ? widget.dailyDayKey!
+          : (widget.isTutorial ? widget.tutorialIndex : widget.level),
       difficulty: widget.difficulty,
       onWin: _handleWin,
       onJam: _handleFoul,
@@ -164,10 +186,26 @@ class _GameScreenState extends State<GameScreen> {
     double topReserved = mq.padding.top + 128;
     final headerBox =
         _headerHudKey.currentContext?.findRenderObject() as RenderBox?;
+    final stackBox =
+        _bodyStackKey.currentContext?.findRenderObject() as RenderBox?;
     if (headerBox != null && headerBox.hasSize) {
       final headerBottom =
           headerBox.localToGlobal(Offset(0, headerBox.size.height)).dy;
       topReserved = headerBottom + 20;
+
+      if (widget.isTutorial &&
+          stackBox != null &&
+          stackBox.hasSize) {
+        final hintTop = stackBox
+            .globalToLocal(
+              headerBox.localToGlobal(Offset(0, headerBox.size.height)),
+            )
+            .dy;
+        final next = (hintTop + 8).clamp(72.0, h * 0.4);
+        if ((_tutorialHintTop - next).abs() > 0.5) {
+          setState(() => _tutorialHintTop = next);
+        }
+      }
     }
 
     double bottomReserved = mq.padding.bottom + 88;
@@ -233,7 +271,11 @@ class _GameScreenState extends State<GameScreen> {
     final earned = widget.difficulty.starsForJams(
       GameScreenConstants.maxLives - _livesRemaining,
     );
-    if (widget.isDailyChallenge) {
+    if (widget.isTutorial) {
+      if (widget.tutorialIndex == 4) {
+        await StorageService.setTutorialCompleted(true);
+      }
+    } else if (widget.isDailyChallenge) {
       await StorageService.saveDailyStars(widget.dailyDayKey!, earned);
     } else {
       await StorageService.saveStars(widget.difficulty, widget.level, earned);
@@ -248,6 +290,14 @@ class _GameScreenState extends State<GameScreen> {
     });
 
     if (widget.isDailyChallenge) {
+      return;
+    }
+
+    if (widget.isTutorial && widget.tutorialIndex == 4) {
+      _tutorialExitTimer?.cancel();
+      _tutorialExitTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) _goMenu();
+      });
       return;
     }
 
@@ -302,6 +352,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _resetForRetry() {
+    _tutorialExitTimer?.cancel();
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     _countdownTimer?.cancel();
@@ -320,6 +371,9 @@ class _GameScreenState extends State<GameScreen> {
         ..start();
     });
     _game.resumeEngine();
+    unawaited(
+      _audio.setAmbientGameplayPaused(false, _settings.soundEnabled),
+    );
     _game.restart();
     _game.playSfx(GameSfx.restart);
     _startCountdown();
@@ -329,6 +383,27 @@ class _GameScreenState extends State<GameScreen> {
 
   void _goNextLevel() {
     if (!mounted || widget.isDailyChallenge) return;
+    if (widget.isTutorial) {
+      final next = widget.tutorialIndex + 1;
+      if (next >= tutorialLevels.length) return;
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => GameScreen(
+            level: next + 1,
+            difficulty: DifficultyMode.easy,
+            fixedLevel: tutorialLevels[next],
+            isTutorial: true,
+            tutorialIndex: next,
+          ),
+          transitionsBuilder: (_, anim, __, child) => FadeTransition(
+            opacity: anim,
+            child: child,
+          ),
+          transitionDuration: const Duration(milliseconds: 350),
+        ),
+      );
+      return;
+    }
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => GameScreen(
@@ -345,6 +420,7 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _goMenu() {
+    _tutorialExitTimer?.cancel();
     _autoAdvanceDelayTimer?.cancel();
     _autoAdvanceTimer?.cancel();
     Navigator.of(context).popUntil((r) => r.isFirst);
@@ -369,6 +445,9 @@ class _GameScreenState extends State<GameScreen> {
   void _startEasyHudTimer() {
     _easyHudTimer?.cancel();
     if (widget.difficulty != DifficultyMode.easy) return;
+    // Elapsed clock only when Easy is **untimed** (no countdown). Timed Easy
+    // uses [_countdownTimer] for HUD updates.
+    if (_timeLimitSec != null) return;
     _easyHudTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || _isPaused || _hasWon) return;
       setState(() {});
@@ -382,6 +461,9 @@ class _GameScreenState extends State<GameScreen> {
       setState(() => _isPaused = false);
       _game.resumeEngine();
       if (!_stopwatch.isRunning) _stopwatch.start();
+      unawaited(
+        _audio.setAmbientGameplayPaused(false, _settings.soundEnabled),
+      );
       _startCountdown();
       _resetGhostHintTimer();
       _startEasyHudTimer();
@@ -389,6 +471,9 @@ class _GameScreenState extends State<GameScreen> {
       setState(() => _isPaused = true);
       _game.pauseEngine();
       _stopwatch.stop();
+      unawaited(
+        _audio.setAmbientGameplayPaused(true, _settings.soundEnabled),
+      );
       _countdownTimer?.cancel();
       _ghostHintTimer?.cancel();
       _easyHudTimer?.cancel();
@@ -430,9 +515,25 @@ class _GameScreenState extends State<GameScreen> {
       onSettingsChanged: (next) async {
         setState(() => _settings = next);
         _pushFeedbackToGame();
+        await _audio.setAmbientEnabled(_settings.soundEnabled);
         await StorageService.saveGameSettings(_settings);
       },
     );
+  }
+
+  String _tutorialHintText() {
+    switch (widget.tutorialIndex) {
+      case 0:
+        return 'Tap the glowing arrow. Clear the board before the countdown reaches zero.';
+      case 1:
+        return 'Arrows block each other. Clear a free exit first—keep an eye on the countdown.';
+      case 2:
+        return 'Chain good pops in a safe order. The timer only counts down; pops do not add time.';
+      case 3:
+        return 'Bigger board: plan clears and watch the countdown.';
+      default:
+        return 'Final recap: 8 arrows. Clear every piece before the 45s countdown hits zero.';
+    }
   }
 
   @override
@@ -443,6 +544,7 @@ class _GameScreenState extends State<GameScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
+        key: _bodyStackKey,
         children: [
           Positioned.fill(
             child: DecoratedBox(
@@ -450,20 +552,29 @@ class _GameScreenState extends State<GameScreen> {
                 gradient: RadialGradient(
                   center: Alignment.center,
                   radius: 1.0,
-                  colors: [accent.withOpacity(0.05), Colors.transparent],
+                  colors: [accent.withValues(alpha: 0.05), Colors.transparent],
                 ),
               ),
             ),
           ),
           Positioned.fill(child: GameWidget(game: _game)),
+          if (_hasWon)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: WinCelebrationOverlay(accent: accent),
+              ),
+            ),
           GameHeaderHud(
             measureKey: _headerHudKey,
             onBack: _goMenu,
             onOpenSettings: _openSettings,
             livesRemaining: _livesRemaining,
             difficulty: widget.difficulty,
-            headerModeLabel:
-                widget.isDailyChallenge ? 'DAILY CHALLENGE' : null,
+            headerModeLabel: widget.isDailyChallenge
+                ? 'DAILY CHALLENGE'
+                : (widget.isTutorial
+                    ? 'TUTORIAL ${widget.tutorialIndex + 1}/5'
+                    : null),
             removedNodes: _removedNodes,
             totalNodes: _totalNodes,
             timeLeftSec: _timeLeftSec,
@@ -471,6 +582,46 @@ class _GameScreenState extends State<GameScreen> {
             elapsed: _stopwatch.elapsed,
             onTogglePause: _togglePause,
           ),
+          if (widget.isTutorial && !_hasWon)
+            Positioned(
+              top: _tutorialHintTop,
+              left: 12,
+              right: 12,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _isPaused ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 220),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.42),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: accent.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        _tutorialHintText(),
+                        textAlign: TextAlign.center,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        softWrap: true,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           if (!_hasWon)
             GameBottomToolbar(
               measureKey: _footerHudKey,
@@ -525,10 +676,13 @@ class _GameScreenState extends State<GameScreen> {
                   onMenu: _goMenu,
                   onRetry: _resetForRetry,
                   onNext: _goNextLevel,
-                  showNextAndAutoAdvance: !widget.isDailyChallenge,
+                  showNextAndAutoAdvance: !widget.isDailyChallenge &&
+                      (!widget.isTutorial || widget.tutorialIndex < 4),
                   titleLine: widget.isDailyChallenge
                       ? 'DAILY CHALLENGE · ${DailyChallenge.compactDateLabelFromKey(widget.dailyDayKey!)}'
-                      : null,
+                      : (widget.isTutorial
+                          ? 'TUTORIAL · STEP ${widget.tutorialIndex + 1} / 5'
+                          : null),
                 ),
               ),
             ),
