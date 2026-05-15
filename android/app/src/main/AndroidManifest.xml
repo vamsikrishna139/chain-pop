@@ -29,7 +29,7 @@
         </activity>
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-4216543114907932~4253667866"/>
         <!-- Google Mobile Ads sample app ID (Android). Replace before release.
              https://developers.google.com/admob/android/quick-start -->
         <!-- Don't delete the meta-data below.

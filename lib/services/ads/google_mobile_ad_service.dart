@@ -11,9 +11,9 @@ import 'daily_challenge_banner_slot.dart';
 ///
 /// Production: replace manifest / Info.plist entries with your real app IDs.
 const String androidSampleAppIdMeta =
-    'ca-app-pub-3940256099942544~3347511713'; // Example App ID (Android)
+    'ca-app-pub-4216543114907932~4253667866'; // Provided App ID (Android)
 const String iosSampleAppIdMeta =
-    'ca-app-pub-3940256099942544~1458002511'; // Example App ID (iOS)
+    'ca-app-pub-4216543114907932~4253667866'; // Provided App ID (iOS)
 
 /// Sample **rewarded** units — override via `--dart-define` for production.
 ///
@@ -21,11 +21,11 @@ const String iosSampleAppIdMeta =
 /// iOS test rewarded: `ca-app-pub-3940256099942544/1712485313`
 const String rewardedAndroidUnit = String.fromEnvironment(
   'ADMOB_REWARDED_ANDROID',
-  defaultValue: 'ca-app-pub-3940256099942544/5224354917',
+  defaultValue: 'ca-app-pub-4216543114907932/1764067448',
 );
 const String rewardedIosUnit = String.fromEnvironment(
   'ADMOB_REWARDED_IOS',
-  defaultValue: 'ca-app-pub-3940256099942544/1712485313',
+  defaultValue: 'ca-app-pub-4216543114907932/1764067448',
 );
 
 /// Sample **interstitial** units — override via `--dart-define` for production.
@@ -34,11 +34,11 @@ const String rewardedIosUnit = String.fromEnvironment(
 /// iOS test interstitial: `ca-app-pub-3940256099942544/4411468910`
 const String interstitialAndroidUnit = String.fromEnvironment(
   'ADMOB_INTERSTITIAL_ANDROID',
-  defaultValue: 'ca-app-pub-3940256099942544/1033173712',
+  defaultValue: 'ca-app-pub-4216543114907932/5390268529',
 );
 const String interstitialIosUnit = String.fromEnvironment(
   'ADMOB_INTERSTITIAL_IOS',
-  defaultValue: 'ca-app-pub-3940256099942544/4411468910',
+  defaultValue: 'ca-app-pub-4216543114907932/5390268529',
 );
 
 /// Sample **banner** units — override via `--dart-define` for production.
@@ -49,11 +49,11 @@ const String interstitialIosUnit = String.fromEnvironment(
 /// **iOS fallback:** sample banner when `--dart-define=ADMOB_BANNER_IOS` is not set.
 const String bannerAndroidUnit = String.fromEnvironment(
   'ADMOB_BANNER_ANDROID',
-  defaultValue: 'ca-app-pub-3940256099942544/6300978111',
+  defaultValue: 'ca-app-pub-4216543114907932/5396190695',
 );
 const String bannerIosUnit = String.fromEnvironment(
   'ADMOB_BANNER_IOS',
-  defaultValue: 'ca-app-pub-3940256099942544/2934735716',
+  defaultValue: 'ca-app-pub-4216543114907932/5396190695',
 );
 
 String _rewardedUnitId() => defaultTargetPlatform == TargetPlatform.iOS
