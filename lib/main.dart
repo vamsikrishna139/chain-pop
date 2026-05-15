@@ -69,7 +69,6 @@ Future<void> _bootstrapThirdPartySdks() async {
   } catch (e) {
     if (kDebugMode) debugPrint('UMP consent error: $e');
   }
-
   final ads = createDefaultAdService();
   AdsLocator.install(ads);
   await ads.bootstrap();
