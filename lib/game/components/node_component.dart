@@ -63,25 +63,25 @@ class NodeComponent extends PositionComponent
     _gradientPaint = Paint()
       ..shader = LinearGradient(
         colors: [
-          Colors.white.withOpacity(0.35),
+          Colors.white.withValues(alpha: 0.35),
           Colors.transparent,
         ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ).createShader(_rect);
 
-    _fillPaint = Paint()..color = data.color.withOpacity(1.0);
+    _fillPaint = Paint()..color = data.color.withValues(alpha: 1.0);
 
     final strokeW = cellSize * 0.09;
     _arrowPaintNormal = Paint()
-      ..color = Colors.white.withOpacity(0.92)
+      ..color = Colors.white.withValues(alpha: 0.92)
       ..strokeWidth = strokeW
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
     _buildArrowPath();
 
-    _shadowGlowColor = data.color.withOpacity(0.55);
+    _shadowGlowColor = data.color.withValues(alpha: 0.55);
     _shadowGlowRadius = (cellSize * 0.38).clamp(4.0, 18.0);
   }
 
@@ -143,8 +143,8 @@ class NodeComponent extends PositionComponent
 
   void _syncColorsFromSettings() {
     final c = gameRef.effectiveNodeColor(data);
-    _fillPaint.color = c.withOpacity(1.0);
-    _shadowGlowColor = c.withOpacity(0.55);
+    _fillPaint.color = c.withValues(alpha: 1.0);
+    _shadowGlowColor = c.withValues(alpha: 0.55);
   }
 
   @override
@@ -278,12 +278,15 @@ class NodeComponent extends PositionComponent
     }
   }
 
-  Vector2 _directionVector() {
-    switch (data.dir) {
-      case Direction.up:    return Vector2(0, -1);
-      case Direction.down:  return Vector2(0, 1);
-      case Direction.left:  return Vector2(-1, 0);
-      case Direction.right: return Vector2(1, 0);
-    }
-  }
+  static final Vector2 _up    = Vector2(0, -1);
+  static final Vector2 _down  = Vector2(0, 1);
+  static final Vector2 _left  = Vector2(-1, 0);
+  static final Vector2 _right = Vector2(1, 0);
+
+  Vector2 _directionVector() => switch (data.dir) {
+    Direction.up    => _up,
+    Direction.down  => _down,
+    Direction.left  => _left,
+    Direction.right => _right,
+  };
 }

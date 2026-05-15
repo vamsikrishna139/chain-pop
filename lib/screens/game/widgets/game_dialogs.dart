@@ -142,7 +142,7 @@ class PastDailyUnlockDialog extends StatelessWidget {
       ),
       content: Text(
         'Jump back to $puzzleDateLabel?\n\n'
-        "Watch a short ad to unlock this day's challenge. You only need to do this once per date.",
+        "Watch a quick ad to permanently unlock this puzzle.",
         textAlign: TextAlign.center,
         style: TextStyle(
           color: Colors.white.withValues(alpha: 0.72),
