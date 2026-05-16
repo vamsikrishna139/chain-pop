@@ -49,8 +49,9 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Demo AdMob iOS app id; replace with your real iOS app id before App Store release. -->
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-4216543114907932~4253667866</string>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

@@ -24,7 +24,7 @@ final class GameAdCoordinator {
     if (!_s._hardOrDailyFeatures) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!_s.mounted) return;
-      if (StorageService.hintRewardAdCoachSeen) return;
+      if (_s._gameStorage.hintRewardAdCoachSeen) return;
       await showDialog<void>(
         context: _s.context,
         builder: (ctx) => AlertDialog(
@@ -44,7 +44,7 @@ final class GameAdCoordinator {
         ),
       );
       if (_s.mounted) {
-        await StorageService.setHintRewardAdCoachSeen();
+        await _s._gameStorage.setHintRewardAdCoachSeen();
       }
     });
   }

@@ -2,11 +2,11 @@ import 'package:flutter/foundation.dart';
 
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/game_settings.dart';
-import 'storage/chain_pop_persistence.dart';
+import 'storage/chain_pop_storage.dart';
 import 'storage/hive_chain_pop_persistence.dart';
 import 'storage/storage_locator.dart';
 
-/// Thin facade over [ChainPopPersistence] (`StorageLocator.instance`).
+/// Thin facade over [ChainPopStorage] (`StorageLocator.instance`).
 ///
 /// **Scope:** device-local, unencrypted game state only.
 ///
@@ -14,7 +14,10 @@ import 'storage/storage_locator.dart';
 class StorageService {
   StorageService._();
 
-  static ChainPopPersistence get _p => StorageLocator.instance;
+  static ChainPopStorage get _p => StorageLocator.instance;
+
+  /// Injectable backing store (tests may replace via [installForTesting]).
+  static ChainPopStorage get backing => StorageLocator.instance;
 
   /// Mirrors [HiveChainPopPersistence.campaignInterstitialMinLifetimeClears].
   static const int campaignInterstitialMinLifetimeClears =
@@ -30,9 +33,9 @@ class StorageService {
     StorageLocator.install(persistence);
   }
 
-  /// Replaces persistence for deterministic tests (`FakeChainPopPersistence`, etc.).
+  /// Replaces persistence for deterministic tests (`FakeChainPopStorage`, etc.).
   @visibleForTesting
-  static void installForTesting(ChainPopPersistence persistence) {
+  static void installForTesting(ChainPopStorage persistence) {
     StorageLocator.install(persistence);
   }
 

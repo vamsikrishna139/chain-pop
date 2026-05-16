@@ -15,6 +15,7 @@ import '../models/game_settings.dart';
 import '../services/ads/ad_placements.dart';
 import '../services/ads/ad_service.dart';
 import '../services/ads/ads_locator.dart';
+import '../services/crash_reporting.dart';
 import '../services/ads/campaign_between_levels_ads.dart';
 import '../services/ads/campaign_interstitial_frustration_gate.dart';
 import '../services/ads/hint_ad_policy.dart';
@@ -23,7 +24,8 @@ import '../services/game_audio.dart';
 import '../services/game_sfx.dart';
 import '../services/session_campaign_streak.dart';
 import '../services/storage/chain_pop_progress_store.dart';
-import '../services/storage_service.dart';
+import '../services/storage/chain_pop_storage.dart';
+import '../services/storage/storage_locator.dart';
 import '../theme/app_colors.dart';
 import 'game/game_screen_constants.dart';
 import 'game/game_screen_timer_coordinator.dart';
@@ -43,7 +45,7 @@ part 'game/game_flow_controller.dart';
 
 /// Full-screen game view for a single level.
 ///
-/// **Lifetime ad engagement:** [StorageService.accumulateLifetimeGameplaySeconds] is fed
+/// **Lifetime ad engagement:** [ChainPopProgressStore.accumulateLifetimeGameplaySeconds] is fed
 /// via delta flushes from [GameFlowController.flushLifetimeGameplayDelta] (pause, app
 /// background, win, lifecycle) so OS kills only lose at most a tiny window — not an
 /// entire level.
@@ -52,7 +54,7 @@ part 'game/game_flow_controller.dart';
 /// modal route), which eliminates all Navigator-pop race conditions.
 /// Auto-advances to the next level after a countdown ([GameScreenConstants]),
 /// except for [isDailyChallenge] runs (no auto-next; stars go to
-/// [StorageService.saveDailyStars]) and the last step of [isTutorial].
+/// [ChainPopProgressStore.saveDailyStars]) and the last step of [isTutorial].
 class GameScreen extends StatefulWidget {
   final int level;
   final DifficultyMode difficulty;
@@ -74,6 +76,15 @@ class GameScreen extends StatefulWidget {
   /// Overrides session streak tracker ([SessionCampaignStreak] default).
   final CampaignStreakTracker? campaignStreak;
 
+  /// Overrides [StorageLocator] reads/writes for settings and ad-coach flags
+  /// (widget tests with a fake [ChainPopStorage]).
+  final ChainPopStorage? storage;
+
+  /// Replaces [LevelManager.getLevel] for deferred campaign loads (widget tests,
+  /// deterministic fixtures). Omit in production builds.
+  final LevelData Function(int level, DifficultyMode mode)?
+      campaignLevelBuilder;
+
   const GameScreen({
     super.key,
     required this.level,
@@ -87,6 +98,8 @@ class GameScreen extends StatefulWidget {
     this.audioHandleFactory,
     this.progressStore,
     this.campaignStreak,
+    this.storage,
+    this.campaignLevelBuilder,
   }) : assert(
           !isDailyChallenge || (dailyDayKey != null && fixedLevel != null),
         ),
@@ -128,14 +141,16 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   late GameSettings _settings;
   late final GameAudioHandle _audio;
 
+  late final ChainPopStorage _gameStorage;
+
   late final GamePlayfieldInsetController _playfieldInsetController =
       GamePlayfieldInsetController(this);
   late final GameFlowController _gameFlow = GameFlowController(this);
   late final GameAdCoordinator _adCoordinator = GameAdCoordinator(this);
   late final GameTimerController _timerController = GameTimerController(this);
 
-  ChainPopProgressStore get _progress =>
-      widget.progressStore ?? defaultHiveChainPopProgressStore;
+  late final ChainPopProgressStore _progress;
+
 
   CampaignStreakTracker get _streak =>
       widget.campaignStreak ?? defaultCampaignStreakTracker;
@@ -183,18 +198,34 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     );
     WidgetsBinding.instance.addObserver(this);
 
+    _gameStorage = widget.storage ?? StorageLocator.instance;
+    _progress = widget.progressStore ??
+        HiveChainPopProgressStore(widget.storage);
+
     _stopwatch = Stopwatch();
-    _settings = StorageService.gameSettings;
+    _settings = _gameStorage.gameSettings;
     _audio = widget.audioHandleFactory?.call() ?? GameAudioController();
 
     if (_needsDeferredCampaignGeneration()) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         await Future<void>.delayed(Duration.zero);
-        final level =
-            LevelManager.getLevel(widget.level, mode: widget.difficulty);
         if (!mounted) return;
-        _installResolvedLevel(level);
+        try {
+          final level = widget.campaignLevelBuilder?.call(
+                widget.level,
+                widget.difficulty,
+              ) ??
+              LevelManager.getLevel(widget.level, mode: widget.difficulty);
+          if (!mounted) return;
+          _installResolvedLevel(level);
+        } catch (e, st) {
+          recordNonFatal(e, st);
+          if (!mounted) return;
+          _installResolvedLevel(
+            LevelManager.emergencyFallbackLevel(widget.level),
+          );
+        }
       });
     } else {
       final LevelData initial;
@@ -365,7 +396,7 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         setState(() => _settings = next);
         _pushFeedbackToGame();
         await _audio.setAmbientEnabled(_settings.soundEnabled);
-        await StorageService.saveGameSettings(_settings);
+        await _gameStorage.saveGameSettings(_settings);
       },
     );
   }
@@ -373,15 +404,18 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   String _tutorialHintText() {
     switch (widget.tutorialIndex) {
       case 0:
-        return 'Tap the glowing arrow. Clear the board before the countdown reaches zero.';
+        return 'Tap the glowing arrow and clear the board before the countdown reaches zero. '
+            'Pinch or tap Zoom in for a closer look; Reset zoom snaps back to the full board.';
       case 1:
-        return 'Arrows block each other. Clear a free exit first—keep an eye on the countdown.';
+        return 'Arrows block each other—clear a free exit first and watch the countdown. '
+            'Tap the grid button for alignment lines along shared rows and columns.';
       case 2:
         return 'Chain good pops in a safe order. The timer only counts down; pops do not add time.';
       case 3:
-        return 'Bigger board: plan clears and watch the countdown.';
+        return 'Bigger board: plan clears and watch the countdown—zoom or alignment lines help scan paths.';
       default:
-        return 'Final recap: 8 arrows. Clear every piece before the 45s countdown hits zero.';
+        return 'Final recap: 8 arrows—clear everything before the 45s countdown hits zero. '
+            'Pinch out or Reset zoom if you need the full board again.';
     }
   }
 
@@ -482,7 +516,7 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       child: Text(
                         _tutorialHintText(),
                         textAlign: TextAlign.center,
-                        maxLines: 3,
+                        maxLines: 5,
                         overflow: TextOverflow.ellipsis,
                         softWrap: true,
                         style: TextStyle(

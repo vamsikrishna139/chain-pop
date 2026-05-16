@@ -11,6 +11,8 @@
 ///   5. Solution Path Completeness — solution path clears all nodes
 ///   6. Direction Validity         — each node is free when its turn comes
 ///   7. No Crashes                 — generator never throws
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chain_pop/game/levels/generation/generation.dart';
 import 'package:chain_pop/game/levels/level.dart';

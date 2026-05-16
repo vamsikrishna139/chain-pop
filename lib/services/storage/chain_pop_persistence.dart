@@ -1,8 +1,10 @@
 import '../../game/levels/generation/difficulty_mode.dart';
 import '../../models/game_settings.dart';
 
-/// Injectable persistence boundary for Hive-backed gameplay state ([StorageService]
-/// facade in production tests against a temporary box via [HiveChainPopPersistence]).
+/// Low-level persistence boundary for Hive-backed gameplay state.
+///
+/// Prefer the synonym [ChainPopStorage] in new code; [StorageService] remains the
+/// static façade (production tests use a temporary box via [HiveChainPopPersistence]).
 abstract interface class ChainPopPersistence {
   Future<void> open();
 

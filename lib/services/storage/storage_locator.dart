@@ -1,15 +1,15 @@
-import 'chain_pop_persistence.dart';
+import 'chain_pop_storage.dart';
 
 /// Service location for persisted gameplay state ([AdsLocator]-style singleton).
 abstract final class StorageLocator {
   StorageLocator._();
 
-  static ChainPopPersistence? _instance;
+  static ChainPopStorage? _instance;
 
-  static ChainPopPersistence get instance =>
+  static ChainPopStorage get instance =>
       _instance ?? (throw StateError('StorageLocator not installed — call StorageService.init()'));
 
-  static void install(ChainPopPersistence persistence) {
+  static void install(ChainPopStorage persistence) {
     _instance = persistence;
   }
 

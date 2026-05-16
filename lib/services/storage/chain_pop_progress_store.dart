@@ -1,5 +1,6 @@
 import '../../game/levels/generation/difficulty_mode.dart';
-import '../storage_service.dart';
+import 'chain_pop_storage.dart';
+import 'storage_locator.dart';
 
 /// Persistence facade for campaign / daily progression used by [GameScreen].
 ///
@@ -18,35 +19,39 @@ abstract interface class ChainPopProgressStore {
   Future<void> setTutorialCompleted(bool value);
 }
 
-/// Default implementation delegating to [StorageService].
+/// Default implementation delegating to [ChainPopStorage] (via [StorageLocator]).
 final class HiveChainPopProgressStore implements ChainPopProgressStore {
-  const HiveChainPopProgressStore();
+  HiveChainPopProgressStore([this._override]);
+
+  final ChainPopStorage? _override;
+
+  ChainPopStorage get _backend => _override ?? StorageLocator.instance;
 
   @override
   Future<void> accumulateLifetimeGameplaySeconds(int secs) =>
-      StorageService.accumulateLifetimeGameplaySeconds(secs);
+      _backend.accumulateLifetimeGameplaySeconds(secs);
 
   @override
   Future<void> incrementLifetimeCampaignClears() =>
-      StorageService.incrementLifetimeCampaignClears();
+      _backend.incrementLifetimeCampaignClears();
 
   @override
   Future<void> saveDailyStars(int dayKey, int earned) =>
-      StorageService.saveDailyStars(dayKey, earned);
+      _backend.saveDailyStars(dayKey, earned);
 
   @override
   Future<void> saveStars(DifficultyMode mode, int levelId, int newStars) =>
-      StorageService.saveStars(mode, levelId, newStars);
+      _backend.saveStars(mode, levelId, newStars);
 
   @override
   Future<void> setTutorialCompleted(bool value) =>
-      StorageService.setTutorialCompleted(value);
+      _backend.setTutorialCompleted(value);
 
   @override
   Future<void> unlockLevel(DifficultyMode mode, int level) =>
-      StorageService.unlockLevel(mode, level);
+      _backend.unlockLevel(mode, level);
 }
 
 /// Default Hive-backed store for menu/game navigation (tests may inject fakes).
-const HiveChainPopProgressStore defaultHiveChainPopProgressStore =
+final HiveChainPopProgressStore defaultHiveChainPopProgressStore =
     HiveChainPopProgressStore();

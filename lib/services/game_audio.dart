@@ -95,6 +95,8 @@ class GameAudioController implements GameAudioHandle {
   static bool _isBoardGameplaySfx(GameSfx sfx) =>
       sfx == GameSfx.pop || sfx == GameSfx.jam;
 
+  bool _disposed = false;
+
   @override
   Future<void> play(GameSfx sfx, {double playbackRate = 1.0}) async {
     final path = _paths[sfx];
@@ -218,6 +220,8 @@ class GameAudioController implements GameAudioHandle {
 
   @override
   Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
     _gameplayAmbientArmed = false;
     await stopAmbient();
     await _ambientPlayer.dispose();

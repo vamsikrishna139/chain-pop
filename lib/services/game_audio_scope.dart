@@ -1,10 +1,15 @@
 import 'package:flutter/widgets.dart';
 
-import '../services/game_audio.dart';
+import 'game_audio.dart';
 
 /// Shared lightweight UI audio for menus / level grid (no gameplay ambient loop).
 ///
-/// [GameScreen] still constructs its own [GameAudioController] for ambient SFX.
+/// **Lifetime:** [ChainPopApp] owns the scoped controller and disposes it with the app.
+/// [GameScreen] always builds a **separate** [GameAudioController] for gameplay SFX and
+/// ambient bed; it disposes only that instance when leaving the game route. Menu audio is
+/// not disposed during menu→game navigation, so there is no double-[dispose] on one pool.
+///
+/// (Planning docs may refer to this widget as “GameAudioScope”.)
 class ChainPopAudioScope extends InheritedWidget {
   const ChainPopAudioScope({
     super.key,

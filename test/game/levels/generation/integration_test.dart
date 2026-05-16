@@ -1,6 +1,8 @@
 /// End-to-end integration tests for the level generation pipeline.
 ///
 /// Tests the complete flow: level ID → configuration → generation → validation → LevelData
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chain_pop/game/levels/generation/generation.dart';
 import 'package:chain_pop/game/levels/level_manager.dart';

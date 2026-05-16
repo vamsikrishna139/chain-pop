@@ -4,10 +4,10 @@ import '../../game/levels/generation/difficulty_mode.dart';
 import '../../models/difficulty.dart';
 import '../../models/game_settings.dart';
 import '../../utils/safe_hive_values.dart';
-import 'chain_pop_persistence.dart';
+import 'chain_pop_storage.dart';
 
-/// Hive implementation of [ChainPopPersistence].
-final class HiveChainPopPersistence implements ChainPopPersistence {
+/// Hive implementation of [ChainPopStorage] / [ChainPopPersistence].
+final class HiveChainPopPersistence implements ChainPopStorage {
   HiveChainPopPersistence();
 
   static const String boxName = 'chain_pop_storage';

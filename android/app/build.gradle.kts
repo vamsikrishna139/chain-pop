@@ -18,7 +18,7 @@ val localProperties = Properties().apply {
 fun admobAndroidApplicationId(): String =
     System.getenv("ADMOB_ANDROID_APPLICATION_ID")
         ?: localProperties.getProperty("admob.android.application.id")
-        ?: "ca-app-pub-4216543114907932~4253667866"
+        ?: "ca-app-pub-6510329237083952~7569862231"
 
 fun signingPropsFile(): java.io.File? {
     System.getenv("ANDROID_KEY_PROPERTIES")?.let { raw ->
