@@ -8,7 +8,7 @@ import '../chain_pop_game.dart';
 import '../../services/game_sfx.dart';
 
 class NodeComponent extends PositionComponent
-    with TapCallbacks, HasGameRef<ChainPopGame> {
+    with TapCallbacks, HasGameReference<ChainPopGame> {
   final NodeData data;
   final double cellSize;
 
@@ -35,6 +35,13 @@ class NodeComponent extends PositionComponent
   static const double _highlightDuration = 2.0;
   static const double _highlightPulseCount = 3.0;
   static const double _speed = 1500.0;
+
+  static final Vector2 _dirUp = Vector2(0, -1);
+  static final Vector2 _dirDown = Vector2(0, 1);
+  static final Vector2 _dirLeft = Vector2(-1, 0);
+  static final Vector2 _dirRight = Vector2(1, 0);
+
+  Color? _cachedEffectiveColor;
 
   final Paint _ringPaint = Paint()
     ..style = PaintingStyle.stroke
@@ -63,25 +70,25 @@ class NodeComponent extends PositionComponent
     _gradientPaint = Paint()
       ..shader = LinearGradient(
         colors: [
-          Colors.white.withOpacity(0.35),
+          Colors.white.withValues(alpha: 0.35),
           Colors.transparent,
         ],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ).createShader(_rect);
 
-    _fillPaint = Paint()..color = data.color.withOpacity(1.0);
+    _fillPaint = Paint()..color = data.color.withValues(alpha: 1.0);
 
     final strokeW = cellSize * 0.09;
     _arrowPaintNormal = Paint()
-      ..color = Colors.white.withOpacity(0.92)
+      ..color = Colors.white.withValues(alpha: 0.92)
       ..strokeWidth = strokeW
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
     _buildArrowPath();
 
-    _shadowGlowColor = data.color.withOpacity(0.55);
+    _shadowGlowColor = data.color.withValues(alpha: 0.55);
     _shadowGlowRadius = (cellSize * 0.38).clamp(4.0, 18.0);
   }
 
@@ -142,9 +149,11 @@ class NodeComponent extends PositionComponent
   }
 
   void _syncColorsFromSettings() {
-    final c = gameRef.effectiveNodeColor(data);
-    _fillPaint.color = c.withOpacity(1.0);
-    _shadowGlowColor = c.withOpacity(0.55);
+    final effective = game.effectiveNodeColor(data);
+    if (_cachedEffectiveColor == effective) return;
+    _cachedEffectiveColor = effective;
+    _fillPaint.color = effective.withValues(alpha: 1.0);
+    _shadowGlowColor = effective.withValues(alpha: 0.55);
   }
 
   @override
@@ -174,14 +183,14 @@ class NodeComponent extends PositionComponent
     final center = _rect.center;
 
     // ── Expanding ring ripple (one ring per pulse cycle) ──
-    final ringPeriod = _highlightDuration / _highlightPulseCount;
+    const ringPeriod = _highlightDuration / _highlightPulseCount;
     final ringT = (_highlightTimer % ringPeriod) / ringPeriod;
     final baseRadius = _rect.width * 0.5;
     final ringRadius = baseRadius + ringT * baseRadius * 0.6;
     final ringOpacity = (1.0 - ringT) * 0.45 * fadeOut;
     if (ringOpacity > 0.005) {
       _ringPaint
-        ..color = gameRef.effectiveNodeColor(data).withOpacity(ringOpacity)
+        ..color = game.effectiveNodeColor(data).withValues(alpha: ringOpacity)
         ..strokeWidth = 2.5 * (1.0 - ringT * 0.6);
       canvas.drawCircle(center, ringRadius, _ringPaint);
     }
@@ -198,7 +207,7 @@ class NodeComponent extends PositionComponent
     final glowOpacity = (0.55 + 0.3 * pulseVal * fadeOut).clamp(0.0, 1.0);
     canvas.drawShadow(
       _shadowPath,
-      gameRef.effectiveNodeColor(data).withOpacity(glowOpacity),
+      game.effectiveNodeColor(data).withValues(alpha: glowOpacity),
       glowStrength,
       true,
     );
@@ -226,14 +235,14 @@ class NodeComponent extends PositionComponent
       // [position] is board-local; compare in game/world space so we actually
       // reach the viewport edge before removing.
       final world = absoluteCenter;
-      final gs = gameRef.size;
+      final gs = game.size;
       final pad = math.max(size.x, size.y) * 0.55 + 48;
       if (world.x < -pad ||
           world.x > gs.x + pad ||
           world.y < -pad ||
           world.y > gs.y + pad) {
         removeFromParent();
-        gameRef.checkWinCondition();
+        game.checkWinCondition();
       }
       return;
     }
@@ -243,7 +252,7 @@ class NodeComponent extends PositionComponent
       _shakeTimer += dt;
       if (_shakeTimer >= _shakeDuration) {
         isJamming = false;
-        position = _originalPos.clone();
+        position.setFrom(_originalPos);
         _shakeTimer = 0.0;
       } else {
         final shakeAmount = (1.0 - (_shakeTimer / _shakeDuration)) * 10.0;
@@ -255,35 +264,39 @@ class NodeComponent extends PositionComponent
 
   @override
   void onTapDown(TapDownEvent event) {
-    if (isPopping || isJamming || gameRef.hasWon || gameRef.isGameOver) return;
+    if (isPopping || isJamming || game.hasWon || game.isGameOver) return;
 
-    if (gameRef.canExtract(data)) {
+    if (game.canExtract(data)) {
       isPopping = true;
-      gameRef.registerExtraction(data);
-      if (gameRef.hapticsEnabled) {
+      game.registerExtraction(data);
+      if (game.hapticsEnabled) {
         Haptics.vibrate(HapticsType.medium);
       }
-      gameRef.playSfx(
+      game.playSfx(
         GameSfx.pop,
-        playbackRate: gameRef.popPlaybackRate,
+        playbackRate: game.popPlaybackRate,
       );
     } else {
       isJamming = true;
       _shakeTimer = 0.0;
-      if (gameRef.hapticsEnabled) {
+      if (game.hapticsEnabled) {
         Haptics.vibrate(HapticsType.heavy);
       }
-      gameRef.playSfx(GameSfx.jam);
-      gameRef.reportJam();
+      game.playSfx(GameSfx.jam);
+      game.reportJam();
     }
   }
 
   Vector2 _directionVector() {
     switch (data.dir) {
-      case Direction.up:    return Vector2(0, -1);
-      case Direction.down:  return Vector2(0, 1);
-      case Direction.left:  return Vector2(-1, 0);
-      case Direction.right: return Vector2(1, 0);
+      case Direction.up:
+        return _dirUp;
+      case Direction.down:
+        return _dirDown;
+      case Direction.left:
+        return _dirLeft;
+      case Direction.right:
+        return _dirRight;
     }
   }
 }

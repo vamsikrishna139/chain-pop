@@ -98,7 +98,7 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final accent = widget.difficulty.color;
-    final totalSec = GameScreenConstants.winAutoAdvanceSeconds;
+    const totalSec = GameScreenConstants.winAutoAdvanceSeconds;
     final frac = widget.autoAdvanceSec / totalSec;
 
     return SafeArea(
@@ -107,10 +107,10 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: accent.withOpacity(0.3), width: 1.5),
+          border: Border.all(color: accent.withValues(alpha: 0.3), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: accent.withOpacity(0.2),
+              color: accent.withValues(alpha: 0.2),
               blurRadius: 40,
               spreadRadius: 4,
             ),
@@ -156,7 +156,7 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
                       shadows: earned
                           ? [
                               Shadow(
-                                color: AppColors.starGold.withOpacity(0.7),
+                                color: AppColors.starGold.withValues(alpha: 0.7),
                                 blurRadius: 16,
                               )
                             ]
@@ -180,39 +180,44 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
             ),
             if (widget.showNextAndAutoAdvance) ...[
               const SizedBox(height: 20),
-              Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.skip_next_rounded,
-                        size: 14,
-                        color: Colors.white38,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Next level in ${widget.autoAdvanceSec}s',
-                        style: const TextStyle(
+              Semantics(
+                liveRegion: true,
+                label:
+                    'Next level in ${widget.autoAdvanceSec} seconds. Tap Next to skip the wait.',
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.skip_next_rounded,
+                          size: 14,
                           color: Colors.white38,
-                          fontSize: 12,
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: frac.clamp(0.0, 1.0),
-                      backgroundColor: Colors.white12,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        accent.withOpacity(0.6),
-                      ),
-                      minHeight: 3,
+                        const SizedBox(width: 4),
+                        Text(
+                          'Next level in ${widget.autoAdvanceSec}s',
+                          style: const TextStyle(
+                            color: Colors.white38,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: frac.clamp(0.0, 1.0),
+                        backgroundColor: Colors.white12,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          accent.withValues(alpha: 0.6),
+                        ),
+                        minHeight: 3,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             SizedBox(height: widget.showNextAndAutoAdvance ? 20 : 8),
@@ -265,7 +270,7 @@ class _WinStatChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.06),
+        color: Colors.white.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -361,7 +366,7 @@ class _WinPrimaryButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 13),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         elevation: 8,
-        shadowColor: color.withOpacity(0.5),
+        shadowColor: color.withValues(alpha: 0.5),
       ),
     );
   }

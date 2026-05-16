@@ -1,3 +1,4 @@
+import 'grid_cell_key.dart';
 import 'level.dart';
 
 /// Stateless solver utilities for Chain Pop.
@@ -20,7 +21,7 @@ class LevelSolver {
   /// bounds (min/max removal waves ≈ puzzle “depth”).
   static int countRemovalWaves(LevelData level) {
     final nodes = level.nodes.map((n) => n.clone()).toList();
-    final positions = <String>{for (final n in nodes) '${n.x},${n.y}'};
+    final positions = <int>{for (final n in nodes) gridCellKey(n.x, n.y)};
     var waves = 0;
 
     while (true) {
@@ -34,7 +35,7 @@ class LevelSolver {
       waves++;
       for (final n in wave) {
         nodes.remove(n);
-        positions.remove('${n.x},${n.y}');
+        positions.remove(gridCellKey(n.x, n.y));
       }
     }
   }
@@ -47,7 +48,9 @@ class LevelSolver {
     List<NodeData> activeNodes,
     LevelData level,
   ) {
-    final positions = <String>{for (final n in activeNodes) '${n.x},${n.y}'};
+    final positions = <int>{
+      for (final n in activeNodes) gridCellKey(n.x, n.y),
+    };
     for (final n in activeNodes) {
       if (_canRemoveWithSet(n, positions, level)) return n;
     }
@@ -60,21 +63,21 @@ class LevelSolver {
   /// board; [LevelData.playCells] does not shorten the ray (void is not an
   /// exit). O(max(n, grid span)) per call.
   static bool canRemove(NodeData node, List<NodeData> allNodes, LevelData level) {
-    final others = <String>{};
+    final others = <int>{};
     for (final o in allNodes) {
-      if (o.id != node.id) others.add('${o.x},${o.y}');
+      if (o.id != node.id) others.add(gridCellKey(o.x, o.y));
     }
     return _canRemoveWithSet(node, others, level);
   }
 
-  /// Like [canRemove] but uses a pre-built occupancy set.
+  /// Like [canRemove] but uses a pre-built occupancy set ([gridCellKey] ints).
   ///
-  /// Caller must exclude [node]'s own `'${x},${y}'` key from [otherPositions]
-  /// so the ray is not blocked by itself. Each call is O(grid span); batching
-  /// rebuilds with one set is O(n × grid span) instead of O(n²).
+  /// Caller must exclude [node]'s own cell key from [otherPositions] so the ray
+  /// is not blocked by itself. Each call is O(grid span); batching rebuilds
+  /// with one set is O(n × grid span) instead of O(n²).
   static bool canRemoveWithPositions(
     NodeData node,
-    Set<String> otherPositions,
+    Set<int> otherPositions,
     LevelData level,
   ) {
     return _canRemoveWithSet(node, otherPositions, level);
@@ -86,7 +89,7 @@ class LevelSolver {
   /// clear only when the ray leaves the bounding rectangle.
   static bool _canRemoveWithSet(
     NodeData node,
-    Set<String> otherPositions,
+    Set<int> otherPositions,
     LevelData level,
   ) {
     var x = node.x;
@@ -106,7 +109,7 @@ class LevelSolver {
           x++;
       }
       if (x < 0 || x >= gw || y < 0 || y >= gh) return true;
-      if (otherPositions.contains('$x,$y')) return false;
+      if (otherPositions.contains(gridCellKey(x, y))) return false;
     }
   }
 }

@@ -41,7 +41,7 @@ void main() {
         expect(config.gridWidth, lessThanOrEqualTo(20));
         expect(config.gridHeight, greaterThanOrEqualTo(3));
         expect(config.gridHeight, lessThanOrEqualTo(20));
-        expect(config.targetNodeCount, greaterThanOrEqualTo(5));
+        expect(config.targetNodeCount, greaterThanOrEqualTo(25));
         expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
     });
@@ -73,7 +73,7 @@ void main() {
         expect(config.difficulty.mode, equals(DifficultyMode.hard));
         expect(config.gridWidth, greaterThanOrEqualTo(3));
         expect(config.gridWidth, lessThanOrEqualTo(20));
-        expect(config.targetNodeCount, greaterThanOrEqualTo(5));
+        expect(config.targetNodeCount, greaterThanOrEqualTo(25));
         expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
     });

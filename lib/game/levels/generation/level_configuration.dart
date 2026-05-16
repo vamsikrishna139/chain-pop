@@ -56,10 +56,10 @@ enum DirectionBiasType {
 
 /// Minimum fraction of the grid that must hold nodes (clamped by medium caps).
 /// Kept moderate so generation still succeeds unlike the earlier ~0.78 floor.
-const double kDailyChallengeMinFillRatio = 0.60;
+const double kDailyChallengeMinFillRatio = 0.80;
 
 /// First-roll chance to attempt an irregular [playCells] mask (blobs, zigzag, etc.).
-const double kDailyChallengeIrregularProbability = 0.78;
+const double kDailyChallengeIrregularProbability = 0.95;
 
 /// Extra guaranteed mask attempts if the first roll misses or the mask is too small.
 const int kDailyChallengeIrregularExtraTries = 10;

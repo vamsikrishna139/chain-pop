@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:chain_pop/game/chain_pop_game.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/game/levels/level_manager.dart';
 import 'package:chain_pop/screens/game_screen.dart';
 import 'package:chain_pop/services/game_audio.dart';
 import 'package:chain_pop/services/storage_service.dart';
@@ -29,11 +30,13 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final level = LevelManager.getLevel(1, mode: DifficultyMode.easy);
     await tester.pumpWidget(
       MaterialApp(
         home: GameScreen(
           level: 1,
           difficulty: DifficultyMode.easy,
+          fixedLevel: level,
           audioHandleFactory: SilentGameAudioHandle.new,
         ),
       ),
@@ -80,11 +83,13 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final level = LevelManager.getLevel(1, mode: DifficultyMode.easy);
     await tester.pumpWidget(
       MaterialApp(
         home: GameScreen(
           level: 1,
           difficulty: DifficultyMode.easy,
+          fixedLevel: level,
           audioHandleFactory: SilentGameAudioHandle.new,
         ),
       ),

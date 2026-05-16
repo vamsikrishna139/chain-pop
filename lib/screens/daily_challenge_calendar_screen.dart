@@ -191,16 +191,29 @@ class _DailyChallengeCalendarScreenState
                       final needsVideoBadge =
                           playable && !isFuture && !inFree && !adOk;
 
-                      return _DayCell(
-                        day: dayNum,
-                        accent: accent,
-                        stars: stars,
-                        isToday: isToday,
-                        isFuture: isFuture,
-                        needsVideoBadge: needsVideoBadge,
-                        dimmed: isFuture || !playable,
-                        onTap:
-                            playable && !isFuture ? () => _openDay(day) : null,
+                      final enabled = playable && !isFuture;
+
+                      return Semantics(
+                        button: enabled,
+                        label: _dayCellAccessibilityLabel(
+                          dayNum: dayNum,
+                          isToday: isToday,
+                          isFuture: isFuture,
+                          stars: stars,
+                          needsVideoBadge: needsVideoBadge,
+                          playable: playable,
+                        ),
+                        child: _DayCell(
+                          day: dayNum,
+                          accent: accent,
+                          stars: stars,
+                          isToday: isToday,
+                          isFuture: isFuture,
+                          needsVideoBadge: needsVideoBadge,
+                          dimmed: isFuture || !playable,
+                          onTap:
+                              enabled ? () => _openDay(day) : null,
+                        ),
                       );
                     },
                   ),
@@ -213,6 +226,23 @@ class _DailyChallengeCalendarScreenState
       ),
     );
   }
+}
+
+String _dayCellAccessibilityLabel({
+  required int dayNum,
+  required bool isToday,
+  required bool isFuture,
+  required int stars,
+  required bool needsVideoBadge,
+  required bool playable,
+}) {
+  final buf = StringBuffer('Day $dayNum');
+  if (isToday) buf.write(', today');
+  if (isFuture) buf.write(', locked future day');
+  if (!playable) buf.write(', not playable');
+  if (needsVideoBadge) buf.write(', unlock with video ad');
+  buf.write(', $stars of 3 stars');
+  return buf.toString();
 }
 
 class _DayCell extends StatelessWidget {

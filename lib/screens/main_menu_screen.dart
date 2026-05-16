@@ -6,7 +6,7 @@ import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
 import '../services/ads/ad_service_factory.dart';
-import '../services/game_audio.dart';
+import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
 import '../game/levels/tutorial_levels.dart';
 import '../services/storage_service.dart';
@@ -30,24 +30,18 @@ class MainMenuScreen extends StatefulWidget {
 
 class _MainMenuScreenState extends State<MainMenuScreen> {
   late DifficultyMode _selected;
-  late GameAudioController _audio;
 
   @override
   void initState() {
     super.initState();
     _selected = StorageService.selectedDifficulty;
-    _audio = GameAudioController(voiceCount: 2);
-  }
-
-  @override
-  void dispose() {
-    unawaited(_audio.dispose());
-    super.dispose();
   }
 
   Future<void> _selectDifficulty(DifficultyMode mode) async {
     if (_selected != mode && StorageService.gameSettings.soundEnabled) {
-      unawaited(_audio.play(GameSfx.uiTap, playbackRate: 1.1));
+      unawaited(
+        ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.1),
+      );
     }
     await StorageService.setSelectedDifficulty(mode);
     if (!mounted) return;
@@ -56,7 +50,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
   void _play() {
     if (StorageService.gameSettings.soundEnabled) {
-      unawaited(_audio.play(GameSfx.uiTap));
+      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
     Navigator.of(context)
         .push(
@@ -74,7 +68,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
   void _openTutorial() {
     if (StorageService.gameSettings.soundEnabled) {
-      unawaited(_audio.play(GameSfx.uiTap));
+      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
     Navigator.of(context)
         .push<void>(
@@ -96,7 +90,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
   void _openDailyChallenge() {
     if (StorageService.gameSettings.soundEnabled) {
-      unawaited(_audio.play(GameSfx.uiTap));
+      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
     Navigator.of(context)
         .push<void>(
@@ -175,15 +169,14 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
             backgroundColor: cs.surface,
             body: Container(
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                color: cs.surface,
+                gradient: RadialGradient(
+                  center: const Alignment(0, -0.7),
+                  radius: 1.3,
                   colors: [
-                    Color.lerp(cs.surface, accent, 0.08)!,
+                    Color.lerp(cs.surface, accent, 0.18)!,
                     cs.surface,
-                    Color.lerp(cs.surface, cs.surfaceContainerHighest, 0.35)!,
                   ],
-                  stops: const [0.0, 0.35, 1.0],
                 ),
               ),
               child: SafeArea(
@@ -196,17 +189,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                       sliver: SliverList(
                         delegate: SliverChildListDelegate([
-                          _MainMenuHero(accent: accent),
-                          const SizedBox(height: 28),
-                          Text(
-                            'Difficulty',
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                              color: cs.onSurfaceVariant,
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 24),
                           _DifficultySegmented(
                             selected: _selected,
                             onChanged: _selectDifficulty,
@@ -303,31 +286,41 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                             ),
                             const SizedBox(height: 12),
                           ],
-                          FilledButton.icon(
-                            onPressed: _play,
-                            icon: const Icon(Icons.play_arrow_rounded, size: 26),
-                            label: const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 4),
-                              child: Text(
-                                'Play',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.5,
+                          Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: accent.withValues(alpha: 0.3),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
+                            ),
+                            child: FilledButton.icon(
+                              onPressed: _play,
+                              icon: const Icon(Icons.play_arrow_rounded, size: 28),
+                              label: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 6),
+                                child: Text(
+                                  'Play',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.0,
+                                  ),
                                 ),
                               ),
-                            ),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: accent,
-                              foregroundColor: Colors.black,
-                              elevation: 2,
-                              shadowColor: accent.withValues(alpha: 0.45),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 16,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: accent,
+                                foregroundColor: AppColors.background,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 18,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
                               ),
                             ),
                           ),
@@ -371,50 +364,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 }
 
-// ── Hero ─────────────────────────────────────────────────────────────────────
-
-class _MainMenuHero extends StatelessWidget {
-  final Color accent;
-
-  const _MainMenuHero({required this.accent});
-
-  @override
-  Widget build(BuildContext context) {
-    final tt = Theme.of(context).textTheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        Text(
-          'CHAIN POP',
-          style: tt.displaySmall?.copyWith(
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
-            height: 1.05,
-            color: accent,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Clear the board in the right order.',
-          style: tt.titleMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.72),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Tap arrows. No jams. Chain the pops.',
-          style: tt.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 // ── Daily challenge (compact grid, global daily seed; leaderboard TBD) ─────
 
 class _DailyChallengeCard extends StatelessWidget {
@@ -434,75 +383,100 @@ class _DailyChallengeCard extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     final accent = DifficultyMode.medium.color;
 
-    return Card(
-      elevation: 1,
-      shadowColor: Colors.black54,
-      color: cs.surfaceContainerHigh,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: accent.withValues(alpha: 0.35), width: 1),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            cs.surfaceContainerHigh.withValues(alpha: 0.8),
+            cs.surfaceContainerHigh.withValues(alpha: 0.4),
+          ],
+        ),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.25),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.05),
+            blurRadius: 16,
+            spreadRadius: 2,
+          ),
+        ],
       ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(14),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(22),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          splashColor: accent.withValues(alpha: 0.1),
+          highlightColor: accent.withValues(alpha: 0.05),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: accent.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.calendar_today_rounded,
+                    color: accent,
+                    size: 22,
+                  ),
                 ),
-                child: Icon(
-                  Icons.calendar_today_rounded,
-                  color: accent,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Daily challenge',
-                      style: tt.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Daily challenge',
+                        style: tt.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      DailyChallenge.compactDateLabelFromKey(dayKey),
-                      style: tt.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
+                      const SizedBox(height: 4),
+                      Text(
+                        DailyChallenge.compactDateLabelFromKey(dayKey),
+                        style: tt.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: List.generate(3, (i) {
-                        final on = i < starsToday;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Icon(
-                            on
-                                ? Icons.star_rounded
-                                : Icons.star_outline_rounded,
-                            size: 20,
-                            color: on ? AppColors.starGold : Colors.white24,
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Row(
+                        children: List.generate(3, (i) {
+                          final on = i < starsToday;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Icon(
+                              on
+                                  ? Icons.star_rounded
+                                  : Icons.star_outline_rounded,
+                              size: 20,
+                              color: on ? AppColors.starGold : Colors.white24,
+                            ),
+                          );
+                        }),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: cs.onSurfaceVariant.withValues(alpha: 0.6),
-              ),
-            ],
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -523,42 +497,71 @@ class _DifficultySegmented extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<DifficultyMode>(
-      segments: [
-        ButtonSegment<DifficultyMode>(
-          value: DifficultyMode.easy,
-          icon: Icon(DifficultyMode.easy.icon, size: 18),
-          label: const Text('Easy'),
-        ),
-        ButtonSegment<DifficultyMode>(
-          value: DifficultyMode.medium,
-          icon: Icon(DifficultyMode.medium.icon, size: 18),
-          label: const Text('Med'),
-        ),
-        ButtonSegment<DifficultyMode>(
-          value: DifficultyMode.hard,
-          icon: Icon(DifficultyMode.hard.icon, size: 18),
-          label: const Text('Hard'),
-        ),
-      ],
-      selected: {selected},
-      onSelectionChanged: (set) {
-        if (set.isNotEmpty) unawaited(onChanged(set.first));
-      },
-      multiSelectionEnabled: false,
-      emptySelectionAllowed: false,
-      showSelectedIcon: false,
-      style: ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        padding: WidgetStateProperty.all(
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-        ),
-        shape: WidgetStateProperty.resolveWith(
-          (states) => RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+    return Row(
+      children: DifficultyMode.values.map((mode) {
+        final isSelected = selected == mode;
+        final color = mode.color;
+        return Expanded(
+          child: GestureDetector(
+            onTap: () => unawaited(onChanged(mode)),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? color.withValues(alpha: 0.15)
+                    : Theme.of(context).colorScheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isSelected
+                      ? color.withValues(alpha: 0.6)
+                      : Theme.of(context)
+                          .colorScheme
+                          .outline
+                          .withValues(alpha: 0.15),
+                  width: isSelected ? 1.5 : 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.2),
+                          blurRadius: 12,
+                          spreadRadius: -2,
+                        ),
+                      ]
+                    : [],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    mode.icon,
+                    color: isSelected
+                        ? color
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
+                    size: 22,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    mode.label,
+                    style: TextStyle(
+                      color: isSelected
+                          ? color
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight:
+                          isSelected ? FontWeight.w800 : FontWeight.w600,
+                      fontSize: 12,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      }).toList(),
     );
   }
 }
@@ -589,11 +592,29 @@ class _ProgressionCard extends StatelessWidget {
         stretch.cap > 0 ? (stretch.earned / stretch.cap).clamp(0.0, 1.0) : 0.0;
     final avg = ProgressFormat.avgStarsPerClearedStage(totalStars, frontier);
 
-    return Card(
-      elevation: 1,
-      shadowColor: Colors.black54,
-      color: cs.surfaceContainerHigh,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            cs.surfaceContainerHigh.withValues(alpha: 0.7),
+            cs.surfaceContainerHigh.withValues(alpha: 0.2),
+          ],
+        ),
+        border: Border.all(
+          color: accent.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: 0.08),
+            blurRadius: 24,
+            spreadRadius: 4,
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
         child: Column(
@@ -613,70 +634,56 @@ class _ProgressionCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            Text(
-              ProgressFormat.level(frontier),
-              style: tt.headlineLarge?.copyWith(
-                fontWeight: FontWeight.w800,
-                height: 1.05,
-                color: accent,
-                letterSpacing: -0.5,
-              ),
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  ProgressFormat.level(frontier),
+                  style: tt.displayMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                    letterSpacing: -1.0,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  'Current stage',
+                  style: tt.titleMedium?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Deepest stage you can open',
-              style: tt.bodyMedium?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'The map groups levels in pages of 20 — same as this bar.',
-              style: tt.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant.withValues(alpha: 0.85),
-              ),
-            ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 20),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: cs.surfaceContainer,
-                borderRadius: BorderRadius.circular(14),
+                color: cs.surfaceContainerLowest.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: cs.outline.withValues(alpha: 0.22),
+                  color: cs.outline.withValues(alpha: 0.1),
                 ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'This stretch',
-                    style: tt.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Levels ${ProgressFormat.level(window.start)} – ${ProgressFormat.level(window.end)}',
-                    style: tt.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Stars here',
-                        style: tt.labelMedium?.copyWith(
-                          color: cs.onSurfaceVariant,
+                        'Levels ${ProgressFormat.level(window.start)} – ${ProgressFormat.level(window.end)}',
+                        style: tt.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
                         ),
                       ),
                       Text(
-                        '${ProgressFormat.starsCompact(stretch.earned)} / ${stretch.cap} ★',
-                        style: tt.labelMedium?.copyWith(
+                        '★ ${ProgressFormat.starsCompact(stretch.earned)} / ${stretch.cap}',
+                        style: tt.titleSmall?.copyWith(
                           color: AppColors.starGold,
                           fontWeight: FontWeight.w800,
                         ),

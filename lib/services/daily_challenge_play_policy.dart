@@ -1,4 +1,5 @@
 import '../game/daily_challenge.dart';
+import 'ads/ad_debug_log.dart';
 import 'storage_service.dart';
 
 /// Resolves whether a calendar day’s puzzle may be started.
@@ -71,7 +72,9 @@ class DailyChallengePlayPolicy {
     final ad = showRewardedAd;
     if (ad == null) return false;
 
+    adDebug('daily-calendar: showing rewarded for unlock dayKey=$dayKey');
     final watched = await ad();
+    adDebug('daily-calendar: rewarded unlock result=$watched dayKey=$dayKey');
     if (watched) await StorageService.markDailyUnlockedViaAd(dayKey);
     return watched;
   }

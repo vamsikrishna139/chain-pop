@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_colors.dart';
 
-class _TimerBadge extends StatelessWidget {
+class _TimerBadge extends StatefulWidget {
   final int timeLeftSec;
   final int timeLimitSec;
   final Color color;
@@ -14,16 +14,61 @@ class _TimerBadge extends StatelessWidget {
   });
 
   @override
+  State<_TimerBadge> createState() => _TimerBadgeState();
+}
+
+class _TimerBadgeState extends State<_TimerBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
+    final frac =
+        widget.timeLimitSec > 0 ? widget.timeLeftSec / widget.timeLimitSec : 0.0;
+    if (frac < 0.22) {
+      _pulse.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _TimerBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final frac =
+        widget.timeLimitSec > 0 ? widget.timeLeftSec / widget.timeLimitSec : 0.0;
+    final urgent = frac < 0.22;
+    if (urgent && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!urgent && _pulse.isAnimating) {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final frac = timeLimitSec > 0 ? timeLeftSec / timeLimitSec : 0.0;
+    final frac =
+        widget.timeLimitSec > 0 ? widget.timeLeftSec / widget.timeLimitSec : 0.0;
+    final urgent = frac < 0.22;
     final c = frac < 0.20
         ? AppColors.timerWarning
         : frac < 0.40
             ? AppColors.timerCaution
-            : color;
-    final m = (timeLeftSec ~/ 60).toString();
-    final s = (timeLeftSec % 60).toString().padLeft(2, '0');
-    return Row(
+            : widget.color;
+    final m = (widget.timeLeftSec ~/ 60).toString();
+    final s = (widget.timeLeftSec % 60).toString().padLeft(2, '0');
+
+    final iconRow = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(Icons.timer_outlined, size: 14, color: c),
@@ -38,6 +83,20 @@ class _TimerBadge extends StatelessWidget {
           ),
         ),
       ],
+    );
+
+    return Semantics(
+      label:
+          'Time remaining $m minutes $s seconds${urgent ? ', running low' : ''}',
+      child: urgent
+          ? AnimatedBuilder(
+              animation: _pulse,
+              builder: (_, __) => Transform.scale(
+                scale: 1 + _pulse.value * 0.06,
+                child: iconRow,
+              ),
+            )
+          : iconRow,
     );
   }
 }
@@ -84,50 +143,56 @@ class TimerPauseChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (hasCountdown)
-                  _TimerBadge(
-                    timeLeftSec: timeLeftSec!,
-                    timeLimitSec: timeLimitSec!,
-                    color: color,
-                  )
-                else
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.schedule_rounded,
-                        size: 14,
-                        color: color.withOpacity(0.9),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _fmtElapsed(elapsed),
-                        style: TextStyle(
-                          color: color.withOpacity(0.95),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
+            child: Semantics(
+              button: true,
+              label: hasCountdown
+                  ? 'Timer, tap to pause or resume'
+                  : 'Elapsed time clock, tap to pause or resume',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (hasCountdown)
+                    _TimerBadge(
+                      timeLeftSec: timeLeftSec!,
+                      timeLimitSec: timeLimitSec!,
+                      color: color,
+                    )
+                  else
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.schedule_rounded,
+                          size: 14,
+                          color: color.withValues(alpha: 0.9),
                         ),
-                      ),
-                    ],
-                  ),
-                const SizedBox(height: 3),
-                Text(
-                  hint,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(
-                      emphasizeResume ? 0.75 : 0.42,
+                        const SizedBox(width: 4),
+                        Text(
+                          _fmtElapsed(elapsed),
+                          style: TextStyle(
+                            color: color.withValues(alpha: 0.95),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
                     ),
-                    fontSize: 8,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.9,
+                  const SizedBox(height: 3),
+                  Text(
+                    hint,
+                    style: TextStyle(
+                      color: Colors.white.withValues(
+                        alpha: emphasizeResume ? 0.75 : 0.42,
+                      ),
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.9,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

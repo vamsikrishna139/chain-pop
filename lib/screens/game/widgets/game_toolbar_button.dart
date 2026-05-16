@@ -31,12 +31,11 @@ class GameToolbarButton extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               color: selected
-                  ? accent.withOpacity(0.18)
-                  : Colors.white.withOpacity(0.06),
+                  ? accent.withValues(alpha: 0.18)
+                  : Colors.white.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
             ),
-            child: Icon(icon,
-                color: selected ? accent : Colors.white70, size: 22),
+            child: Icon(icon, color: selected ? accent : Colors.white70, size: 22),
           ),
         ),
       ),

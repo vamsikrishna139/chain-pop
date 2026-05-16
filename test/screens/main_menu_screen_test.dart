@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:chain_pop/game/levels/tutorial_levels.dart';
 import 'package:chain_pop/models/game_settings.dart';
 import 'package:chain_pop/screens/game_screen.dart';
 import 'package:chain_pop/screens/main_menu_screen.dart';
+import 'package:chain_pop/services/game_audio.dart';
+import 'package:chain_pop/services/game_audio_scope.dart';
 import 'package:chain_pop/services/storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,8 +42,14 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
+    final uiAudio = GameAudioController(voiceCount: 2);
+    addTearDown(() => unawaited(uiAudio.dispose()));
+
     await tester.pumpWidget(
-      const MaterialApp(home: MainMenuScreen()),
+      ChainPopAudioScope(
+        uiAudio: uiAudio,
+        child: const MaterialApp(home: MainMenuScreen()),
+      ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../config/chain_pop_legal.dart';
 import '../../../models/game_settings.dart';
 import '../../../theme/app_colors.dart';
 
@@ -20,6 +22,13 @@ Future<void> showGameSettingsSheet({
     builder: (sheetContext) {
       return StatefulBuilder(
         builder: (context, setModalState) {
+          Future<void> openPrivacyPolicy() async {
+            final uri = Uri.parse(ChainPopLegal.privacyPolicyUrl);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          }
+
           return SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
@@ -41,7 +50,7 @@ Future<void> showGameSettingsSheet({
                   Text(
                     'Settings',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.95),
+                      color: Colors.white.withValues(alpha: 0.95),
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.5,
@@ -85,7 +94,7 @@ Future<void> showGameSettingsSheet({
                     subtitle: Text(
                       'Higher-contrast hues (Okabe–Ito style)',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.45),
+                        color: Colors.white.withValues(alpha: 0.45),
                         fontSize: 12,
                       ),
                     ),
@@ -96,6 +105,21 @@ Future<void> showGameSettingsSheet({
                       onSettingsChanged(current);
                       setModalState(() {});
                     },
+                  ),
+                  TextButton.icon(
+                    onPressed: openPrivacyPolicy,
+                    icon: Icon(
+                      Icons.article_outlined,
+                      color: accent.withValues(alpha: 0.95),
+                      size: 18,
+                    ),
+                    label: Text(
+                      'Privacy policy',
+                      style: TextStyle(
+                        color: accent.withValues(alpha: 0.95),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ],
               ),
