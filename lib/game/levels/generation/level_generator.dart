@@ -363,29 +363,28 @@ class LevelGenerator {
       final scaledConfig = attempt < 2
           ? config
           : () {
-            var scaledTarget = (config.targetNodeCount * nodeCountScale)
-                .round()
-                .clamp(
-                  config.difficulty.minNodes,
-                  config.targetNodeCount,
-                );
-            final minFloor = config.minimumTargetNodeCount;
-            if (minFloor != null && scaledTarget < minFloor) {
-              scaledTarget = minFloor;
-            }
-            return LevelConfiguration(
-              levelId: config.levelId,
-              gridWidth: config.gridWidth,
-              gridHeight: config.gridHeight,
-              targetNodeCount: scaledTarget,
-              difficulty: config.difficulty,
-              archetype: config.archetype,
-              directionBias: config.directionBias,
-              irregularMaskProbability: config.irregularMaskProbability,
-              irregularLayoutExtraTries: config.irregularLayoutExtraTries,
-              minimumTargetNodeCount: config.minimumTargetNodeCount,
-            );
-          }();
+              var scaledTarget =
+                  (config.targetNodeCount * nodeCountScale).round().clamp(
+                        config.difficulty.minNodes,
+                        config.targetNodeCount,
+                      );
+              final minFloor = config.minimumTargetNodeCount;
+              if (minFloor != null && scaledTarget < minFloor) {
+                scaledTarget = minFloor;
+              }
+              return LevelConfiguration(
+                levelId: config.levelId,
+                gridWidth: config.gridWidth,
+                gridHeight: config.gridHeight,
+                targetNodeCount: scaledTarget,
+                difficulty: config.difficulty,
+                archetype: config.archetype,
+                directionBias: config.directionBias,
+                irregularMaskProbability: config.irregularMaskProbability,
+                irregularLayoutExtraTries: config.irregularLayoutExtraTries,
+                minimumTargetNodeCount: config.minimumTargetNodeCount,
+              );
+            }();
 
       final result = _attemptGeneration(scaledConfig, rng, targetTier: targetTier);
       if (result.isSuccess) {
@@ -920,12 +919,10 @@ class LevelGenerator {
     final used = <String>{};
 
     if (allowedCells != null && allowedCells.isNotEmpty) {
-      final pool = allowedCells
-          .map((k) {
-            final parts = k.split(',');
-            return Point(int.parse(parts[0]), int.parse(parts[1]));
-          })
-          .toList()
+      final pool = allowedCells.map((k) {
+        final parts = k.split(',');
+        return Point(int.parse(parts[0]), int.parse(parts[1]));
+      }).toList()
         ..shuffle(random);
       if (pool.length < count) return positions;
       for (var i = 0; i < count; i++) {
@@ -1042,7 +1039,8 @@ class LevelGenerator {
     };
 
     for (final dir in ordered) {
-      if (!_directionHitsNodes(position, dir, futureSet, gridWidth, gridHeight)) {
+      if (!_directionHitsNodes(
+          position, dir, futureSet, gridWidth, gridHeight)) {
         return dir;
       }
     }
@@ -1194,8 +1192,8 @@ class LevelGenerator {
     LevelConfiguration config,
     Random random,
   ) {
-    final maxCount = min(config.gridWidth * config.gridHeight,
-        max(config.targetNodeCount, 40));
+    final maxCount = min(
+        config.gridWidth * config.gridHeight, max(config.targetNodeCount, 40));
     final denseConfig = LevelConfiguration(
       levelId: config.levelId,
       gridWidth: config.gridWidth,
