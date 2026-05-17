@@ -1,3 +1,4 @@
+import 'package:chain_pop/game/levels/grid_cell_key.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
 import 'package:flutter/material.dart';
@@ -80,9 +81,9 @@ void main() {
       final all = [a, b, c];
 
       for (final focus in all) {
-        final others = <String>{
+        final others = <int>{
           for (final o in all)
-            if (o.id != focus.id) '${o.x},${o.y}',
+            if (o.id != focus.id) gridCellKey(o.x, o.y),
         };
         expect(
           LevelSolver.canRemoveWithPositions(focus, others, level),

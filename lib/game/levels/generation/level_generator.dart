@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../theme/app_colors.dart';
+import '../grid_cell_key.dart';
 import '../level.dart';
 import '../level_solver.dart';
 import 'difficulty_mode.dart';
@@ -57,8 +58,10 @@ class LevelGenerator {
         minW = min(minW, 2);
       } else if (nodeCount <= 35) {
         minW = min(minW, 3);
-      } else if (nodeCount <= 55) {
-        minW = min(minW, 4);
+      } else {
+        // Dense hard boards may still clear in relatively few waves; keep lower
+        // bound compatible with solver-compatible outputs.
+        minW = min(minW, 3);
       }
     }
     minW = min(minW, maxW);
@@ -129,29 +132,28 @@ class LevelGenerator {
       final scaledConfig = attempt < 2
           ? config
           : () {
-            var scaledTarget = (config.targetNodeCount * nodeCountScale)
-                .round()
-                .clamp(
-                  config.difficulty.minNodes,
-                  config.targetNodeCount,
-                );
-            final minFloor = config.minimumTargetNodeCount;
-            if (minFloor != null && scaledTarget < minFloor) {
-              scaledTarget = minFloor;
-            }
-            return LevelConfiguration(
-              levelId: config.levelId,
-              gridWidth: config.gridWidth,
-              gridHeight: config.gridHeight,
-              targetNodeCount: scaledTarget,
-              difficulty: config.difficulty,
-              archetype: config.archetype,
-              directionBias: config.directionBias,
-              irregularMaskProbability: config.irregularMaskProbability,
-              irregularLayoutExtraTries: config.irregularLayoutExtraTries,
-              minimumTargetNodeCount: config.minimumTargetNodeCount,
-            );
-          }();
+              var scaledTarget =
+                  (config.targetNodeCount * nodeCountScale).round().clamp(
+                        config.difficulty.minNodes,
+                        config.targetNodeCount,
+                      );
+              final minFloor = config.minimumTargetNodeCount;
+              if (minFloor != null && scaledTarget < minFloor) {
+                scaledTarget = minFloor;
+              }
+              return LevelConfiguration(
+                levelId: config.levelId,
+                gridWidth: config.gridWidth,
+                gridHeight: config.gridHeight,
+                targetNodeCount: scaledTarget,
+                difficulty: config.difficulty,
+                archetype: config.archetype,
+                directionBias: config.directionBias,
+                irregularMaskProbability: config.irregularMaskProbability,
+                irregularLayoutExtraTries: config.irregularLayoutExtraTries,
+                minimumTargetNodeCount: config.minimumTargetNodeCount,
+              );
+            }();
 
       final result = _attemptGeneration(scaledConfig, rng);
       if (result.isSuccess) {
@@ -290,25 +292,39 @@ class LevelGenerator {
       LevelArchetype.standard => switch (config.difficulty.mode) {
           DifficultyMode.easy => 0.12,
           DifficultyMode.medium => 0.22,
-          DifficultyMode.hard => 0.58,
+          DifficultyMode.hard => 0.85,
         },
     };
   }
 
   /// Subset of mask shapes favoured by each archetype, or null for all.
+  ///
+  /// Broader than a minimal pair so irregular levels actually exercise every
+  /// [LayoutMaskKind] over a campaign (gemini_code had the same masks but only
+  /// rotated two kinds per special archetype).
   static List<LayoutMaskKind>? _preferredShapes(LevelArchetype archetype) {
     return switch (archetype) {
       LevelArchetype.claustrophobic => const [
           LayoutMaskKind.diamond,
           LayoutMaskKind.cross,
+          LayoutMaskKind.hollowDiamond,
+          LayoutMaskKind.cShape,
+          LayoutMaskKind.lShape,
         ],
       LevelArchetype.fortress => const [
           LayoutMaskKind.donut,
           LayoutMaskKind.cShape,
+          LayoutMaskKind.pentagon,
+          LayoutMaskKind.vShape,
+          LayoutMaskKind.hollowDiamond,
         ],
       LevelArchetype.chaos => const [
           LayoutMaskKind.randomBlob,
           LayoutMaskKind.zigzag,
+          LayoutMaskKind.scatteredHoles,
+          LayoutMaskKind.checkerboard,
+          LayoutMaskKind.spiral,
+          LayoutMaskKind.xShape,
         ],
       _ => null,
     };
@@ -329,12 +345,10 @@ class LevelGenerator {
     final used = <String>{};
 
     if (allowedCells != null && allowedCells.isNotEmpty) {
-      final pool = allowedCells
-          .map((k) {
-            final parts = k.split(',');
-            return Point(int.parse(parts[0]), int.parse(parts[1]));
-          })
-          .toList()
+      final pool = allowedCells.map((k) {
+        final parts = k.split(',');
+        return Point(int.parse(parts[0]), int.parse(parts[1]));
+      }).toList()
         ..shuffle(random);
       if (pool.length < count) return positions;
       for (var i = 0; i < count; i++) {
@@ -446,12 +460,13 @@ class LevelGenerator {
 
     if (futureNodes.isEmpty) return ordered.first;
 
-    final futureSet = <String>{
-      for (final p in futureNodes) '${p.x},${p.y}',
+    final futureSet = <int>{
+      for (final p in futureNodes) gridCellKey(p.x, p.y),
     };
 
     for (final dir in ordered) {
-      if (!_directionHitsNodes(position, dir, futureSet, gridWidth, gridHeight)) {
+      if (!_directionHitsNodes(
+          position, dir, futureSet, gridWidth, gridHeight)) {
         return dir;
       }
     }
@@ -539,7 +554,7 @@ class LevelGenerator {
   bool _directionHitsNodes(
     Point<int> position,
     Direction dir,
-    Set<String> futureSet,
+    Set<int> futureSet,
     int gridWidth,
     int gridHeight,
   ) {
@@ -562,7 +577,7 @@ class LevelGenerator {
           break;
       }
       if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return false;
-      if (futureSet.contains('$x,$y')) return true;
+      if (futureSet.contains(gridCellKey(x, y))) return true;
     }
   }
 
@@ -668,8 +683,8 @@ class LevelGenerator {
     LevelConfiguration config,
     Random random,
   ) {
-    final maxCount = min(config.gridWidth * config.gridHeight,
-        max(config.targetNodeCount, 40));
+    final maxCount = min(
+        config.gridWidth * config.gridHeight, max(config.targetNodeCount, 40));
     final denseConfig = LevelConfiguration(
       levelId: config.levelId,
       gridWidth: config.gridWidth,

@@ -35,129 +35,147 @@ class GamePauseOverlay extends StatelessWidget {
     final accent = difficulty.color;
 
     return Positioned.fill(
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                color: Colors.black.withOpacity(0.38),
+      child: Semantics(
+        scopesRoute: true,
+        explicitChildNodes: true,
+        namesRoute: true,
+        label: 'Game paused. Tap the timer chip to resume.',
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRect(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  color: Colors.black.withValues(alpha: 0.38),
+                ),
               ),
             ),
-          ),
-          Positioned.fill(
-            child: Listener(
-              behavior: HitTestBehavior.opaque,
-              onPointerDown: (_) {},
+            Positioned.fill(
+              child: Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (_) {},
+              ),
             ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: onMenuFromPause,
-                          borderRadius: BorderRadius.circular(12),
-                          child: const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Icon(
-                              Icons.chevron_left_rounded,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      TimerPauseChip(
-                        timeLeftSec: timeLeftSec,
-                        timeLimitSec: timeLimitSec,
-                        elapsed: elapsed,
-                        color: accent,
-                        onTap: onTogglePause,
-                        emphasizeResume: true,
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  Text(
-                    'PAUSED',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.95),
-                      fontSize: 28,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 4,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tap the timer to resume',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: accent.withOpacity(0.85),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextButton.icon(
-                          onPressed: onRestartFromPause,
-                          icon: Icon(
-                            Icons.refresh_rounded,
-                            size: 20,
-                            color: accent.withOpacity(0.9),
-                          ),
-                          label: Text(
-                            'RESTART',
-                            style: TextStyle(
-                              color: accent.withOpacity(0.95),
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.2,
+                        Semantics(
+                          button: true,
+                          label: 'Back to menu from pause',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: onMenuFromPause,
+                              borderRadius: BorderRadius.circular(12),
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(
+                                  Icons.chevron_left_rounded,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 20),
-                        TextButton.icon(
-                          onPressed: onMenuFromPause,
-                          icon: const Icon(
-                            Icons.home_rounded,
-                            size: 20,
-                            color: Colors.white54,
-                          ),
-                          label: const Text(
-                            'MENU',
-                            style: TextStyle(
-                              color: Colors.white54,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
+                        const Spacer(),
+                        TimerPauseChip(
+                          timeLeftSec: timeLeftSec,
+                          timeLimitSec: timeLimitSec,
+                          elapsed: elapsed,
+                          color: accent,
+                          onTap: onTogglePause,
+                          emphasizeResume: true,
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  ClipRect(child: pauseBanner),
-                  const SizedBox(height: 12),
-                ],
+                    const Spacer(),
+                    Text(
+                      'PAUSED',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.95),
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 4,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tap the timer to resume',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: accent.withValues(alpha: 0.85),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Semantics(
+                            button: true,
+                            label: 'Restart level from pause',
+                            child: TextButton.icon(
+                              onPressed: onRestartFromPause,
+                              icon: Icon(
+                                Icons.refresh_rounded,
+                                size: 20,
+                                color: accent.withValues(alpha: 0.9),
+                              ),
+                              label: Text(
+                                'RESTART',
+                                style: TextStyle(
+                                  color: accent.withValues(alpha: 0.95),
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Semantics(
+                            button: true,
+                            label: 'Leave to main menu from pause',
+                            child: TextButton.icon(
+                              onPressed: onMenuFromPause,
+                              icon: const Icon(
+                                Icons.home_rounded,
+                                size: 20,
+                                color: Colors.white54,
+                              ),
+                              label: const Text(
+                                'MENU',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ClipRect(child: pauseBanner),
+                    const SizedBox(height: 12),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

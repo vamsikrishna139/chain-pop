@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../game/levels/level_grid_config.dart';
 import '../models/difficulty.dart';
-import '../services/game_audio.dart';
+import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
 import '../services/storage_service.dart';
 import '../theme/app_colors.dart';
@@ -112,12 +112,10 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _modes = DifficultyMode.values;
-  late final GameAudioController _audio;
 
   @override
   void initState() {
     super.initState();
-    _audio = GameAudioController(voiceCount: 2);
     _tabController = TabController(
       length: _modes.length,
       vsync: this,
@@ -128,13 +126,12 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    unawaited(_audio.dispose());
     super.dispose();
   }
 
   void _openLevel(int levelId, DifficultyMode mode) async {
     if (StorageService.gameSettings.soundEnabled) {
-      unawaited(_audio.play(GameSfx.uiTap));
+      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
     await StorageService.setSelectedDifficulty(mode);
     if (!mounted) return;
@@ -202,7 +199,6 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
                                 .map(
                                   (m) => _ChapteredLevelView(
                                     mode: m,
-                                    audio: _audio,
                                     onTap: (id) => _openLevel(id, m),
                                   ),
                                 )
@@ -231,7 +227,9 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
             icon: Icon(Icons.arrow_back_rounded, color: cs.onSurface),
             onPressed: () {
               if (StorageService.gameSettings.soundEnabled) {
-                unawaited(_audio.play(GameSfx.uiTap, playbackRate: 0.9));
+                unawaited(
+                  ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.9),
+                );
               }
               Navigator.of(context).pop();
             },
@@ -320,7 +318,9 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
                 .toList(),
             onTap: (_) {
               if (StorageService.gameSettings.soundEnabled) {
-                unawaited(_audio.play(GameSfx.uiTap, playbackRate: 1.1));
+                unawaited(
+                  ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.1),
+                );
               }
               setState(() {});
             },
@@ -335,12 +335,10 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
 
 class _ChapteredLevelView extends StatefulWidget {
   final DifficultyMode mode;
-  final GameAudioController audio;
   final void Function(int levelId) onTap;
 
   const _ChapteredLevelView({
     required this.mode,
-    required this.audio,
     required this.onTap,
   });
 
@@ -374,7 +372,9 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _goToPage(int page) {
     if (page != _currentPage && StorageService.gameSettings.soundEnabled) {
-      unawaited(widget.audio.play(GameSfx.uiTap, playbackRate: 1.2));
+      unawaited(
+        ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.2),
+      );
     }
     _pageCtrl.animateToPage(
       page,
@@ -385,7 +385,9 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _onPillTap(NavGroup group) {
     if (StorageService.gameSettings.soundEnabled) {
-      unawaited(widget.audio.play(GameSfx.uiTap, playbackRate: 1.05));
+      unawaited(
+        ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.05),
+      );
     }
     if (group.isDrillable) {
       setState(() {
@@ -403,7 +405,9 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _closeDrill() {
     if (StorageService.gameSettings.soundEnabled) {
-      unawaited(widget.audio.play(GameSfx.uiTap, playbackRate: 0.95));
+      unawaited(
+        ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.95),
+      );
     }
     if (_drillPath.isEmpty) return;
     setState(() {

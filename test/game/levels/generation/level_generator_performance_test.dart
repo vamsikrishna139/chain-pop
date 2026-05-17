@@ -6,13 +6,15 @@
 ///   - 400 nodes < 2000 ms
 ///
 /// Run with: flutter test test/game/levels/generation/level_generator_performance_test.dart
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chain_pop/game/levels/generation/generation.dart';
 
 void main() {
   final generator = LevelGenerator();
 
-  Duration _measureAvg(int levelId, {int runs = 5}) {
+  Duration measureAvg(int levelId, {int runs = 5}) {
     // Warm-up run (JIT compilation, caches)
     generator.generate(levelId);
 
@@ -29,7 +31,7 @@ void main() {
   group('Performance — generation latency', () {
     test('Easy levels (≈4-12 nodes) generate in < 100 ms', () {
       // Level 5 → easy mode
-      final avg = _measureAvg(5);
+      final avg = measureAvg(5);
       expect(
         avg.inMilliseconds,
         lessThan(100),
@@ -39,7 +41,7 @@ void main() {
 
     test('Medium levels (≈10-30 nodes) generate in < 500 ms', () {
       // Level 20 → medium mode
-      final avg = _measureAvg(20);
+      final avg = measureAvg(20);
       expect(
         avg.inMilliseconds,
         lessThan(500),
@@ -49,7 +51,7 @@ void main() {
 
     test('Hard levels (≈5-60 nodes) generate in < 2000 ms', () {
       // Level 50 → hard mode
-      final avg = _measureAvg(50);
+      final avg = measureAvg(50);
       expect(
         avg.inMilliseconds,
         lessThan(2000),

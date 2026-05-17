@@ -57,18 +57,18 @@ class DifficultyParameters {
           mode: DifficultyMode.medium,
           minChainLength: 2,
           maxChainLength: 8,
-          densityFactor: 0.45,
+          densityFactor: 0.60,
           minNodes: 10,
-          maxNodes: 30,
+          maxNodes: 45,
         );
       case DifficultyMode.hard:
         return const DifficultyParameters(
           mode: DifficultyMode.hard,
-          minChainLength: 5,
-          maxChainLength: 12,
-          densityFactor: 0.40,
-          minNodes: 5,
-          maxNodes: 60,
+          minChainLength: 6,
+          maxChainLength: 20,
+          densityFactor: 0.75,
+          minNodes: 25,
+          maxNodes: 100,
         );
     }
   }

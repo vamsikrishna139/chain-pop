@@ -1,4 +1,4 @@
-package com.example.chain_pop
+package com.adbkv.chainpop
 
 import io.flutter.embedding.android.FlutterActivity
 

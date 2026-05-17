@@ -2,7 +2,6 @@ import 'dart:ui';
 
 import 'package:chain_pop/game/components/board_mask_component.dart';
 import 'package:chain_pop/game/levels/level.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

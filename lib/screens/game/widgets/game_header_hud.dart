@@ -73,7 +73,7 @@ class GameHeaderHud extends StatelessWidget {
                   tooltip: 'Settings',
                   icon: Icon(
                     Icons.tune_rounded,
-                    color: Colors.white.withOpacity(0.72),
+                    color: Colors.white.withValues(alpha: 0.72),
                     size: 26,
                   ),
                 ),
@@ -105,7 +105,7 @@ class GameHeaderHud extends StatelessWidget {
                       Text(
                         '$removedNodes / $totalNodes nodes',
                         style: TextStyle(
-                          color: accent.withOpacity(0.7),
+                          color: accent.withValues(alpha: 0.7),
                           fontSize: 11,
                           letterSpacing: 1,
                           fontWeight: FontWeight.w600,
@@ -121,7 +121,7 @@ class GameHeaderHud extends StatelessWidget {
                             value: progress.clamp(0.0, 1.0),
                             backgroundColor: Colors.white12,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              accent.withOpacity(0.7),
+                              accent.withValues(alpha: 0.7),
                             ),
                           ),
                         ),

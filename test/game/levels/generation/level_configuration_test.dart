@@ -41,7 +41,7 @@ void main() {
         expect(config.gridWidth, lessThanOrEqualTo(20));
         expect(config.gridHeight, greaterThanOrEqualTo(3));
         expect(config.gridHeight, lessThanOrEqualTo(20));
-        expect(config.targetNodeCount, greaterThanOrEqualTo(5));
+        expect(config.targetNodeCount, greaterThanOrEqualTo(25));
         expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
     });
@@ -73,7 +73,7 @@ void main() {
         expect(config.difficulty.mode, equals(DifficultyMode.hard));
         expect(config.gridWidth, greaterThanOrEqualTo(3));
         expect(config.gridWidth, lessThanOrEqualTo(20));
-        expect(config.targetNodeCount, greaterThanOrEqualTo(5));
+        expect(config.targetNodeCount, greaterThanOrEqualTo(25));
         expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
     });
@@ -125,12 +125,12 @@ void main() {
 
     group('validation rejects invalid configurations', () {
       test('rejects negative level IDs', () {
-        final config = LevelConfiguration(
+        const config = LevelConfiguration(
           levelId: -1,
           gridWidth: 5,
           gridHeight: 5,
           targetNodeCount: 10,
-          difficulty: const DifficultyParameters(
+          difficulty: DifficultyParameters(
             mode: DifficultyMode.easy,
             minChainLength: 2,
             maxChainLength: 4,
@@ -147,12 +147,12 @@ void main() {
       });
 
       test('rejects grids smaller than 3x3', () {
-        final config = LevelConfiguration(
+        const config = LevelConfiguration(
           levelId: 1,
           gridWidth: 2,
           gridHeight: 2,
           targetNodeCount: 3,
-          difficulty: const DifficultyParameters(
+          difficulty: DifficultyParameters(
             mode: DifficultyMode.easy,
             minChainLength: 2,
             maxChainLength: 4,
@@ -169,12 +169,12 @@ void main() {
       });
 
       test('rejects grids larger than 20x20', () {
-        final config = LevelConfiguration(
+        const config = LevelConfiguration(
           levelId: 1,
           gridWidth: 21,
           gridHeight: 21,
           targetNodeCount: 50,
-          difficulty: const DifficultyParameters(
+          difficulty: DifficultyParameters(
             mode: DifficultyMode.hard,
             minChainLength: 5,
             maxChainLength: 10,
@@ -191,12 +191,12 @@ void main() {
       });
 
       test('rejects node count less than 3', () {
-        final config = LevelConfiguration(
+        const config = LevelConfiguration(
           levelId: 1,
           gridWidth: 5,
           gridHeight: 5,
           targetNodeCount: 2,
-          difficulty: const DifficultyParameters(
+          difficulty: DifficultyParameters(
             mode: DifficultyMode.easy,
             minChainLength: 2,
             maxChainLength: 4,
@@ -213,12 +213,12 @@ void main() {
       });
 
       test('rejects node count exceeding grid capacity', () {
-        final config = LevelConfiguration(
+        const config = LevelConfiguration(
           levelId: 1,
           gridWidth: 5,
           gridHeight: 5,
           targetNodeCount: 26,
-          difficulty: const DifficultyParameters(
+          difficulty: DifficultyParameters(
             mode: DifficultyMode.easy,
             minChainLength: 2,
             maxChainLength: 4,
@@ -241,12 +241,12 @@ void main() {
         // or test it with an artificially large grid that would fail the grid size check first
         
         // Instead, let's verify the grid capacity check works (which is the practical limit)
-        final config = LevelConfiguration(
+        const config = LevelConfiguration(
           levelId: 1,
           gridWidth: 20,
           gridHeight: 20,
           targetNodeCount: 401,
-          difficulty: const DifficultyParameters(
+          difficulty: DifficultyParameters(
             mode: DifficultyMode.hard,
             minChainLength: 5,
             maxChainLength: 10,
@@ -293,12 +293,12 @@ void main() {
       });
 
       test('accepts minimum valid configuration', () {
-        final config = LevelConfiguration(
+        const config = LevelConfiguration(
           levelId: 0,
           gridWidth: 3,
           gridHeight: 3,
           targetNodeCount: 3,
-          difficulty: const DifficultyParameters(
+          difficulty: DifficultyParameters(
             mode: DifficultyMode.easy,
             minChainLength: 2,
             maxChainLength: 4,
@@ -314,12 +314,12 @@ void main() {
       });
 
       test('accepts maximum valid configuration', () {
-        final config = LevelConfiguration(
+        const config = LevelConfiguration(
           levelId: 100,
           gridWidth: 20,
           gridHeight: 20,
           targetNodeCount: 400,
-          difficulty: const DifficultyParameters(
+          difficulty: DifficultyParameters(
             mode: DifficultyMode.hard,
             minChainLength: 5,
             maxChainLength: 10,

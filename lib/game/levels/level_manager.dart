@@ -50,6 +50,11 @@ class LevelManager {
     return _emergencyFallback(dayKey);
   }
 
+  /// Guaranteed-solvable one-node layout — used when unexpected errors occur
+  /// during async loads (crash reporting captures the underlying failure).
+  static LevelData emergencyFallbackLevel(int levelId) =>
+      _emergencyFallback(levelId);
+
   /// An absolute last-resort fallback: one node pointing up in an empty grid.
   static LevelData _emergencyFallback(int levelId) {
     return LevelData(

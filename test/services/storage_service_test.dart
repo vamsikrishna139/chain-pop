@@ -2,12 +2,10 @@ import 'dart:io';
 
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/models/game_settings.dart';
+import 'package:chain_pop/services/storage/hive_chain_pop_persistence.dart';
 import 'package:chain_pop/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
-
-/// Must match [StorageService] private box name for legacy-type migration tests.
-const _storageBoxName = 'chain_pop_storage';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +21,32 @@ void main() {
   });
 
   group('StorageService', () {
+    test('Hive schema marker is current after init/clearProgress', () {
+      final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
+      expect(box.get('_chain_pop_storage_schema'), 2);
+    });
+
+    group('Hive schema reconciliation', () {
+      test(
+          'debugReconcileStorageSchemaMarker restores version when key missing',
+          () async {
+        await StorageService.clearProgress();
+        final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
+        await box.delete('_chain_pop_storage_schema');
+        expect(StorageService.debugSchemaMarkerOrZero, 0);
+        await StorageService.debugReconcileStorageSchemaMarker();
+        expect(box.get('_chain_pop_storage_schema'), 2);
+        expect(StorageService.debugSchemaMarkerOrZero, 2);
+      });
+
+      test('reconcile is idempotent when marker already current', () async {
+        await StorageService.clearProgress();
+        await StorageService.debugReconcileStorageSchemaMarker();
+        final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
+        expect(box.get('_chain_pop_storage_schema'), 2);
+      });
+    });
+
     test('selectedDifficulty defaults to easy', () {
       expect(StorageService.selectedDifficulty, DifficultyMode.easy);
     });
@@ -145,7 +169,7 @@ void main() {
 
     test('tutorialCompleted reads int 1 as true (legacy / corrupt cell)', () async {
       await StorageService.clearProgress();
-      final box = Hive.box<dynamic>(_storageBoxName);
+      final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
       await box.put('tutorial_completed', 1);
       expect(StorageService.tutorialCompleted, isTrue);
     });

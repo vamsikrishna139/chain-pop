@@ -34,6 +34,22 @@ enum LayoutMaskKind {
 
   /// Organic blob with random radial variation.
   randomBlob,
+
+  /// Checkerboard pattern (alternating cells).
+  checkerboard,
+
+  /// Full grid with randomly scattered holes.
+  scatteredHoles,
+
+  /// Archimedean spiral band from the center (polar band; matches gemini_code
+  /// visual without the unused grid-walk stub).
+  spiral,
+
+  /// Thick Manhattan-diamond boundary with hollow center.
+  hollowDiamond,
+
+  /// Thick diagonal X reaching toward the corners.
+  xShape,
 }
 
 /// Builds the set of playable cell keys `"x,y"` for [kind] on a `w`×`h` grid.
@@ -66,6 +82,16 @@ Set<String>? buildLayoutMask(
       return _zigzag(w, h, random);
     case LayoutMaskKind.randomBlob:
       return _randomBlob(w, h, random);
+    case LayoutMaskKind.checkerboard:
+      return _checkerboard(w, h, random);
+    case LayoutMaskKind.scatteredHoles:
+      return _scatteredHoles(w, h, random);
+    case LayoutMaskKind.spiral:
+      return _spiralCells(w, h, random);
+    case LayoutMaskKind.hollowDiamond:
+      return _hollowDiamond(w, h, random);
+    case LayoutMaskKind.xShape:
+      return _xShape(w, h, random);
   }
 }
 
@@ -77,7 +103,7 @@ bool rollIrregularLayout(DifficultyMode mode, Random random) {
     case DifficultyMode.medium:
       return random.nextDouble() < 0.22;
     case DifficultyMode.hard:
-      return random.nextDouble() < 0.58;
+      return random.nextDouble() < 0.85;
   }
 }
 
@@ -98,6 +124,11 @@ LayoutMaskKind pickIrregularKind(Random random,
     LayoutMaskKind.donut,
     LayoutMaskKind.zigzag,
     LayoutMaskKind.randomBlob,
+    LayoutMaskKind.checkerboard,
+    LayoutMaskKind.scatteredHoles,
+    LayoutMaskKind.spiral,
+    LayoutMaskKind.hollowDiamond,
+    LayoutMaskKind.xShape,
   ];
   return all[random.nextInt(all.length)];
 }
@@ -284,8 +315,7 @@ Set<String> _zigzag(int w, int h, Random? random) {
     for (var x = 0; x < w; x++) {
       final progress = (vertical ? y : x) / max(1, length);
       final perp = (vertical ? x : y).toDouble();
-      final center =
-          span / 2.0 + sin(progress * periods * pi) * span * 0.28;
+      final center = span / 2.0 + sin(progress * periods * pi) * span * 0.28;
       if ((perp - center).abs() < bandWidth) {
         cells.add('$x,$y');
       }
@@ -322,5 +352,97 @@ Set<String> _randomBlob(int w, int h, Random? random) {
     }
   }
   if (cells.length < 6) return _diamond(w, h, random);
+  return cells;
+}
+
+/// Checkerboard — alternating cells (many local gaps; high perimeter).
+Set<String> _checkerboard(int w, int h, Random? random) {
+  final cells = <String>{};
+  final offset = random?.nextInt(2) ?? 0;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      if ((x + y) % 2 == offset) {
+        cells.add('$x,$y');
+      }
+    }
+  }
+  return cells;
+}
+
+/// Full grid with roughly 20–30% random holes removed (70–85% filled).
+Set<String> _scatteredHoles(int w, int h, Random? random) {
+  final cells = <String>{};
+  final rng = random ?? Random();
+  final fillRate = 0.7 + rng.nextDouble() * 0.15;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      if (rng.nextDouble() < fillRate) {
+        cells.add('$x,$y');
+      }
+    }
+  }
+  if (cells.length < 9) return _diamond(w, h, random);
+  return cells;
+}
+
+/// Archimedean spiral band using polar math (compact, deterministic).
+Set<String> _spiralCells(int w, int h, Random? random) {
+  final cells = <String>{};
+  final cx = w / 2.0;
+  final cy = h / 2.0;
+  for (var ty = 0; ty < h; ty++) {
+    for (var tx = 0; tx < w; tx++) {
+      final fx = tx + 0.5 - cx;
+      final fy = ty + 0.5 - cy;
+      final r = sqrt(fx * fx + fy * fy);
+      final theta = atan2(fy, fx);
+      final scaledR = r * 1.5;
+      final normalized = (scaledR - theta * 0.5) % (pi * 1.5);
+      if (normalized < pi * 0.8) {
+        cells.add('$tx,$ty');
+      }
+    }
+  }
+  if (cells.length < 9) return _diamond(w, h, random);
+  return cells;
+}
+
+/// Hollow diamond — Manhattan annulus.
+Set<String> _hollowDiamond(int w, int h, Random? random) {
+  final cells = <String>{};
+  final cx = w / 2.0;
+  final cy = h / 2.0;
+  final radius = min(w, h) / 2.0;
+  final innerRadius = max(1.0, radius * 0.4);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      final dist = (x + 0.5 - cx).abs() + (y + 0.5 - cy).abs();
+      if (dist <= radius && dist >= innerRadius) {
+        cells.add('$x,$y');
+      }
+    }
+  }
+  if (cells.length < 9) return _donut(w, h, random);
+  return cells;
+}
+
+/// X shape — thick diagonals.
+Set<String> _xShape(int w, int h, Random? random) {
+  final cells = <String>{};
+  final cx = w / 2.0;
+  final cy = h / 2.0;
+  final thickness = max(1.0, min(w, h) * 0.15);
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      final normX = (x + 0.5 - cx) / w;
+      final normY = (y + 0.5 - cy) / h;
+      final d1 = (normX - normY).abs() * w;
+      final d2 = (normX + normY).abs() * w;
+      if (d1 <= thickness || d2 <= thickness) {
+        cells.add('$x,$y');
+      }
+    }
+  }
+  if (cells.length < 9) return _cross(w, h, random);
   return cells;
 }

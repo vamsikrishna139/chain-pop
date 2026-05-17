@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import 'ad_debug_log.dart';
+
 /// Loads and anchors an adaptive [BannerAd] (e.g. calendar or pause overlay).
 ///
 /// [debugPlacementTag] is for logging only ([AdPlacements] constants).
@@ -35,6 +37,10 @@ class _DailyChallengeBannerSlotState extends State<DailyChallengeBannerSlot>
   Animation<double>? _fadeAnimation;
 
   Future<void> _loadAnchoredBanner(int logicalWidthDp) async {
+    adDebug(
+      'banner(${widget.debugPlacementTag}): '
+      'getAnchoredSize widthDp=$logicalWidthDp unit=${widget.adUnitId}',
+    );
     final bounded = logicalWidthDp.clamp(1, 1200);
     AnchoredAdaptiveBannerAdSize? size;
 
@@ -67,6 +73,10 @@ class _DailyChallengeBannerSlotState extends State<DailyChallengeBannerSlot>
             unawaited(advertisement.dispose());
             return;
           }
+          adDebug(
+            'banner(${widget.debugPlacementTag}): onAdLoaded '
+            'size=${advertisement.size.width}x${advertisement.size.height}',
+          );
           AnimationController? ctrl;
           Animation<double>? anim;
           final fade = widget.fadeInDuration;

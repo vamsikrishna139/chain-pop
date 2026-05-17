@@ -5,6 +5,7 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'board_layout.dart';
+import 'levels/grid_cell_key.dart';
 import 'levels/level.dart';
 import 'levels/level_manager.dart';
 import 'levels/level_solver.dart';
@@ -491,11 +492,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// set for all [activeNodes], then each node is checked via a ray walk only.
   void _rebuildExtractableIds() {
     _extractableIds.clear();
-    final positions = <String>{
-      for (final n in activeNodes) '${n.x},${n.y}',
+    final positions = <int>{
+      for (final n in activeNodes) gridCellKey(n.x, n.y),
     };
     for (final node in activeNodes) {
-      final key = '${node.x},${node.y}';
+      final key = gridCellKey(node.x, node.y);
       positions.remove(key);
       if (LevelSolver.canRemoveWithPositions(node, positions, levelData)) {
         _extractableIds.add(node.id);

@@ -1,5 +1,9 @@
 /// Barrel file exporting all classes from the generation subsystem.
 ///
+/// Prefer importing `difficulty_parameters.dart` (and other leaf libraries)
+/// directly when you only need tuning types — avoids accidental transitive
+/// coupling through this barrel.
+///
 /// Import this single file to access the entire generation API:
 /// ```dart
 /// import 'package:chain_pop/game/levels/generation/generation.dart';
