@@ -41,6 +41,28 @@ class GenerationError {
     return GenerationError._('unexpected', message);
   }
 
+  /// Greedy elimination exhausted every randomized elimination trial — the
+  /// `tryGreedyEliminationOrder` contract returns null honestly (no shuffle
+  /// fallback order).
+  factory GenerationError.greedyEliminationExhausted([String detail = '']) {
+    return GenerationError._(
+      'greedy_elimination_exhausted',
+      detail.isEmpty ? 'Greedy elimination exhausted' : detail,
+    );
+  }
+
+  /// Legacy greedy path could not assign backward-safe directions after a
+  /// valid elimination order was found.
+  factory GenerationError.greedyDirectionAssignmentFailed(
+      [String detail = '']) {
+    return GenerationError._(
+      'greedy_direction_assignment_failed',
+      detail.isEmpty
+          ? 'Greedy direction assignment failed'
+          : detail,
+    );
+  }
+
   @override
   String toString() => 'GenerationError($type): $message';
 }

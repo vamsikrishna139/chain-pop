@@ -19,7 +19,9 @@ import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
 
 void main() {
-  final generator = LevelGenerator();
+  // Property tests assert per-levelId determinism; the Phase-3 Director's
+  // diversity ledger is stateful across calls, so we disable it here.
+  final generator = LevelGenerator(enableDiversityGating: false);
 
   // Sample of level IDs spanning all difficulties: easy (1-9), medium (10-29), hard (30+)
   final sampleIds = [

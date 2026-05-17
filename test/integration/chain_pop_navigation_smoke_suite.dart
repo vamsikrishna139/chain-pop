@@ -40,7 +40,12 @@ void registerChainPopNavigationSmoke({
 
     await _pumpFrames(tester, frames: 45);
 
-    expect(find.text('Difficulty'), findsOneWidget);
+    // Main menu now uses a segmented difficulty control (no 'Difficulty'
+    // header label); assert the three mode chips are rendered instead.
+    // DifficultyExt.label uppercases the names (EASY / MEDIUM / HARD).
+    expect(find.text('EASY'), findsWidgets);
+    expect(find.text('MEDIUM'), findsWidgets);
+    expect(find.text('HARD'), findsWidgets);
     final play = find.text('Play');
     expect(play, findsOneWidget);
     await tester.ensureVisible(play.first);
