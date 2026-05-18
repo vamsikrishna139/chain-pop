@@ -155,7 +155,8 @@ class PastDailyUnlockDialog extends StatelessWidget {
           onPressed: onCancel,
           child: const Text(
             'NOT NOW',
-            style: TextStyle(color: Colors.white38, fontWeight: FontWeight.w700),
+            style:
+                TextStyle(color: Colors.white38, fontWeight: FontWeight.w700),
           ),
         ),
         const SizedBox(width: 8),

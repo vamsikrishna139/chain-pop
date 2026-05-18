@@ -13,6 +13,7 @@ class GameHeaderHud extends StatelessWidget {
   final VoidCallback onOpenSettings;
   final int livesRemaining;
   final DifficultyMode difficulty;
+
   /// When non-null, shown instead of [DifficultyLabel] (e.g. daily challenge).
   final String? headerModeLabel;
   final int removedNodes;

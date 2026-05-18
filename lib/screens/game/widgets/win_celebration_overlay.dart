@@ -40,7 +40,8 @@ class _WinCelebrationOverlayState extends State<WinCelebrationOverlay>
 
   List<_Particle> _generate(Size size) {
     final r = math.Random(
-      Object.hash(widget.accent.hashCode, size.width.round(), size.height.round()),
+      Object.hash(
+          widget.accent.hashCode, size.width.round(), size.height.round()),
     );
     final w = size.width;
     final h = size.height;
@@ -59,8 +60,11 @@ class _WinCelebrationOverlayState extends State<WinCelebrationOverlay>
     for (var i = 0; i < n; i++) {
       final c = colors[r.nextInt(colors.length)];
       final burst = r.nextDouble() < 0.42;
-      final ax = burst ? (w * (0.38 + r.nextDouble() * 0.24)) : r.nextDouble() * w;
-      final ay = burst ? (h * (0.12 + r.nextDouble() * 0.14)) : (-m * (0.04 + r.nextDouble() * 0.18));
+      final ax =
+          burst ? (w * (0.38 + r.nextDouble() * 0.24)) : r.nextDouble() * w;
+      final ay = burst
+          ? (h * (0.12 + r.nextDouble() * 0.14))
+          : (-m * (0.04 + r.nextDouble() * 0.18));
       final angle = burst
           ? (math.pi * 0.55 + (r.nextDouble() - 0.5) * math.pi * 1.15)
           : (r.nextDouble() - 0.5) * 0.55;
@@ -68,7 +72,9 @@ class _WinCelebrationOverlayState extends State<WinCelebrationOverlay>
           ? (m * (0.52 + r.nextDouble() * 0.85))
           : (m * (0.35 + r.nextDouble() * 0.55));
       final vx = burst ? (math.cos(angle) * sp) : (math.sin(angle) * m * 0.45);
-      final vy = burst ? (math.sin(angle) * sp * 0.85 + m * 0.12) : (m * (0.42 + r.nextDouble() * 0.55));
+      final vy = burst
+          ? (math.sin(angle) * sp * 0.85 + m * 0.12)
+          : (m * (0.42 + r.nextDouble() * 0.55));
 
       list.add(
         _Particle(
@@ -139,6 +145,7 @@ class _Particle {
   final Color color;
   final double swayPhase;
   final double swayAmp;
+
   /// 0 = back, 1 = front — affects opacity and size slightly.
   final double depth;
 
@@ -182,13 +189,19 @@ class _ConfettiPainter extends CustomPainter {
       }
       final rot = p.rot0 + p.rotSpeed * t;
       final fadeIn = Curves.easeOut.transform((progress * 1.4).clamp(0.0, 1.0));
-      final fadeOut = progress < 0.82 ? 1.0 : (1.0 - Curves.easeIn.transform(((progress - 0.82) / 0.18).clamp(0.0, 1.0)));
+      final fadeOut = progress < 0.82
+          ? 1.0
+          : (1.0 -
+              Curves.easeIn
+                  .transform(((progress - 0.82) / 0.18).clamp(0.0, 1.0)));
       final a = (0.55 + p.depth * 0.45) * fadeIn * fadeOut;
-      _drawPiece(canvas, Offset(x, y), rot, p.width, p.height, p.color.withValues(alpha: a));
+      _drawPiece(canvas, Offset(x, y), rot, p.width, p.height,
+          p.color.withValues(alpha: a));
     }
   }
 
-  void _drawPiece(Canvas canvas, Offset c, double rot, double w, double h, Color color) {
+  void _drawPiece(
+      Canvas canvas, Offset c, double rot, double w, double h, Color color) {
     final paint = Paint()..color = color;
     canvas.save();
     canvas.translate(c.dx, c.dy);

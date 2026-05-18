@@ -28,8 +28,9 @@ class _TimerBadgeState extends State<_TimerBadge>
       vsync: this,
       duration: const Duration(milliseconds: 450),
     );
-    final frac =
-        widget.timeLimitSec > 0 ? widget.timeLeftSec / widget.timeLimitSec : 0.0;
+    final frac = widget.timeLimitSec > 0
+        ? widget.timeLeftSec / widget.timeLimitSec
+        : 0.0;
     if (frac < 0.22) {
       _pulse.repeat(reverse: true);
     }
@@ -38,8 +39,9 @@ class _TimerBadgeState extends State<_TimerBadge>
   @override
   void didUpdateWidget(covariant _TimerBadge oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final frac =
-        widget.timeLimitSec > 0 ? widget.timeLeftSec / widget.timeLimitSec : 0.0;
+    final frac = widget.timeLimitSec > 0
+        ? widget.timeLeftSec / widget.timeLimitSec
+        : 0.0;
     final urgent = frac < 0.22;
     if (urgent && !_pulse.isAnimating) {
       _pulse.repeat(reverse: true);
@@ -57,8 +59,9 @@ class _TimerBadgeState extends State<_TimerBadge>
 
   @override
   Widget build(BuildContext context) {
-    final frac =
-        widget.timeLimitSec > 0 ? widget.timeLeftSec / widget.timeLimitSec : 0.0;
+    final frac = widget.timeLimitSec > 0
+        ? widget.timeLeftSec / widget.timeLimitSec
+        : 0.0;
     final urgent = frac < 0.22;
     final c = frac < 0.20
         ? AppColors.timerWarning
