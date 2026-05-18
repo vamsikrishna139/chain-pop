@@ -85,6 +85,10 @@ class GameScreen extends StatefulWidget {
   final LevelData Function(int level, DifficultyMode mode)?
       campaignLevelBuilder;
 
+  /// When true, skip starting countdown / HUD tick / ghost-hint timers. Used by
+  /// automated screenshot and widget tests so the test binding can idle.
+  final bool suppressGameplayTimers;
+
   const GameScreen({
     super.key,
     required this.level,
@@ -100,6 +104,7 @@ class GameScreen extends StatefulWidget {
     this.campaignStreak,
     this.storage,
     this.campaignLevelBuilder,
+    this.suppressGameplayTimers = false,
   }) : assert(
           !isDailyChallenge || (dailyDayKey != null && fixedLevel != null),
         ),
@@ -260,9 +265,11 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     if (!_stopwatch.isRunning) _stopwatch.start();
 
     _buildGame();
-    _timerController.startCountdown();
-    _timerController.resetGhostHintTimer();
-    _timerController.startEasyHudTimer();
+    if (!widget.suppressGameplayTimers) {
+      _timerController.startCountdown();
+      _timerController.resetGhostHintTimer();
+      _timerController.startEasyHudTimer();
+    }
     unawaited(_audio.startAmbientIfEnabled(_settings.soundEnabled));
 
     _adCoordinator.preloadForLevelStartup();
@@ -354,9 +361,11 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       unawaited(
         _audio.setAmbientGameplayPaused(false, _settings.soundEnabled),
       );
-      _timerController.startCountdown();
-      _timerController.resetGhostHintTimer();
-      _timerController.startEasyHudTimer();
+      if (!widget.suppressGameplayTimers) {
+        _timerController.startCountdown();
+        _timerController.resetGhostHintTimer();
+        _timerController.startEasyHudTimer();
+      }
     } else {
       _engine.pauseEngine();
       _stopwatch.stop();

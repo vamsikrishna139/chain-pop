@@ -1,6 +1,9 @@
+import 'package:chain_pop/game/levels/analytics/generation_analytics.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/game/levels/generation/level_configuration.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/level_validator.dart';
+import 'package:chain_pop/game/levels/generation/silhouettes.dart';
 import 'package:chain_pop/game/levels/generation/validation_result.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +13,12 @@ void main() {
     late LevelGenerator generator;
 
     setUp(() {
-      generator = LevelGenerator();
+      // Phase-3 note: the Director's diversity ledger is stateful across
+      // calls in the same generator. These tests assert per-levelId
+      // determinism (calling `generate(id)` twice → same level), which only
+      // holds when the ledger does NOT mutate the second call's path. We
+      // therefore disable the ledger here.
+      generator = LevelGenerator(enableDiversityGating: false);
     });
 
     group('generate returns success for valid level IDs', () {
@@ -56,6 +64,54 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         expect(result.value.levelId, equals(1000));
+      });
+    });
+
+    group('Hard campaign diversity (primary acceptance)', () {
+      test(
+          'levels 1–20: sliding windows of 5 are not single-family locked-in '
+          'and no family appears more than 3 times per window',
+          () {
+        final sink = InMemoryAnalyticsSink();
+        final gen = LevelGenerator(
+          enableDiversityGating: true,
+          analyticsSink: sink,
+        );
+        for (var levelId = 1; levelId <= 20; levelId++) {
+          final cfg = LevelConfiguration.fromLevelId(
+            levelId,
+            mode: DifficultyMode.hard,
+          );
+          final r = gen.generateFromConfiguration(
+            cfg,
+            primarySeed: 9000 + levelId * 31,
+            applyMilestones: false,
+          );
+          expect(r.isSuccess, isTrue, reason: 'level $levelId');
+        }
+        expect(sink.events.length, equals(20),
+            reason: 'each hard emission should produce one analytics event');
+        final families = [
+          for (final e in sink.events) silhouetteVisualFamily(e.silhouette),
+        ];
+        for (var i = 0; i <= families.length - 5; i++) {
+          final w = families.sublist(i, i + 5);
+          expect(
+            w.toSet().length,
+            greaterThan(1),
+            reason:
+                'window $i should not be single-family (${w.map((f) => f.name)})',
+          );
+          for (final fam in SilhouetteVisualFamily.values) {
+            final n = w.where((e) => e == fam).length;
+            expect(
+              n,
+              lessThanOrEqualTo(3),
+              reason: 'family ${fam.name} dominates window $i '
+                  '(${w.map((f) => f.name)})',
+            );
+          }
+        }
       });
     });
 
@@ -234,19 +290,20 @@ void main() {
     });
 
     group('retry logic', () {
-      test('returns fallback level after max retries with failing validator', () {
-        // Create a validator that always fails
+      test(
+          'returns typed error after max retries with failing validator '
+          '(Phase 3 retired the monotone fallback)', () {
+        // Phase 3 retired _generateFallbackLevel. With an always-failing
+        // validator, generation must now surface a `GenerationError` instead
+        // of synthesising a monotone fallback level. The expectation
+        // flipped from `isSuccess` → `isError` accordingly.
         final alwaysFailValidator = _AlwaysFailValidator();
         final generatorWithFailValidator = LevelGenerator(
           validator: alwaysFailValidator,
+          enableDiversityGating: false,
         );
-
         final result = generatorWithFailValidator.generate(42);
-
-        // Should still succeed (returns fallback level)
-        expect(result.isSuccess, isTrue);
-        expect(result.value.levelId, equals(42));
-        expect(result.value.nodes, isNotEmpty);
+        expect(result.isError, isTrue);
       });
 
       test('succeeds on first attempt with valid validator', () {
