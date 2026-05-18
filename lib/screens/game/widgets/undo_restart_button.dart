@@ -183,9 +183,7 @@ class _UndoRestartButtonState extends State<UndoRestartButton>
                       Transform.rotate(
                         angle: v * 2 * 3.14159265,
                         child: Icon(
-                          v > 0.1
-                              ? Icons.refresh_rounded
-                              : Icons.undo_rounded,
+                          v > 0.1 ? Icons.refresh_rounded : Icons.undo_rounded,
                           color: Color.lerp(
                             hasUndo ? Colors.white70 : Colors.white24,
                             widget.accent,
