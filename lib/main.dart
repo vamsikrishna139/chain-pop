@@ -18,6 +18,9 @@ import 'services/crash_reporting.dart';
 import 'services/game_audio.dart';
 import 'services/game_audio_scope.dart';
 import 'services/storage_service.dart';
+import 'services/subscription/no_op_subscription_service.dart';
+import 'services/subscription/revenue_cat_subscription_service.dart';
+import 'services/subscription/subscription_locator.dart';
 import 'theme/app_colors.dart';
 
 /// Hive, storage, Firebase (optional), ads SDK — call before [runApp] or before
@@ -58,9 +61,16 @@ Future<void> main() async {
 /// **Mobile Ads:** UMP consent → [RequestConfiguration] (test device ids) →
 /// `MobileAds.instance.initialize()` here, then [AdService.bootstrap] only preloads.
 Future<void> _bootstrapThirdPartySdks() async {
+  // 1. Initialize Subscription Service
+  final subService = kIsWeb ? NoOpSubscriptionService() : RevenueCatSubscriptionService();
+  SubscriptionLocator.install(subService);
+  await subService.init();
+
   if (!kIsWeb) {
     const mockAds = bool.fromEnvironment('MOCK_ADS', defaultValue: false);
-    if (!mockAds &&
+    final isPremium = subService.isPremium.value;
+
+    if (!mockAds && !isPremium &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS)) {
       await requestAdsConsentIfApplicable();
@@ -71,6 +81,8 @@ Future<void> _bootstrapThirdPartySdks() async {
       if (kDebugMode) {
         debugPrint('MobileAds SDK initialized after consent + test device ids.');
       }
+    } else if (isPremium && kDebugMode) {
+      debugPrint('MobileAds SDK initialization skipped (Premium User).');
     }
   }
 
@@ -105,7 +117,7 @@ class _ChainPopAppState extends State<ChainPopApp> {
     return ChainPopAudioScope(
       uiAudio: _menuUiAudio,
       child: MaterialApp(
-        title: 'Chain Pop',
+        title: 'Unbound: Arrow Puzzle',
         theme: ThemeData(
           brightness: Brightness.dark,
           scaffoldBackgroundColor: AppColors.background,

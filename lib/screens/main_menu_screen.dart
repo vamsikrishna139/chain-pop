@@ -15,6 +15,7 @@ import '../utils/progress_format.dart';
 import 'daily_challenge_calendar_screen.dart';
 import 'game_screen.dart';
 import 'level_select_screen.dart';
+import 'widgets/home_settings_sheet.dart';
 
 /// Home hub: Material 3 surfaces, segmented difficulty, clear progression.
 ///
@@ -189,7 +190,31 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                       sliver: SliverList(
                         delegate: SliverChildListDelegate([
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Unbound',
+                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                      fontWeight: FontWeight.w900,
+                                      color: accent,
+                                      letterSpacing: 1.2,
+                                    ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.settings_outlined),
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                onPressed: () {
+                                  showHomeSettingsSheet(
+                                    context: context,
+                                    accent: accent,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
                           _DifficultySegmented(
                             selected: _selected,
                             onChanged: _selectDifficulty,
@@ -198,12 +223,6 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                           _ProgressionCard(
                             mode: _selected,
                             totalStars: _totalStarsForMode(_selected),
-                          ),
-                          const SizedBox(height: 12),
-                          _CrossTrackStarsRow(
-                            selected: _selected,
-                            totalStarsFor: _totalStarsForMode,
-                            onSelectMode: (m) => unawaited(_selectDifficulty(m)),
                           ),
                           const SizedBox(height: 20),
                           _DailyChallengeCard(
@@ -322,9 +341,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                               ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 16),
                           Center(
                             child: Semantics(
                               button: true,
@@ -774,84 +793,3 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-// ── Other tracks at a glance ─────────────────────────────────────────────────
-
-class _CrossTrackStarsRow extends StatelessWidget {
-  final DifficultyMode selected;
-  final int Function(DifficultyMode) totalStarsFor;
-  final void Function(DifficultyMode) onSelectMode;
-
-  const _CrossTrackStarsRow({
-    required this.selected,
-    required this.totalStarsFor,
-    required this.onSelectMode,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    return Row(
-      children: DifficultyMode.values.map((m) {
-        final stars = totalStarsFor(m);
-        final isSel = m == selected;
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Material(
-              color: isSel
-                  ? m.color.withValues(alpha: 0.14)
-                  : cs.surfaceContainer,
-              borderRadius: BorderRadius.circular(14),
-              child: InkWell(
-                onTap: () => onSelectMode(m),
-                borderRadius: BorderRadius.circular(14),
-                splashColor: m.color.withValues(alpha: 0.2),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isSel
-                          ? m.color.withValues(alpha: 0.45)
-                          : cs.outline.withValues(alpha: 0.25),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.star_rounded,
-                        size: 18,
-                        color: stars > 0 ? AppColors.starGold : cs.outline,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        ProgressFormat.starsCompact(stars),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                          color: isSel ? m.color : cs.onSurface,
-                        ),
-                      ),
-                      Text(
-                        m.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.4,
-                          color: cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}

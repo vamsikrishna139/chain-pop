@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 /// Animated splash screen shown on app launch.
 ///
-/// Shows the Chain Pop logo with a glowing chevron animation,
+/// Shows the "Escaping Arrow" Unbound logo,
 /// then smoothly transitions to [nextScreen] after a short delay.
 class SplashScreen extends StatefulWidget {
   final Widget nextScreen;
@@ -20,66 +21,94 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
   late final AnimationController _logoController;
-  late final AnimationController _glowController;
   late final AnimationController _textController;
+  late final AnimationController _breathController;
   late final AnimationController _fadeOutController;
 
-  late final Animation<double> _logoScale;
-  late final Animation<double> _logoOpacity;
-  late final Animation<double> _glowPulse;
-  late final Animation<double> _textOpacity;
-  late final Animation<Offset> _textSlide;
+  late final Animation<double> _sparkOpacity;
+  late final Animation<double> _boxDraw;
+  late final Animation<double> _arrowDraw;
+
+  late final Animation<double> _titleOpacity;
+  late final Animation<double> _titleSpacing;
+  late final Animation<Offset> _titleSlide;
+  late final Animation<double> _sloganOpacity;
+  late final Animation<double> _breathSpacing;
   late final Animation<double> _fadeOut;
 
-  // Particle system for floating arrow shapes
-  late final List<_FloatingParticle> _particles;
+  late final List<_FloatingDust> _particles;
   late final AnimationController _particleController;
 
   @override
   void initState() {
     super.initState();
 
-    // ── Logo entrance ──
     _logoController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 1500),
     );
-    _logoScale = CurvedAnimation(
-      parent: _logoController,
-      curve: Curves.elasticOut,
-    );
-    _logoOpacity = Tween<double>(begin: 0, end: 1).animate(
+
+    _sparkOpacity = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
         parent: _logoController,
-        curve: const Interval(0, 0.5, curve: Curves.easeOut),
+        curve: const Interval(0.0, 0.15, curve: Curves.easeOut),
       ),
     );
 
-    // ── Glow pulse ──
-    _glowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    );
-    _glowPulse = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    _boxDraw = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _logoController,
+        curve: const Interval(0.12, 0.55, curve: Curves.easeInOutCubic),
+      ),
     );
 
-    // ── Text slide in ──
+    _arrowDraw = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _logoController,
+        curve: const Interval(0.48, 0.92, curve: Curves.easeOutCubic),
+      ),
+    );
+
     _textController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 1100),
     );
-    _textOpacity = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _textController, curve: Curves.easeOut),
+    _titleOpacity = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _textController,
+        curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
+      ),
     );
-    _textSlide = Tween<Offset>(
-      begin: const Offset(0, 0.3),
+    _titleSpacing = Tween<double>(begin: 1.0, end: 6.0).animate(
+      CurvedAnimation(
+        parent: _textController,
+        curve: const Interval(0.0, 0.7, curve: Curves.easeOutCubic),
+      ),
+    );
+    _titleSlide = Tween<Offset>(
+      begin: const Offset(0, 0.15),
       end: Offset.zero,
     ).animate(
-      CurvedAnimation(parent: _textController, curve: Curves.easeOutCubic),
+      CurvedAnimation(
+        parent: _textController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic),
+      ),
+    );
+    _sloganOpacity = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _textController,
+        curve: const Interval(0.45, 1.0, curve: Curves.easeOut),
+      ),
     );
 
-    // ── Fade out transition ──
+    _breathController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    );
+    _breathSpacing = Tween<double>(begin: 5.5, end: 7.5).animate(
+      CurvedAnimation(parent: _breathController, curve: Curves.easeInOut),
+    );
+
     _fadeOutController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
@@ -88,27 +117,27 @@ class _SplashScreenState extends State<SplashScreen>
       CurvedAnimation(parent: _fadeOutController, curve: Curves.easeInCubic),
     );
 
-    // ── Floating particles ──
     _particleController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 10),
     )..repeat();
     final rng = Random(42);
-    _particles = List.generate(12, (_) => _FloatingParticle(rng));
+    _particles = List.generate(18, (_) => _FloatingDust(rng));
 
-    // ── Choreography ──
     _startAnimation();
   }
 
   Future<void> _startAnimation() async {
-    await Future.delayed(const Duration(milliseconds: 200));
+    await Future.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
     _logoController.forward();
-    _glowController.repeat(reverse: true);
 
-    await Future.delayed(const Duration(milliseconds: 600));
+    await Future.delayed(const Duration(milliseconds: 850));
+    if (!mounted) return;
     _textController.forward();
+    _breathController.repeat(reverse: true);
 
-    await Future.delayed(const Duration(milliseconds: 1800));
+    await Future.delayed(const Duration(milliseconds: 2300));
     if (!mounted) return;
 
     _fadeOutController.forward().then((_) {
@@ -116,7 +145,7 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (_, __, ___) => widget.nextScreen,
-          transitionDuration: const Duration(milliseconds: 400),
+          transitionDuration: const Duration(milliseconds: 500),
           transitionsBuilder: (_, animation, __, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -128,8 +157,8 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void dispose() {
     _logoController.dispose();
-    _glowController.dispose();
     _textController.dispose();
+    _breathController.dispose();
     _fadeOutController.dispose();
     _particleController.dispose();
     super.dispose();
@@ -138,115 +167,93 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _fadeOut,
+      animation: Listenable.merge([_fadeOut, _breathController]),
       builder: (context, child) {
+        final letterSpacing = _textController.isCompleted
+            ? _breathSpacing.value
+            : _titleSpacing.value;
+
         return Opacity(
           opacity: _fadeOut.value,
           child: Scaffold(
             backgroundColor: AppColors.background,
             body: Stack(
               children: [
-                // Floating particle background
                 AnimatedBuilder(
                   animation: _particleController,
                   builder: (context, _) {
                     return CustomPaint(
                       size: MediaQuery.of(context).size,
-                      painter: _ParticlePainter(
+                      painter: _DustPainter(
                         _particles,
                         _particleController.value,
                       ),
                     );
                   },
                 ),
-
-                // Radial glow behind logo
-                Center(
-                  child: AnimatedBuilder(
-                    animation: _glowPulse,
-                    builder: (context, _) {
-                      return Container(
-                        width: 280,
-                        height: 280,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              AppColors.accentEasy.withValues(
-                                alpha: 0.12 * _glowPulse.value,
-                              ),
-                              AppColors.accentEasy.withValues(
-                                alpha: 0.04 * _glowPulse.value,
-                              ),
-                              Colors.transparent,
-                            ],
-                            stops: const [0.0, 0.5, 1.0],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-
-                // Logo + text
                 Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Chevron icon
                       AnimatedBuilder(
                         animation: _logoController,
                         builder: (context, child) {
-                          return Opacity(
-                            opacity: _logoOpacity.value,
-                            child: Transform.scale(
-                              scale: _logoScale.value,
-                              child: child,
+                          return CustomPaint(
+                            size: const Size(128, 128),
+                            painter: _EscapingArrowPainter(
+                              sparkOpacity: _sparkOpacity.value,
+                              boxDraw: _boxDraw.value,
+                              arrowDraw: _arrowDraw.value,
+                              accentColor: AppColors.accentEasy,
                             ),
                           );
                         },
-                        child: _buildChevronLogo(),
                       ),
-
-                      const SizedBox(height: 32),
-
-                      // Title text
-                      SlideTransition(
-                        position: _textSlide,
-                        child: FadeTransition(
-                          opacity: _textOpacity,
-                          child: Column(
-                            children: [
-                              Text(
-                                'CHAIN POP',
-                                style: TextStyle(
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 4,
-                                  color: Colors.white,
-                                  shadows: [
-                                    Shadow(
-                                      color: AppColors.accentEasy
-                                          .withValues(alpha: 0.5),
-                                      blurRadius: 20,
+                      const SizedBox(height: 44),
+                      AnimatedBuilder(
+                        animation: _textController,
+                        builder: (context, child) {
+                          return SlideTransition(
+                            position: _titleSlide,
+                            child: Column(
+                              children: [
+                                Opacity(
+                                  opacity: _titleOpacity.value,
+                                  child: Text(
+                                    'UNBOUND',
+                                    style: TextStyle(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: letterSpacing,
+                                      color: Colors.white,
+                                      shadows: [
+                                        Shadow(
+                                          color: AppColors.accentEasy
+                                              .withValues(alpha: 0.35),
+                                          blurRadius: 18,
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                'Clear the board. Chain the pops.',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w400,
-                                  letterSpacing: 0.5,
-                                  color:
-                                      Colors.white.withValues(alpha: 0.55),
+                                const SizedBox(height: 14),
+                                Opacity(
+                                  opacity: _sloganOpacity.value,
+                                  child: Text(
+                                    'Find the path. Free the board.',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.8,
+                                      color:
+                                          Colors.white.withValues(alpha: 0.55),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -258,117 +265,175 @@ class _SplashScreenState extends State<SplashScreen>
       },
     );
   }
-
-  Widget _buildChevronLogo() {
-    return AnimatedBuilder(
-      animation: _glowPulse,
-      builder: (context, _) {
-        return CustomPaint(
-          size: const Size(100, 100),
-          painter: _ChevronPainter(glow: _glowPulse.value),
-        );
-      },
-    );
-  }
 }
 
-// ── Chevron painter ──────────────────────────────────────────────────────────
+// ── Escaping Arrow Painter ───────────────────────────────────────────────────
 
-class _ChevronPainter extends CustomPainter {
-  final double glow;
+class _EscapingArrowPainter extends CustomPainter {
+  final double sparkOpacity;
+  final double boxDraw;
+  final double arrowDraw;
+  final Color accentColor;
 
-  _ChevronPainter({required this.glow});
+  _EscapingArrowPainter({
+    required this.sparkOpacity,
+    required this.boxDraw,
+    required this.arrowDraw,
+    required this.accentColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height / 2;
-    final scale = size.width / 100;
+    const maxHalf = 36.0;
+    const strokeWidth = 3.5;
+    const cornerGap = 14.0;
+
+    // 1. Spark — fades as the boundary begins to form
+    if (sparkOpacity > 0) {
+      final sparkAlpha = sparkOpacity * (1.0 - boxDraw * 0.85);
+      if (sparkAlpha > 0.01) {
+        final sparkGlow = Paint()
+          ..color = accentColor.withValues(alpha: sparkAlpha * 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+        final sparkCore = Paint()
+          ..color = accentColor.withValues(alpha: sparkAlpha);
+        canvas.drawCircle(Offset(cx, cy), 5, sparkGlow);
+        canvas.drawCircle(Offset(cx, cy), 2.5, sparkCore);
+      }
+    }
+
+    final half = maxHalf * boxDraw;
+    if (half < 0.5) return;
+
+    final bl = Offset(cx - half, cy + half);
+    final tl = Offset(cx - half, cy - half);
+    final tr = Offset(cx + half, cy - half);
+    final br = Offset(cx + half, cy + half);
+    final topEnd = Offset(tr.dx - cornerGap, tr.dy);
+    final rightStart = Offset(tr.dx, tr.dy + cornerGap);
+
+    // 2. Square boundary — thin, muted, with a gap at the top-right corner
+    final boxPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.28 * boxDraw)
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final boundary = Path()
+      ..moveTo(bl.dx, bl.dy)
+      ..lineTo(tl.dx, tl.dy)
+      ..lineTo(topEnd.dx, topEnd.dy)
+      ..moveTo(rightStart.dx, rightStart.dy)
+      ..lineTo(br.dx, br.dy)
+      ..lineTo(bl.dx, bl.dy);
+
+    canvas.drawPath(boundary, boxPaint);
+
+    // 3. Arrow breaking out through the top-right gap
+    if (arrowDraw <= 0) return;
+
+    final arrowStart = Offset(cx - half * 0.15, cy + half * 0.15);
+    final arrowEnd = Offset(
+      cx + half + cornerGap * 0.6,
+      cy - half - cornerGap * 0.6,
+    );
+
+    final arrowBody = Path()
+      ..moveTo(arrowStart.dx, arrowStart.dy)
+      ..lineTo(arrowEnd.dx, arrowEnd.dy);
+
+    final metrics = arrowBody.computeMetrics().first;
+    final drawnArrow = metrics.extractPath(0, metrics.length * arrowDraw);
 
     final glowPaint = Paint()
-      ..color = AppColors.accentEasy.withValues(alpha: 0.3 * glow)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 16 * scale);
+      ..color = accentColor.withValues(alpha: 0.45 * arrowDraw)
+      ..strokeWidth = strokeWidth + 5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
 
-    final mainPaint = Paint()
-      ..strokeWidth = 6 * scale
+    final arrowPaint = Paint()
+      ..color = accentColor
+      ..strokeWidth = strokeWidth + 0.5
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          AppColors.accentEasy,
-          AppColors.accentEasy.withValues(alpha: 0.7),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      ..style = PaintingStyle.stroke;
 
-    // First chevron
-    final path1 = Path()
-      ..moveTo(cx - 22 * scale, cy - 24 * scale)
-      ..lineTo(cx + 2 * scale, cy)
-      ..lineTo(cx - 22 * scale, cy + 24 * scale);
+    canvas.drawPath(drawnArrow, glowPaint);
+    canvas.drawPath(drawnArrow, arrowPaint);
 
-    // Second chevron
-    final path2 = Path()
-      ..moveTo(cx, cy - 24 * scale)
-      ..lineTo(cx + 24 * scale, cy)
-      ..lineTo(cx, cy + 24 * scale);
+    if (arrowDraw > 0.72) {
+      final headT = ((arrowDraw - 0.72) / 0.28).clamp(0.0, 1.0);
+      const headLen = 11.0;
+      const dir = Offset(1, -1);
+      final mag = dir.distance;
+      final unit = Offset(dir.dx / mag, dir.dy / mag);
+      final tip = arrowEnd;
+      final wingA = tip - unit * headLen + Offset(-unit.dy, unit.dx) * headLen * 0.55;
+      final wingB = tip - unit * headLen - Offset(-unit.dy, unit.dx) * headLen * 0.55;
 
-    // Draw glow
-    canvas.drawPath(path1, glowPaint);
-    canvas.drawPath(path2, glowPaint);
+      final head = Path()
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(lerpDouble(wingA.dx, tip.dx, headT)!, lerpDouble(wingA.dy, tip.dy, headT)!)
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(lerpDouble(wingB.dx, tip.dx, headT)!, lerpDouble(wingB.dy, tip.dy, headT)!);
 
-    // Draw main
-    canvas.drawPath(path1, mainPaint);
-    canvas.drawPath(path2, mainPaint);
+      canvas.drawPath(head, glowPaint);
+      canvas.drawPath(head, arrowPaint);
+    }
   }
 
   @override
-  bool shouldRepaint(_ChevronPainter old) => old.glow != glow;
+  bool shouldRepaint(_EscapingArrowPainter old) =>
+      old.sparkOpacity != sparkOpacity ||
+      old.boxDraw != boxDraw ||
+      old.arrowDraw != arrowDraw ||
+      old.accentColor != accentColor;
 }
 
-// ── Floating particles ───────────────────────────────────────────────────────
+// ── Subtle floating dust ─────────────────────────────────────────────────────
 
-class _FloatingParticle {
+class _FloatingDust {
   final double x;
   final double y;
   final double speed;
   final double size;
   final double opacity;
-  final int colorIndex;
+  final double swayOffset;
 
-  _FloatingParticle(Random rng)
+  _FloatingDust(Random rng)
       : x = rng.nextDouble(),
         y = rng.nextDouble(),
-        speed = 0.2 + rng.nextDouble() * 0.6,
-        size = 3 + rng.nextDouble() * 6,
-        opacity = 0.06 + rng.nextDouble() * 0.12,
-        colorIndex = rng.nextInt(AppColors.nodePalette.length);
+        speed = 0.08 + rng.nextDouble() * 0.14,
+        size = 1 + rng.nextDouble() * 2,
+        opacity = 0.04 + rng.nextDouble() * 0.1,
+        swayOffset = rng.nextDouble() * pi * 2;
 }
 
-class _ParticlePainter extends CustomPainter {
-  final List<_FloatingParticle> particles;
+class _DustPainter extends CustomPainter {
+  final List<_FloatingDust> particles;
   final double time;
 
-  _ParticlePainter(this.particles, this.time);
+  _DustPainter(this.particles, this.time);
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final p in particles) {
-      final py = ((p.y + time * p.speed) % 1.2) * size.height - 0.1 * size.height;
-      final px = p.x * size.width +
-          sin((time + p.y) * pi * 2) * 20;
+      final py = size.height -
+          ((p.y * size.height + time * size.height * p.speed) % size.height);
+      final px = p.x * size.width + sin(time * pi * 2 + p.swayOffset) * 12;
 
       final paint = Paint()
-        ..color = AppColors.nodePalette[p.colorIndex]
-            .withValues(alpha: p.opacity)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+        ..color = Colors.white.withValues(alpha: p.opacity)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2);
 
       canvas.drawCircle(Offset(px, py), p.size, paint);
     }
   }
 
   @override
-  bool shouldRepaint(_ParticlePainter old) => true;
+  bool shouldRepaint(_DustPainter old) => old.time != time;
 }
