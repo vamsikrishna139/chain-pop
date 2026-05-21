@@ -18,8 +18,18 @@ Future<void> requestAdsConsentIfApplicable() async {
 
   adDebug('UMP: requestConsentInfoUpdate starting');
   final done = Completer<void>();
+  
+  final params = ConsentRequestParameters(
+    consentDebugSettings: kDebugMode
+        ? ConsentDebugSettings(
+            debugGeography: DebugGeography.debugGeographyEea,
+            testIdentifiers: ['698E8E4CEB6E2D57599CAB6E8F9459A9'],
+          )
+        : null,
+  );
+
   ConsentInformation.instance.requestConsentInfoUpdate(
-    ConsentRequestParameters(),
+    params,
     () {
       adDebug('UMP: consent info updated, may show form');
       unawaited(_presentConsentThen(done));
@@ -32,7 +42,15 @@ Future<void> requestAdsConsentIfApplicable() async {
       if (!done.isCompleted) done.complete();
     },
   );
-  await done.future;
+  
+  await done.future.timeout(
+    const Duration(seconds: 10),
+    onTimeout: () {
+      adDebug('UMP: Consent timed out — proceeding.');
+      if (kDebugMode) debugPrint('UMP: Consent timed out — proceeding.');
+      if (!done.isCompleted) done.complete();
+    },
+  );
   adDebug('UMP: flow finished (proceed to MobileAds.initialize)');
 }
 
@@ -48,4 +66,29 @@ Future<void> _presentConsentThen(Completer<void> done) async {
   } finally {
     if (!done.isCompleted) done.complete();
   }
+}
+
+/// Checks if the privacy options form is required to be shown (e.g., in GDPR regions).
+Future<bool> isPrivacyOptionsRequired() async {
+  final status = await ConsentInformation.instance.getPrivacyOptionsRequirementStatus();
+  return status == PrivacyOptionsRequirementStatus.required;
+}
+
+/// Presents the privacy options form so the user can change their consent later.
+Future<void> showPrivacyOptionsForm() async {
+  final done = Completer<void>();
+  ConsentForm.showPrivacyOptionsForm((FormError? formError) {
+    if (formError != null) {
+      adDebug('UMP: privacy options form error: ${formError.message}');
+      if (kDebugMode) {
+        debugPrint('UMP privacy options form error: ${formError.message}');
+      }
+    } else {
+      // The MobileAds SDK automatically uses the updated consent status
+      // for the next ad request. No hard restart is strictly required.
+      adDebug('UMP: privacy options form closed. Next ad request will use updated consent.');
+    }
+    if (!done.isCompleted) done.complete();
+  });
+  return done.future;
 }

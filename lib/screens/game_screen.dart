@@ -396,6 +396,13 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     if (_isPaused) return;
     _engine.playSfx(GameSfx.uiTap);
     if (!mounted) return;
+    
+    _stopwatch.stop();
+    _timers.countdownTimer?.cancel();
+    _timers.ghostHintTimer?.cancel();
+    _timers.easyHudTimer?.cancel();
+    _engine.pauseEngine();
+
     final accent = widget.difficulty.color;
     await showGameSettingsSheet(
       context: context,
@@ -408,6 +415,17 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         await _gameStorage.saveGameSettings(_settings);
       },
     );
+
+    if (!mounted) return;
+    if (!_isPaused) {
+      _engine.resumeEngine();
+      if (!_stopwatch.isRunning) _stopwatch.start();
+      if (!widget.suppressGameplayTimers) {
+        _timerController.startCountdown();
+        _timerController.resetGhostHintTimer();
+        _timerController.startEasyHudTimer();
+      }
+    }
   }
 
   String _tutorialHintText() {

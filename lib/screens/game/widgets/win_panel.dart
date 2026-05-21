@@ -18,8 +18,10 @@ class WinPanel extends StatefulWidget {
   final VoidCallback onMenu;
   final VoidCallback onRetry;
   final VoidCallback onNext;
+
   /// When false, hides auto-advance copy and the Next button (daily puzzle).
   final bool showNextAndAutoAdvance;
+
   /// Replaces the default `LEVEL … · MODE` caption when non-null.
   final String? titleLine;
 
@@ -156,7 +158,8 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
                       shadows: earned
                           ? [
                               Shadow(
-                                color: AppColors.starGold.withValues(alpha: 0.7),
+                                color:
+                                    AppColors.starGold.withValues(alpha: 0.7),
                                 blurRadius: 16,
                               )
                             ]

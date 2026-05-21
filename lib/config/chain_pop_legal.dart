@@ -5,7 +5,13 @@
 abstract final class ChainPopLegal {
   static const privacyPolicyUrl = String.fromEnvironment(
     'CHAINPOP_PRIVACY_POLICY_URL',
-    defaultValue:
-        'https://gist.github.com/vamsikrishna139/426c736eb50f35cb125b37f64259f925',
+    defaultValue: 'https://sites.google.com/view/mindglow-studios/home',
+  );
+
+  /// Note: If you change this email, you must also manually update the contact
+  /// email address in `docs/privacy.md`.
+  static const supportEmail = String.fromEnvironment(
+    'CHAINPOP_SUPPORT_EMAIL',
+    defaultValue: 'adbkv.apps@gmail.com',
   );
 }

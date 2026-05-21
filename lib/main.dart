@@ -13,6 +13,7 @@ import 'services/ads/ad_debug_log.dart';
 import 'services/ads/admob_config.dart';
 import 'services/ads/ad_service_factory.dart';
 import 'services/ads/ads_locator.dart';
+import 'services/ads/ump_consent.dart';
 import 'services/crash_reporting.dart';
 import 'services/game_audio.dart';
 import 'services/game_audio_scope.dart';
@@ -62,7 +63,7 @@ Future<void> _bootstrapThirdPartySdks() async {
     if (!mockAds &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS)) {
-      await _gatherConsent();
+      await requestAdsConsentIfApplicable();
       await MobileAds.instance.updateRequestConfiguration(
         RequestConfiguration(testDeviceIds: kAdmobTestDeviceIds),
       );
@@ -82,59 +83,6 @@ Future<void> _bootstrapThirdPartySdks() async {
   await ads.bootstrap();
   adDebug('main: ads.bootstrap() finished');
 }
-
-/// GDPR / UMP — must complete before [MobileAds.instance.initialize].
-Future<void> _gatherConsent() async {
-  if (kIsWeb) return;
-  if (!(defaultTargetPlatform == TargetPlatform.android ||
-      defaultTargetPlatform == TargetPlatform.iOS)) {
-    return;
-  }
-  final completer = Completer<void>();
-  try {
-    final params = ConsentRequestParameters(
-      consentDebugSettings: kDebugMode
-          ? ConsentDebugSettings(
-              debugGeography: DebugGeography.debugGeographyEea,
-              testIdentifiers: ['698E8E4CEB6E2D57599CAB6E8F9459A9'],
-            )
-          : null,
-    );
-
-    ConsentInformation.instance.requestConsentInfoUpdate(
-      params,
-      () async {
-        if (await ConsentInformation.instance.isConsentFormAvailable()) {
-          ConsentForm.loadAndShowConsentFormIfRequired((formError) {
-            if (formError != null && kDebugMode) {
-              debugPrint('Consent form error: ${formError.message}');
-            }
-            if (!completer.isCompleted) completer.complete();
-          });
-        } else {
-          if (!completer.isCompleted) completer.complete();
-        }
-      },
-      (FormError error) {
-        if (kDebugMode) {
-          debugPrint('Consent info update failed: ${error.message}');
-        }
-        if (!completer.isCompleted) completer.complete();
-      },
-    );
-  } catch (e) {
-    if (kDebugMode) debugPrint('UMP consent error: $e');
-    if (!completer.isCompleted) completer.complete();
-  }
-
-  await completer.future.timeout(
-    const Duration(seconds: 10),
-    onTimeout: () {
-      if (kDebugMode) debugPrint('Consent timed out — proceeding.');
-    },
-  );
-}
-
 class ChainPopApp extends StatefulWidget {
   const ChainPopApp({super.key});
 

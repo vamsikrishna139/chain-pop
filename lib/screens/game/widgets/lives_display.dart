@@ -36,8 +36,7 @@ class LivesDisplay extends StatelessWidget {
                   shadows: alive
                       ? [
                           Shadow(
-                            color:
-                                Colors.redAccent.withValues(alpha: 0.5),
+                            color: Colors.redAccent.withValues(alpha: 0.5),
                             blurRadius: 8,
                           )
                         ]
