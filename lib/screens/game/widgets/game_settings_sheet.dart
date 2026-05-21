@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/game_settings.dart';
+import '../../../services/ads/ump_consent.dart';
 import '../../../theme/app_colors.dart';
 import '../../widgets/privacy_ads_settings_section.dart';
 
@@ -19,8 +20,12 @@ Future<void> showGameSettingsSheet({
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
     builder: (sheetContext) {
+      bool privacyOptionsRequired = false;
+      bool hasCheckedPrivacy = false;
+
       return StatefulBuilder(
         builder: (context, setModalState) {
+
           return SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
