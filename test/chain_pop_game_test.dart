@@ -101,15 +101,16 @@ void main() {
       );
       game.activeNodes.addAll(nodes);
 
-      expect(game.canExtract(nodes[0]), isFalse, reason: 'Node 1 is blocked by Node 2');
-      expect(game.canExtract(nodes[1]), isTrue, reason: 'Node 2 is free');
-      expect(game.canExtract(nodes[2]), isTrue, reason: 'Node 3 is free');
+      game.refreshExtractableIdsForTest();
+      expect(game.isExtractable(1), isFalse, reason: 'Node 1 is blocked by Node 2');
+      expect(game.isExtractable(2), isTrue, reason: 'Node 2 is free');
+      expect(game.isExtractable(3), isTrue, reason: 'Node 3 is free');
       
       // Simulate popping Node 2
       game.registerExtraction(nodes[1]);
       
       // Node 1 should now be free
-      expect(game.canExtract(nodes[0]), isTrue, reason: 'Node 1 should be freed after Node 2 pops');
+      expect(game.isExtractable(1), isTrue, reason: 'Node 1 should be freed after Node 2 pops');
     });
 
     test('undo restores last removal and updates onNodeRemoved', () {

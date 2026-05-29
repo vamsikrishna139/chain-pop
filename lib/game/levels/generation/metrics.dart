@@ -27,8 +27,8 @@ class LevelMetrics {
   /// Longest prerequisite chain to any single node (§4.4).
   final int criticalUnlockDepth;
 
-  /// Share of canonical-sequence steps that have exactly one legal move.
-  /// Range `[0.0, 1.0]`.
+  /// Wave-peeling FSR metric. Captures layer-by-layer topological compression.
+  /// (Replaces the legacy single-path forcedSequenceRatio).
   final double forcedSequenceRatio;
 
   /// Population standard deviation of the [tempoProfile].
@@ -46,6 +46,10 @@ class LevelMetrics {
   /// True iff the bounded DFS hit its cap before fully enumerating.
   final bool viablePathCountCapped;
 
+  /// Wave-peeling compression rhythm. Index 0 = opening wave width, etc.
+  /// Used for pacing curve analysis.
+  final List<int> wavePeelingProfile;
+
   const LevelMetrics({
     required this.nodeCount,
     required this.waveDepth,
@@ -57,6 +61,7 @@ class LevelMetrics {
     required this.tempoProfile,
     required this.viablePathCount,
     required this.viablePathCountCapped,
+    required this.wavePeelingProfile,
   });
 
   /// Computes all metrics. Set [includeViablePath] = true to also run the
@@ -64,7 +69,7 @@ class LevelMetrics {
   static LevelMetrics compute(
     LevelData level, {
     bool includeViablePath = false,
-    int viablePathBranchCap = 64,
+    int viablePathBranchCap = 512,
     int viablePathExpansionCap = 6000,
   }) {
     final tempo = computeTempoProfile(level);
@@ -91,17 +96,21 @@ class LevelMetrics {
       capped = r.$2;
     }
 
+    final wavePeelingProfile = computeWavePeelingProfile(level);
+    final forcedSequenceRatio = calculateFSRFromProfile(wavePeelingProfile, level.nodes.length);
+
     return LevelMetrics(
       nodeCount: level.nodes.length,
       waveDepth: wave,
       averageBranchingFactor: avgBF,
       firstLegalMoveCount: firstLegal,
       criticalUnlockDepth: cud,
-      forcedSequenceRatio: fsr,
+      forcedSequenceRatio: forcedSequenceRatio,
       frontierVariance: variance,
       tempoProfile: tempo,
       viablePathCount: paths,
       viablePathCountCapped: capped,
+      wavePeelingProfile: wavePeelingProfile,
     );
   }
 
@@ -150,6 +159,56 @@ List<int> computeTempoProfile(LevelData level) {
     remaining.removeWhere((m) => m.id == next.id);
   }
   return tempo;
+}
+
+/// Generates the sequence of branching factors for each layer peeled off the dependency graph.
+List<int> computeWavePeelingProfile(LevelData level) {
+  if (level.nodes.isEmpty) return [];
+
+  final nodes = level.nodes.map((n) => n.clone()).toList();
+  final positions = <int>{for (final n in nodes) gridCellKey(n.x, n.y)};
+  final waveBranchingFactors = <int>[];
+
+  while (nodes.isNotEmpty) {
+    final wave = [
+      for (final n in nodes)
+        if (LevelSolver.canRemoveWithPositions(n, positions, level)) n,
+    ];
+    if (wave.isEmpty) break; // unsolvable
+
+    waveBranchingFactors.add(wave.length);
+
+    for (final n in wave) {
+      nodes.removeWhere((x) => x.id == n.id);
+      positions.remove(gridCellKey(n.x, n.y));
+    }
+  }
+  return waveBranchingFactors;
+}
+
+/// Computes the true topological Forced Sequence Ratio using a pre-calculated wave peeling profile.
+double calculateFSRFromProfile(List<int> waveBranchingFactors, int totalNodes) {
+  if (waveBranchingFactors.isEmpty) return 0.0;
+
+  double totalScore = 0.0;
+  for (int bf in waveBranchingFactors) {
+    if (bf >= 1 && bf <= 3) {
+      totalScore += 1.0;
+    } else if (bf == 4) {
+      totalScore += 0.8;
+    } else if (bf <= 6) {
+      totalScore += 0.5;
+    } else if (bf <= 8) {
+      totalScore += 0.2;
+    } else {
+      totalScore += 0.1;
+    }
+  }
+
+  final result = totalScore / waveBranchingFactors.length;
+  assert(result >= 0.0 && result <= 1.0, 
+    'tFSR out of range: $result for level with $totalNodes nodes');
+  return result;
 }
 
 /// Longest prerequisite chain in the dependency graph. A node `m` is a
@@ -217,7 +276,7 @@ int computeCriticalUnlockDepth(LevelData level) {
 /// numbers.
 (int, bool) computeViablePathCount(
   LevelData level, {
-  int branchCap = 64,
+  int branchCap = 512,
   int expansionCap = 6000,
   bool bailOutOnTime = false,
   int maxMicroseconds = 8000,
@@ -271,4 +330,97 @@ int computeCriticalUnlockDepth(LevelData level) {
 
   dfs(remaining, initialPositions);
   return (count, capped);
+}
+
+/// Ray-dependency topology on a shipped [LevelData] board.
+class LevelTopologyMetrics {
+  /// Longest prerequisite chain along ray-block edges (same as CUD).
+  final int chainDepthMax;
+
+  /// Maximum fan-in: most nodes pointing at the same target.
+  final int maxHubInDegree;
+
+  /// Mean unlock fan-out over nodes that are ray targets.
+  final double avgUnlockFanout;
+
+  const LevelTopologyMetrics({
+    required this.chainDepthMax,
+    required this.maxHubInDegree,
+    required this.avgUnlockFanout,
+  });
+
+  static LevelTopologyMetrics compute(LevelData level) {
+    if (level.nodes.isEmpty) {
+      return const LevelTopologyMetrics(
+        chainDepthMax: 0,
+        maxHubInDegree: 0,
+        avgUnlockFanout: 0,
+      );
+    }
+
+    final positionToId = <int, int>{
+      for (final n in level.nodes) gridCellKey(n.x, n.y): n.id,
+    };
+    final fanIn = <int, int>{};
+    final depth = <int, int>{};
+    var maxHub = 0;
+    var maxDepth = 0;
+
+    final ids = level.nodes.map((n) => n.id).toList()..sort();
+    for (final id in ids) {
+      final n = level.nodes.firstWhere((node) => node.id == id);
+      final target = _firstRayTargetId(n, positionToId, level);
+      var d = 1;
+      if (target != null) {
+        fanIn[target] = (fanIn[target] ?? 0) + 1;
+        final td = depth[target];
+        if (td != null && td + 1 > d) d = td + 1;
+      }
+      depth[id] = d;
+      if (d > maxDepth) maxDepth = d;
+    }
+
+    for (final count in fanIn.values) {
+      if (count > maxHub) maxHub = count;
+    }
+
+    final avgFanout = fanIn.isEmpty
+        ? 0.0
+        : fanIn.values.fold<int>(0, (a, b) => a + b) / fanIn.length;
+
+    return LevelTopologyMetrics(
+      chainDepthMax: maxDepth,
+      maxHubInDegree: maxHub,
+      avgUnlockFanout: avgFanout,
+    );
+  }
+}
+
+int? _firstRayTargetId(
+  NodeData node,
+  Map<int, int> positionToId,
+  LevelData level,
+) {
+  var x = node.x;
+  var y = node.y;
+  while (true) {
+    switch (node.dir) {
+      case Direction.up:
+        y--;
+      case Direction.down:
+        y++;
+      case Direction.left:
+        x--;
+      case Direction.right:
+        x++;
+    }
+    if (x < 0 ||
+        x >= level.gridWidth ||
+        y < 0 ||
+        y >= level.gridHeight) {
+      return null;
+    }
+    final hit = positionToId[gridCellKey(x, y)];
+    if (hit != null) return hit;
+  }
 }

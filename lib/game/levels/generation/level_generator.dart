@@ -87,6 +87,16 @@ class LevelGenerator {
   // wired so any future regression can be detected; it should never go
   // above 0 in production.
   int _monotoneFallbackHitCount = 0;
+  int _blockingDirCandidatesOffered = 0;
+  int _blockingDirCandidatesPicked = 0;
+  int _crunchZoneBlockingPicked = 0;
+  int _releaseZoneFallbackPicked = 0;
+  int _constructionSolvabilityRetries = 0;
+  int _winningBlockingRetryIndex0 = 0;
+  int _winningBlockingRetryIndex1 = 0;
+  int _winningBlockingRetryIndex2 = 0;
+  int? _lastWinningBlockingRetryIndex;
+  int _maxAttemptsExhaustedCount = 0;
   // Per-archetype emission counts, used by Phase 3's "distribution matches
   // §5 within ±3%" acceptance test.
   final Map<GenerationArchetype, int> _archetypeEmissionCounts = {
@@ -125,6 +135,9 @@ class LevelGenerator {
         _director = director ?? Director(),
         _diversityLedger = diversityLedger ?? DiversityLedger(),
         analyticsSink = analyticsSink ?? noopAnalyticsSink;
+
+  /// Index (0=0.72, 1=0.45, 2=0.25) from the most recent successful retrograde build.
+  int? get lastWinningBlockingRetryIndex => _lastWinningBlockingRetryIndex;
 
   /// Number of times the Director-driven retrograde path was tried.
   int get retrogradeAttemptCount => _retrogradeAttemptCount;
@@ -202,6 +215,15 @@ class LevelGenerator {
       seedEmissions: Map<String, int>.from(_seedEmissionCounts),
       strongMotifEmissions: _strongMotifEmissionCount,
       strongMotifEmissionsWithMotif: _strongMotifEmissionsWithMotifCount,
+      blockingDirCandidatesOffered: _blockingDirCandidatesOffered,
+      blockingDirCandidatesPicked: _blockingDirCandidatesPicked,
+      crunchZoneBlockingPicked: _crunchZoneBlockingPicked,
+      releaseZoneFallbackPicked: _releaseZoneFallbackPicked,
+      constructionSolvabilityRetries: _constructionSolvabilityRetries,
+      winningBlockingRetryIndex0: _winningBlockingRetryIndex0,
+      winningBlockingRetryIndex1: _winningBlockingRetryIndex1,
+      winningBlockingRetryIndex2: _winningBlockingRetryIndex2,
+      maxAttemptsExhaustedCount: _maxAttemptsExhaustedCount,
     );
   }
 
@@ -219,6 +241,15 @@ class LevelGenerator {
     _legacyAttemptCount = 0;
     _renegotiationCount = 0;
     _monotoneFallbackHitCount = 0;
+    _blockingDirCandidatesOffered = 0;
+    _blockingDirCandidatesPicked = 0;
+    _crunchZoneBlockingPicked = 0;
+    _releaseZoneFallbackPicked = 0;
+    _constructionSolvabilityRetries = 0;
+    _winningBlockingRetryIndex0 = 0;
+    _winningBlockingRetryIndex1 = 0;
+    _winningBlockingRetryIndex2 = 0;
+    _maxAttemptsExhaustedCount = 0;
     for (final a in GenerationArchetype.values) {
       _archetypeEmissionCounts[a] = 0;
     }
@@ -285,7 +316,7 @@ class LevelGenerator {
     LevelConfiguration config, {
     required int primarySeed,
     bool applyMilestones = true,
-    int maxAttempts = 28,
+    int maxAttempts = 40,
     DifficultyTier? targetTier,
   }) {
     final validation = config.validate();
@@ -424,6 +455,7 @@ class LevelGenerator {
     // pick a sensible response (re-roll a new seed, prompt for a different
     // mode, etc.) instead of the old "always emit something" behaviour.
     _discardPendingEmission();
+    _maxAttemptsExhaustedCount++;
     return Result.error(
       GenerationError.noValidDirections(
         'Director exhausted $maxAttempts attempts; no in-band level '
@@ -443,7 +475,7 @@ class LevelGenerator {
       config,
       primarySeed: dayKey,
       applyMilestones: false,
-      maxAttempts: 32,
+      maxAttempts: 40,
       targetTier: DifficultyTier.expert,
     );
   }
@@ -498,15 +530,19 @@ class LevelGenerator {
     LevelMetrics? novelOutOfBandMetrics;
     GenerationPlan? novelOutOfBandPlan;
     int novelOutOfBandRenegotiations = 0;
+    ConstructionTelemetry? novelOutOfBandTelemetry;
     Result<LevelData, GenerationError>? nonNovelFallback;
     LevelMetrics? nonNovelMetrics;
     LevelFingerprint? nonNovelFp;
     GenerationPlan? nonNovelPlan;
     int nonNovelRenegotiations = 0;
+    ConstructionTelemetry nonNovelTelemetry = ConstructionTelemetry.zero;
+    final inBandCandidates = <_InBandCandidate>[];
 
     final evaluatorTier =
         targetTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
     final evaluatorProfile = DifficultyProfile.forTier(evaluatorTier);
+    final cudFloor = evaluatorProfile.criticalUnlockDepth.min;
 
     for (var k = 0; k < _evaluatorRetryBudget; k++) {
       // Derive a per-iteration RNG so successive retries diverge
@@ -521,9 +557,17 @@ class LevelGenerator {
             );
 
       Result<LevelData, GenerationError>? once;
+      ConstructionTelemetry? runTelemetry;
       var renegotiationsForThisAttempt = 0;
       for (var r = 0; r <= _director.maxRenegotiations; r++) {
-        once = _runPlannedOnce(plan, config, iterationRandom);
+        final run = _runPlannedOnceWithTelemetry(
+          plan,
+          config,
+          iterationRandom,
+          targetTier: evaluatorTier,
+        );
+        once = run.result;
+        runTelemetry = run.telemetry;
         if (once.isSuccess) break;
         final greedyFailed = _legacyGreedyFailure(once, plan);
         final renegotiated = greedyFailed
@@ -544,12 +588,20 @@ class LevelGenerator {
         continue;
       }
       final inBand = evaluatorProfile.passes(metrics);
-      if (!inBand) _evaluatorRejectionCount++;
+      if (!inBand) {
+        _evaluatorRejectionCount++;
+        if (metrics.criticalUnlockDepth < cudFloor) {
+          continue;
+        }
+      }
 
+      final visible = _visibleMotifsIn(plan, level);
+      final dominantMotif = visible.isEmpty ? MotifId.none : visible.first;
       final fingerprint = computeLevelFingerprint(
         level: level,
         metrics: metrics,
         silhouette: plan.silhouette,
+        dominantMotifId: motifIdFingerprintSlot(dominantMotif),
       );
       final novel = !enableDiversityGating ||
           _diversityLedger.isNovel(fingerprint);
@@ -560,34 +612,59 @@ class LevelGenerator {
         nonNovelMetrics ??= metrics;
         nonNovelFp ??= fingerprint;
         nonNovelRenegotiations = renegotiationsForThisAttempt;
+        nonNovelTelemetry = runTelemetry ?? ConstructionTelemetry.zero;
         continue;
       }
 
       if (inBand) {
-        _retrogradeInBandSuccessCount++;
-        _retrogradeSuccessCount++;
-        _diversityLedger.record(fingerprint);
-        _recordEmissionTelemetry(
+        inBandCandidates.add(_InBandCandidate(
+          result: once,
           plan: plan,
-          level: level,
           metrics: metrics,
           fingerprint: fingerprint,
-          inBand: true,
-          novel: true,
-          seed: seed,
+          visibleMotifs: visible,
           renegotiations: renegotiationsForThisAttempt,
-        );
-        return once;
+          constructionTelemetry: runTelemetry ?? ConstructionTelemetry.zero,
+        ));
+        continue;
       }
       novelOutOfBand ??= once;
       novelOutOfBandFp ??= fingerprint;
       novelOutOfBandMetrics ??= metrics;
       novelOutOfBandPlan ??= plan;
       novelOutOfBandRenegotiations = renegotiationsForThisAttempt;
+      novelOutOfBandTelemetry ??= runTelemetry ?? ConstructionTelemetry.zero;
     }
 
-    // Prefer the novel out-of-band so we keep the ledger window clean.
-    if (novelOutOfBand != null) {
+    if (inBandCandidates.isNotEmpty) {
+      final best = _selectBestInBandCandidate(
+        inBandCandidates,
+        evaluatorTier,
+      );
+      _retrogradeInBandSuccessCount++;
+      _retrogradeSuccessCount++;
+      _diversityLedger.record(best.fingerprint);
+      _recordEmissionTelemetry(
+        plan: best.plan,
+        level: best.result.value,
+        metrics: best.metrics,
+        fingerprint: best.fingerprint,
+        inBand: true,
+        novel: true,
+        seed: seed,
+        renegotiations: best.renegotiations,
+        visibleMotifs: best.visibleMotifs,
+        construction: best.constructionTelemetry,
+      );
+      return best.result;
+    }
+
+    // Hard / Expert: prefer in-band only; ship best novel out-of-band if the
+    // K-loop found no in-band candidate (logged as out-of-band success).
+    if (novelOutOfBand != null &&
+        (evaluatorTier == DifficultyTier.hard ||
+            evaluatorTier == DifficultyTier.expert) &&
+        inBandCandidates.isEmpty) {
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
       _diversityLedger.record(novelOutOfBandFp!);
@@ -600,6 +677,27 @@ class LevelGenerator {
         novel: true,
         seed: seed,
         renegotiations: novelOutOfBandRenegotiations,
+        construction: novelOutOfBandTelemetry ?? ConstructionTelemetry.zero,
+      );
+      return novelOutOfBand;
+    }
+
+    if (evaluatorTier != DifficultyTier.hard &&
+        evaluatorTier != DifficultyTier.expert &&
+        novelOutOfBand != null) {
+      _retrogradeOutOfBandSuccessCount++;
+      _retrogradeSuccessCount++;
+      _diversityLedger.record(novelOutOfBandFp!);
+      _recordEmissionTelemetry(
+        plan: novelOutOfBandPlan!,
+        level: novelOutOfBand.value,
+        metrics: novelOutOfBandMetrics!,
+        fingerprint: novelOutOfBandFp,
+        inBand: false,
+        novel: true,
+        seed: seed,
+        renegotiations: novelOutOfBandRenegotiations,
+        construction: novelOutOfBandTelemetry ?? ConstructionTelemetry.zero,
       );
       return novelOutOfBand;
     }
@@ -620,6 +718,7 @@ class LevelGenerator {
         novel: false,
         seed: seed,
         renegotiations: nonNovelRenegotiations,
+        construction: nonNovelTelemetry,
       );
       return nonNovelFallback;
     }
@@ -641,11 +740,21 @@ class LevelGenerator {
     required bool novel,
     required LevelSeed? seed,
     required int renegotiations,
+    List<MotifId> visibleMotifs = const [],
+    ConstructionTelemetry construction = ConstructionTelemetry.zero,
   }) {
-    final visible = _visibleMotifsIn(plan, level);
+    final visible = visibleMotifs.isNotEmpty
+        ? visibleMotifs
+        : _visibleMotifsIn(plan, level);
+    final topology = LevelTopologyMetrics.compute(level);
+    final pathsCapped = metrics.viablePathCount >= 0
+        ? metrics.viablePathCountCapped
+        : LevelMetrics.compute(level, includeViablePath: true)
+            .viablePathCountCapped;
     _pendingEmission = _PendingDirectorEmission(
       plan: plan,
       visibleMotifs: visible,
+      construction: construction,
       event: buildEmissionEvent(
         level: level,
         archetype: plan.archetype,
@@ -656,8 +765,95 @@ class LevelGenerator {
         metrics: metrics,
         fingerprint: fingerprint,
         renegotiations: renegotiations,
+        visibleMotifs: visible,
+        construction: construction,
+        chainDepthMax: topology.chainDepthMax,
+        maxHubInDegree: topology.maxHubInDegree,
+        avgUnlockFanout: topology.avgUnlockFanout,
+        pathsCapped: pathsCapped,
       ),
     );
+  }
+
+  _InBandCandidate _selectBestInBandCandidate(
+    List<_InBandCandidate> candidates,
+    DifficultyTier tier,
+  ) {
+    candidates.sort((a, b) => _compareInBandCandidates(a, b, tier));
+
+    if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
+      for (var i = 0; i < candidates.length && i < 5; i++) {
+        final c = candidates[i];
+        final withPaths = LevelMetrics.compute(
+          c.result.value,
+          includeViablePath: true,
+        );
+        final paths = withPaths.viablePathCount;
+        if (paths >= 2 && paths <= 8 && !withPaths.viablePathCountCapped) {
+          return _InBandCandidate(
+            result: c.result,
+            plan: c.plan,
+            metrics: withPaths,
+            fingerprint: c.fingerprint,
+            visibleMotifs: c.visibleMotifs,
+            renegotiations: c.renegotiations,
+            constructionTelemetry: c.constructionTelemetry,
+          );
+        }
+      }
+    }
+    return candidates.first;
+  }
+
+  int _compareInBandCandidates(
+    _InBandCandidate a,
+    _InBandCandidate b,
+    DifficultyTier tier,
+  ) {
+    final profile = DifficultyProfile.forTier(tier);
+    if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
+      final arcA = profile.temporalArcScore(a.metrics.tempoProfile);
+      final arcB = profile.temporalArcScore(b.metrics.tempoProfile);
+      final arc = arcB.compareTo(arcA);
+      if (arc != 0) return arc;
+
+      final cud = b.metrics.criticalUnlockDepth
+          .compareTo(a.metrics.criticalUnlockDepth);
+      if (cud != 0) return cud;
+
+      final fsrA = DifficultyProfile.midgameFsr(a.metrics.tempoProfile);
+      final fsrB = DifficultyProfile.midgameFsr(b.metrics.tempoProfile);
+      final midFsr = fsrB.compareTo(fsrA);
+      if (midFsr != 0) return midFsr;
+
+      final densityA = _spatialDensity(a.result.value);
+      final densityB = _spatialDensity(b.result.value);
+      return densityB.compareTo(densityA);
+    }
+
+    final cud = b.metrics.criticalUnlockDepth
+        .compareTo(a.metrics.criticalUnlockDepth);
+    if (cud != 0) return cud;
+    final fsr = b.metrics.forcedSequenceRatio
+        .compareTo(a.metrics.forcedSequenceRatio);
+    if (fsr != 0) return fsr;
+    final densityA = _spatialDensity(a.result.value);
+    final densityB = _spatialDensity(b.result.value);
+    final density = densityB.compareTo(densityA);
+    if (density != 0) return density;
+    if (tier == DifficultyTier.hard) {
+      final aOpen = a.metrics.firstLegalMoveCount >= 3 ? 1 : 0;
+      final bOpen = b.metrics.firstLegalMoveCount >= 3 ? 1 : 0;
+      if (bOpen != aOpen) return bOpen - aOpen;
+    }
+    return b.metrics.firstLegalMoveCount
+        .compareTo(a.metrics.firstLegalMoveCount);
+  }
+
+  double _spatialDensity(LevelData level) {
+    final area = level.gridWidth * level.gridHeight;
+    if (area == 0) return 0;
+    return level.nodes.length / area;
   }
 
   /// Flushes the staged emission — increments counters and forwards the
@@ -683,8 +879,27 @@ class LevelGenerator {
         _motifEmissionCounts[id] = (_motifEmissionCounts[id] ?? 0) + 1;
       }
     }
+    _applyConstructionTelemetry(pending.construction);
     analyticsSink.emit(pending.event);
     _pendingEmission = null;
+  }
+
+  /// Adds one shipped level's construction counters to the session snapshot.
+  void _applyConstructionTelemetry(ConstructionTelemetry t) {
+    _crunchZoneBlockingPicked += t.crunchZoneBlockingPicked;
+    _releaseZoneFallbackPicked += t.releaseZoneFallbackPicked;
+    _blockingDirCandidatesOffered += t.blockingDirCandidatesOffered;
+    _blockingDirCandidatesPicked += t.blockingDirCandidatesPicked;
+    _constructionSolvabilityRetries += t.constructionSolvabilityRetries;
+    _lastWinningBlockingRetryIndex = t.winningBlockingRetryIndex;
+    final winIdx = t.winningBlockingRetryIndex;
+    if (winIdx == 0) {
+      _winningBlockingRetryIndex0++;
+    } else if (winIdx == 1) {
+      _winningBlockingRetryIndex1++;
+    } else if (winIdx == 2) {
+      _winningBlockingRetryIndex2++;
+    }
   }
 
   /// Campaign milestones reuse the telemetry staged inside
@@ -702,6 +917,7 @@ class LevelGenerator {
     _pendingEmission = _PendingDirectorEmission(
       plan: pending.plan,
       visibleMotifs: pending.visibleMotifs,
+      construction: pending.construction,
       event: GenerationEmissionEvent(
         levelId: e.levelId,
         archetype: e.archetype,
@@ -712,6 +928,18 @@ class LevelGenerator {
         metrics: e.metrics,
         fingerprint: e.fingerprint,
         renegotiations: e.renegotiations,
+        dominantMotifId: e.dominantMotifId,
+        lockClusterPlaced: e.lockClusterPlaced,
+        clusterCud: e.clusterCud,
+        crunchPick: e.crunchPick,
+        blkOffered: e.blkOffered,
+        blkPicked: e.blkPicked,
+        solvabilityRetries: e.solvabilityRetries,
+        winRetry: e.winRetry,
+        chainDepthMax: e.chainDepthMax,
+        maxHubInDegree: e.maxHubInDegree,
+        avgUnlockFanout: e.avgUnlockFanout,
+        pathsCapped: e.pathsCapped,
       ),
     );
     _commitPendingEmission();
@@ -737,7 +965,12 @@ class LevelGenerator {
       var allPresent = true;
       for (final r in m.reservations) {
         final n = byCell[r.cellKey];
-        if (n == null || n.dir != r.direction) {
+        if (n == null) {
+          allPresent = false;
+          break;
+        }
+        // Lock clusters may adapt direction at inject time (Phase 2C).
+        if (m.id != MotifId.lockCluster && n.dir != r.direction) {
           allPresent = false;
           break;
         }
@@ -760,26 +993,51 @@ class LevelGenerator {
   Result<LevelData, GenerationError> _runPlannedOnce(
     GenerationPlan plan,
     LevelConfiguration config,
-    Random random,
-  ) {
-    if (plan.useLegacyGreedyPath) {
-      // §5 Experimental archetype — preserve the legacy greedy path so
-      // "happy accidents" the retrograde-with-scorer combo would never pick
-      // still occur. Honour the plan's chosen mask + target.
-      return _attemptLegacyWithSilhouette(plan, config, random);
-    }
-    return _runRetrogradeForPlan(plan, config, random);
+    Random random, {
+    DifficultyTier? targetTier,
+  }) {
+    return _runPlannedOnceWithTelemetry(
+      plan,
+      config,
+      random,
+      targetTier: targetTier,
+    ).result;
   }
 
-  Result<LevelData, GenerationError> _runRetrogradeForPlan(
+  ({Result<LevelData, GenerationError> result, ConstructionTelemetry telemetry})
+      _runPlannedOnceWithTelemetry(
     GenerationPlan plan,
     LevelConfiguration config,
-    Random random,
-  ) {
+    Random random, {
+    DifficultyTier? targetTier,
+  }) {
+    if (plan.useLegacyGreedyPath) {
+      return (
+        result: _attemptLegacyWithSilhouette(plan, config, random),
+        telemetry: ConstructionTelemetry.zero,
+      );
+    }
+    return _runRetrogradeForPlan(
+      plan,
+      config,
+      random,
+      targetTier: targetTier,
+    );
+  }
+
+
+  ({Result<LevelData, GenerationError> result, ConstructionTelemetry telemetry})
+      _runRetrogradeForPlan(
+    GenerationPlan plan,
+    LevelConfiguration config,
+    Random random, {
+    DifficultyTier? targetTier,
+  }) {
     try {
       final sightlines =
           _sightlineTableFor(config.gridWidth, config.gridHeight);
       final scorer = CandidateScorer(weights: plan.spec.scorerWeights);
+      final tier = targetTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
       final constructor = RetrogradeConstructor(
         gridWidth: config.gridWidth,
         gridHeight: config.gridHeight,
@@ -788,15 +1046,34 @@ class LevelGenerator {
         scorer: scorer,
         sightlines: sightlines,
         random: random,
-        reservations: plan.reservations,
+        motifPlacements: plan.motifs,
+        tier: tier,
       );
       final placements = constructor.construct();
+      final telemetry = ConstructionTelemetry(
+        blockingDirCandidatesOffered:
+            constructor.reassignmentFlipsOffered > 0
+                ? constructor.reassignmentFlipsOffered
+                : scorer.blockingDirCandidatesOffered,
+        blockingDirCandidatesPicked:
+            constructor.reassignmentCrunchFlips > 0
+                ? constructor.reassignmentCrunchFlips
+                : scorer.blockingDirCandidatesPicked,
+        crunchZoneBlockingPicked: scorer.crunchZoneBlockingPicked,
+        releaseZoneFallbackPicked: scorer.releaseZoneFallbackPicked,
+        constructionSolvabilityRetries:
+            constructor.constructionSolvabilityRetries,
+        winningBlockingRetryIndex: constructor.winningBlockingRetryIndex,
+      );
       if (placements == null || placements.length != plan.targetNodeCount) {
-        return Result.error(
-          GenerationError.noValidDirections(
-            'Retrograde construction exhausted rollback budget '
-            '(archetype=${plan.archetype.name})',
+        return (
+          result: Result.error(
+            GenerationError.noValidDirections(
+              'Retrograde construction exhausted rollback budget '
+              '(archetype=${plan.archetype.name})',
+            ),
           ),
+          telemetry: telemetry,
         );
       }
       final palette = _getColorPalette();
@@ -813,20 +1090,26 @@ class LevelGenerator {
           colorSlot: colorSlot,
         ));
       }
-      return Result.success(LevelData(
-        levelId: config.levelId,
-        gridWidth: config.gridWidth,
-        gridHeight: config.gridHeight,
-        playCells: silhouetteToPlayCells(
-          plan.silhouetteMask,
+      return (
+        result: Result.success(LevelData(
+          levelId: config.levelId,
           gridWidth: config.gridWidth,
           gridHeight: config.gridHeight,
-        ),
-        nodes: nodes,
-      ));
+          playCells: silhouetteToPlayCells(
+            plan.silhouetteMask,
+            gridWidth: config.gridWidth,
+            gridHeight: config.gridHeight,
+          ),
+          nodes: nodes,
+        )),
+        telemetry: telemetry,
+      );
     } catch (e) {
-      return Result.error(
-        GenerationError.unexpected('Retrograde generation failed: $e'),
+      return (
+        result: Result.error(
+          GenerationError.unexpected('Retrograde generation failed: $e'),
+        ),
+        telemetry: ConstructionTelemetry.zero,
       );
     }
   }
@@ -1271,10 +1554,32 @@ class LevelGenerator {
 class _PendingDirectorEmission {
   final GenerationPlan plan;
   final List<MotifId> visibleMotifs;
+  final ConstructionTelemetry construction;
   final GenerationEmissionEvent event;
   const _PendingDirectorEmission({
     required this.plan,
     required this.visibleMotifs,
+    required this.construction,
     required this.event,
+  });
+}
+
+class _InBandCandidate {
+  final Result<LevelData, GenerationError> result;
+  final GenerationPlan plan;
+  final LevelMetrics metrics;
+  final LevelFingerprint fingerprint;
+  final List<MotifId> visibleMotifs;
+  final int renegotiations;
+  final ConstructionTelemetry constructionTelemetry;
+
+  const _InBandCandidate({
+    required this.result,
+    required this.plan,
+    required this.metrics,
+    required this.fingerprint,
+    required this.visibleMotifs,
+    required this.renegotiations,
+    required this.constructionTelemetry,
   });
 }

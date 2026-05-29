@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:chain_pop/game/levels/generation/motifs.dart';
 import 'package:chain_pop/game/levels/generation/sightline_table.dart';
 import 'package:chain_pop/game/levels/grid_cell_key.dart';
@@ -18,11 +19,12 @@ Set<int> _fullRect(int w, int h) {
 
 void main() {
   group('motifCatalogue', () {
-    test('exposes the four Phase-4 motifs', () {
+    test('exposes Phase-4 motifs plus lock cluster', () {
       final ids = motifCatalogue().map((m) => m.id).toList();
       expect(
         ids,
         containsAll(<MotifId>[
+          MotifId.lockCluster,
           MotifId.escapeChord,
           MotifId.diamondIntersection,
           MotifId.clusterKey,
@@ -92,6 +94,21 @@ void main() {
       const r =
           MotifReservation(position: Point<int>(3, 4), direction: Direction.up);
       expect(r.cellKey, gridCellKey(3, 4));
+    });
+  });
+
+  group('sampleMotifForTier', () {
+    test('Hard tier favours lock cluster', () {
+      var lockCount = 0;
+      for (var seed = 0; seed < 200; seed++) {
+        final motif = sampleMotifForTier(
+          DifficultyTier.hard,
+          Random(seed),
+        );
+        if (motif.id == MotifId.lockCluster) lockCount++;
+      }
+      expect(lockCount, greaterThan(80),
+          reason: 'Hard tier should sample lock cluster ~60%');
     });
   });
 

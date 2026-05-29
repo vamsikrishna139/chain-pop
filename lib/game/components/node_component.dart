@@ -19,6 +19,7 @@ class NodeComponent extends PositionComponent
   Vector2 _originalPos = Vector2.zero();
   double _shakeTimer = 0.0;
   double _highlightTimer = 0.0; // replaces Future.delayed — lifecycle-safe
+  bool _longPressActive = false;
 
   late Rect _rect;
   late RRect _rrect;
@@ -162,8 +163,13 @@ class NodeComponent extends PositionComponent
     if (isHighlighted) {
       _renderHighlighted(canvas);
     } else {
+      // Uniform brightness — legal moves are not telegraphed; wrong taps jam.
       canvas.drawShadow(
-          _shadowPath, _shadowGlowColor, _shadowGlowRadius, true);
+        _shadowPath,
+        _shadowGlowColor,
+        _shadowGlowRadius,
+        true,
+      );
       canvas.drawRRect(_rrect, _fillPaint);
       canvas.drawRRect(_rrect, _gradientPaint);
       canvas.drawPath(_arrowPath, _arrowPaintNormal);
@@ -262,8 +268,7 @@ class NodeComponent extends PositionComponent
     }
   }
 
-  @override
-  void onTapDown(TapDownEvent event) {
+  void _performTapAction() {
     if (isPopping || isJamming || game.hasWon || game.isGameOver) return;
 
     if (game.canExtract(data)) {
@@ -285,6 +290,29 @@ class NodeComponent extends PositionComponent
       game.playSfx(GameSfx.jam);
       game.reportJam();
     }
+  }
+
+  @override
+  void onLongTapDown(TapDownEvent event) {
+    if (isPopping || isJamming || game.hasWon || game.isGameOver) return;
+    _longPressActive = true;
+    game.showRayPreview(data);
+  }
+
+  @override
+  void onTapUp(TapUpEvent event) {
+    game.hideRayPreview();
+    if (_longPressActive) {
+      _longPressActive = false;
+      return;
+    }
+    _performTapAction();
+  }
+
+  @override
+  void onTapCancel(TapCancelEvent event) {
+    _longPressActive = false;
+    game.hideRayPreview();
   }
 
   Vector2 _directionVector() {

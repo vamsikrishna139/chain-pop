@@ -13,6 +13,7 @@ import 'levels/generation/difficulty_mode.dart';
 import 'components/arrow_axis_guide_component.dart';
 import 'components/board_mask_component.dart';
 import 'components/node_component.dart';
+import 'components/ray_preview_component.dart';
 import '../services/game_sfx.dart';
 import '../theme/app_colors.dart';
 
@@ -97,6 +98,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   /// Row/column guide lines ([ArrowAxisGuideComponent]); toggled from HUD only.
   bool _axisGuidesVisible = false;
+
+  RayPreviewComponent? _rayPreview;
 
   /// Whether alignment guides are shown (driven by HUD; cleared after a valid extraction).
   bool get axisGuidesVisible => _axisGuidesVisible;
@@ -405,7 +408,34 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// O(1) — checked per frame by every [NodeComponent].
   bool isExtractable(int nodeId) => _extractableIds.contains(nodeId);
 
+  @visibleForTesting
+  void refreshExtractableIdsForTest() => _rebuildExtractableIds();
+
+  /// Shows a dotted ray from [node] to the grid edge or first blocker.
+  void showRayPreview(NodeData node) {
+    if (hasWon || isGameOver || !_boardLaidOut) return;
+    hideRayPreview();
+    final trace = LevelSolver.traceRay(node, activeNodes, levelData);
+    final preview = RayPreviewComponent(
+      source: node,
+      trace: trace,
+      cellSize: _cellSize,
+      gridWidth: levelData.gridWidth,
+      gridHeight: levelData.gridHeight,
+    );
+    preview.priority = 50;
+    _rayPreview = preview;
+    board.add(preview);
+  }
+
+  /// Clears any active long-press ray preview.
+  void hideRayPreview() {
+    _rayPreview?.removeFromParent();
+    _rayPreview = null;
+  }
+
   void registerExtraction(NodeData data) {
+    hideRayPreview();
     _axisGuidesVisible = false;
     _extractionStreak++;
     _undoStack.add(data.clone());
@@ -467,6 +497,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   }
 
   void restart() {
+    hideRayPreview();
     _extractionStreak = 0;
     hasWon = false;
     isGameOver = false;

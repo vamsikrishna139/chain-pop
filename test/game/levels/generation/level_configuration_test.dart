@@ -107,7 +107,7 @@ void main() {
       // With archetypes, a single level may get different grid shapes per mode.
       // Test the *base* grid size relationship instead of archetype-modulated.
       test('hard mode base grid is at least as large as medium at higher levels', () {
-        // Verify across many levels that hard's base cap (18) > medium's (12)
+        // Verify across many levels that hard's base cap (10) ≥ medium's (9)
         final mediumConfig = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.medium);
         final hardConfig = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
 
@@ -261,6 +261,25 @@ void main() {
         expect(result.isValid, isFalse);
         // This will fail grid capacity check before the 400 check
         expect(result.message, contains('Node count exceeds grid capacity'));
+      });
+    });
+
+    group('grid dimension caps', () {
+      test('hard mode L30-500 respects 8-10 axis caps', () {
+        for (var levelId = 30; levelId <= 500; levelId++) {
+          final config =
+              LevelConfiguration.fromLevelId(levelId, mode: DifficultyMode.hard);
+          expect(
+            config.gridWidth,
+            inInclusiveRange(8, 10),
+            reason: 'L$levelId width ${config.gridWidth}',
+          );
+          expect(
+            config.gridHeight,
+            inInclusiveRange(8, 10),
+            reason: 'L$levelId height ${config.gridHeight}',
+          );
+        }
       });
     });
 

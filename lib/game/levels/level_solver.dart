@@ -1,6 +1,24 @@
 import 'grid_cell_key.dart';
 import 'level.dart';
 
+/// Result of tracing a node's facing ray across the board.
+class RayTraceResult {
+  /// Grid cell where the ray stops (blocker cell or last in-bounds cell).
+  final int endX;
+  final int endY;
+
+  /// When the ray hits another node before exiting the grid.
+  final int? blockerNodeId;
+
+  const RayTraceResult({
+    required this.endX,
+    required this.endY,
+    this.blockerNodeId,
+  });
+
+  bool get hitsBlocker => blockerNodeId != null;
+}
+
 /// Stateless solver utilities for Chain Pop.
 ///
 /// Performance notes:
@@ -81,6 +99,49 @@ class LevelSolver {
     LevelData level,
   ) {
     return _canRemoveWithSet(node, otherPositions, level);
+  }
+
+  /// Traces [node]'s facing ray to the grid edge or the first blocking node.
+  static RayTraceResult traceRay(
+    NodeData node,
+    List<NodeData> activeNodes,
+    LevelData level,
+  ) {
+    final idByCell = <int, int>{};
+    for (final n in activeNodes) {
+      if (n.id != node.id) {
+        idByCell[gridCellKey(n.x, n.y)] = n.id;
+      }
+    }
+
+    var x = node.x;
+    var y = node.y;
+    final gw = level.gridWidth;
+    final gh = level.gridHeight;
+
+    while (true) {
+      switch (node.dir) {
+        case Direction.up:
+          y--;
+        case Direction.down:
+          y++;
+        case Direction.left:
+          x--;
+        case Direction.right:
+          x++;
+      }
+      if (x < 0 || x >= gw || y < 0 || y >= gh) {
+        return RayTraceResult(endX: x, endY: y, blockerNodeId: null);
+      }
+      final blockerId = idByCell[gridCellKey(x, y)];
+      if (blockerId != null) {
+        return RayTraceResult(
+          endX: x,
+          endY: y,
+          blockerNodeId: blockerId,
+        );
+      }
+    }
   }
 
   // ── Internal helper ──────────────────────────────────────────────────────

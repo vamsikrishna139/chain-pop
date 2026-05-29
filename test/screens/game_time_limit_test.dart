@@ -33,4 +33,20 @@ void main() {
       expect(high, greaterThanOrEqualTo(120));
     });
   });
+
+  group('computeGameTimeLimit — hard', () {
+    test('returns countdown scaled by node count and level', () {
+      final small = computeGameTimeLimit(DifficultyMode.hard, 20, 30)!;
+      final large = computeGameTimeLimit(DifficultyMode.hard, 45, 30)!;
+      expect(small, greaterThanOrEqualTo(25));
+      expect(small, lessThanOrEqualTo(150));
+      expect(large, greaterThan(small));
+    });
+
+    test('higher level ids get slightly less time', () {
+      final early = computeGameTimeLimit(DifficultyMode.hard, 30, 10)!;
+      final late = computeGameTimeLimit(DifficultyMode.hard, 30, 200)!;
+      expect(late, lessThanOrEqualTo(early));
+    });
+  });
 }

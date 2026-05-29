@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import '../level.dart';
 import 'metrics.dart';
+import 'motifs.dart';
 import 'silhouettes.dart';
 
 /// Diversity Ledger fingerprint (packed integer) from §4.5 + visual-family
@@ -47,7 +48,8 @@ const double kFingerprintDirectionThreshold = 0.30;
 /// Threshold above which a third-cell's density bit fires.
 const double kFingerprintDensityThreshold = 0.50;
 
-/// Builds the packed fingerprint for an emitted level.
+/// Maps [MotifId] to the 3-bit dominant-motif fingerprint slot (§4.5 bits 7–9).
+int motifIdFingerprintSlot(MotifId id) => id.index & 0x07;
 ///
 /// [silhouette] is the silhouette the Director chose. [dominantMotifId] is
 /// always 0 in Phase 3 (no motifs yet); Phase 4 will pass a meaningful id.

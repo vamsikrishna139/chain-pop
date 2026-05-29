@@ -55,7 +55,7 @@ int computeTutorialCountdownSec(int tutorialIndex) =>
 /// before; now uses the same countdown HUD as other modes). Capped at
 /// [easyCampaignTimerCapSeconds] so late-game boards stay bounded.
 ///
-/// Medium / Hard: T(mode, N, L) = α × N × (1 + β × ln N) × max(γ_min, 1 − δ × L).
+/// **Medium / Hard:** T(mode, N, L) = α × N × (1 + β × ln N) × max(γ_min, 1 − δ × L).
 /// Coefficients are tuned next to [DifficultyParameters] node density per mode.
 int? computeGameTimeLimit(
   DifficultyMode mode,

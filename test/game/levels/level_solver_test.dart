@@ -182,4 +182,29 @@ void main() {
       expect(LevelSolver.getHint([], level), isNull);
     });
   });
+
+  group('LevelSolver.traceRay', () {
+    test('ray exits grid when path is clear', () {
+      final level = LevelData(levelId: 1, gridWidth: 5, gridHeight: 5, nodes: []);
+      final node = NodeData(id: 0, x: 2, y: 2, dir: Direction.up);
+      final trace = LevelSolver.traceRay(node, [node], level);
+      expect(trace.blockerNodeId, isNull);
+      expect(trace.endY, lessThan(0));
+    });
+
+    test('ray stops on first blocker node', () {
+      final blocker = NodeData(id: 1, x: 2, y: 1, dir: Direction.down);
+      final node = NodeData(id: 0, x: 2, y: 2, dir: Direction.up);
+      final level = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: [node, blocker],
+      );
+      final trace = LevelSolver.traceRay(node, [node, blocker], level);
+      expect(trace.blockerNodeId, 1);
+      expect(trace.endX, 2);
+      expect(trace.endY, 1);
+    });
+  });
 }

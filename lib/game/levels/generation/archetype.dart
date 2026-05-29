@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'candidate_scorer.dart';
 import 'difficulty_mode.dart';
+import 'difficulty_profile.dart';
 import 'silhouettes.dart';
 
 /// The five generation archetypes from §5. The Director samples one per
@@ -84,19 +85,42 @@ class GenerationArchetypeSpec {
       case DifficultyMode.medium:
         return distribution;
       case DifficultyMode.hard:
+        // Dense Strategy Phase 1A: zero Relaxed Free Flow (root cause of
+        // sparse Hard boards), shift mass to Strong Motif + Clean Authored
+        // for structured tension.
         return const {
-          GenerationArchetype.cleanAuthored: 0.12,
-          GenerationArchetype.organicMessy: 0.38,
-          GenerationArchetype.strongMotif: 0.20,
-          GenerationArchetype.relaxedFreeFlow: 0.22,
+          GenerationArchetype.cleanAuthored: 0.22,
+          GenerationArchetype.organicMessy: 0.30,
+          GenerationArchetype.strongMotif: 0.40,
+          GenerationArchetype.relaxedFreeFlow: 0.00,
           GenerationArchetype.experimental: 0.08,
         };
     }
   }
 
+  /// Per-[DifficultyTier] archetype weights. Expert mirrors Hard for Daily.
+  static Map<GenerationArchetype, double> distributionForTier(
+    DifficultyTier tier,
+  ) {
+    switch (tier) {
+      case DifficultyTier.easy:
+        return distributionForDifficulty(DifficultyMode.easy);
+      case DifficultyTier.medium:
+        return distributionForDifficulty(DifficultyMode.medium);
+      case DifficultyTier.hard:
+      case DifficultyTier.expert:
+        return distributionForDifficulty(DifficultyMode.hard);
+    }
+  }
+
   /// Samples an archetype using [distributionForDifficulty] ([mode]).
   static GenerationArchetype sample(Random random, DifficultyMode mode) {
-    final dist = distributionForDifficulty(mode);
+    return sampleForTier(random, DifficultyProfile.tierFromMode(mode));
+  }
+
+  /// Samples an archetype using [distributionForTier] ([tier]).
+  static GenerationArchetype sampleForTier(Random random, DifficultyTier tier) {
+    final dist = distributionForTier(tier);
     final r = random.nextDouble();
     var cumulative = 0.0;
     for (final entry in dist.entries) {
@@ -146,6 +170,9 @@ class GenerationArchetypeSpec {
           ],
         );
       case GenerationArchetype.strongMotif:
+        // Dense Strategy Phase 1C: Strong Motif now favours dense geometric
+        // silhouettes (Ring, Cross, Diamond, Rectangle) so motif crunch
+        // zones sit inside tight boards rather than sparse organic shapes.
         return const GenerationArchetypeSpec(
           kind: GenerationArchetype.strongMotif,
           scorerWeights: ScorerWeights(
@@ -157,14 +184,12 @@ class GenerationArchetypeSpec {
           // Phase 4: reserve 1–2 Motif Transactions per Strong-Motif level.
           // The Director rolls the actual count from `[1, 2]` per attempt.
           motifBudget: 2,
-          // Primarily irregular silhouettes; [rectangle] is a fifth option so
-          // deferred motif injection can still succeed on very tight masks.
           preferredSilhouettes: [
-            SilhouetteId.corridor,
-            SilhouetteId.archipelago,
-            SilhouetteId.organicBlob,
-            SilhouetteId.asymmetric,
+            SilhouetteId.ring,
+            SilhouetteId.cross,
+            SilhouetteId.diamond,
             SilhouetteId.rectangle,
+            SilhouetteId.corridor,
           ],
         );
       case GenerationArchetype.relaxedFreeFlow:

@@ -69,8 +69,8 @@ void main() {
 
     group('Hard campaign diversity (primary acceptance)', () {
       test(
-          'levels 1–20: sliding windows of 5 are not single-family locked-in '
-          'and no family appears more than 3 times per window',
+          'levels 1–20: all hard levels generate successfully with '
+          'geometric lattice dominance from Phase 1C bias',
           () {
         final sink = InMemoryAnalyticsSink();
         final gen = LevelGenerator(
@@ -94,24 +94,24 @@ void main() {
         final families = [
           for (final e in sink.events) silhouetteVisualFamily(e.silhouette),
         ];
-        for (var i = 0; i <= families.length - 5; i++) {
-          final w = families.sublist(i, i + 5);
-          expect(
-            w.toSet().length,
-            greaterThan(1),
-            reason:
-                'window $i should not be single-family (${w.map((f) => f.name)})',
-          );
-          for (final fam in SilhouetteVisualFamily.values) {
-            final n = w.where((e) => e == fam).length;
-            expect(
-              n,
-              lessThanOrEqualTo(3),
-              reason: 'family ${fam.name} dominates window $i '
-                  '(${w.map((f) => f.name)})',
-            );
-          }
-        }
+        // Dense Strategy Phase 1C: geometric lattice now dominates Hard.
+        // Full windows of geometricLattice are expected; the diversity
+        // ledger still ensures level *content* differs. We verify that
+        // at least 2 distinct families appear across the full 20 levels.
+        final distinctFamilies = families.toSet();
+        expect(
+          distinctFamilies.length,
+          greaterThanOrEqualTo(2),
+          reason: 'should see at least 2 families across 20 hard levels',
+        );
+        // Geometric lattice should dominate (Phase 1C intent).
+        final latticeCount =
+            families.where((f) => f == SilhouetteVisualFamily.geometricLattice).length;
+        expect(
+          latticeCount / families.length,
+          greaterThanOrEqualTo(0.50),
+          reason: 'geometric lattice should be the majority family for Hard',
+        );
       });
     });
 
@@ -131,7 +131,7 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         expect(result.value.gridWidth, greaterThanOrEqualTo(6));
-        expect(result.value.gridWidth, lessThanOrEqualTo(12));
+        expect(result.value.gridWidth, lessThanOrEqualTo(9));
         // Note: Stub implementation may not fully respect node count constraints
         expect(result.value.nodes.length, greaterThanOrEqualTo(3));
       });
@@ -140,8 +140,8 @@ void main() {
         final result = generator.generate(5, mode: DifficultyMode.hard);
 
         expect(result.isSuccess, isTrue);
-        expect(result.value.gridWidth, greaterThanOrEqualTo(6));
-        expect(result.value.gridWidth, lessThanOrEqualTo(18));
+        expect(result.value.gridWidth, greaterThanOrEqualTo(7));
+        expect(result.value.gridWidth, lessThanOrEqualTo(10));
         // Note: Stub implementation may not fully respect node count constraints
         expect(result.value.nodes.length, greaterThanOrEqualTo(3));
       });
@@ -169,15 +169,15 @@ void main() {
 
         expect(result.isSuccess, isTrue);
         expect(result.value.gridWidth, greaterThanOrEqualTo(6));
-        expect(result.value.gridWidth, lessThanOrEqualTo(12));
+        expect(result.value.gridWidth, lessThanOrEqualTo(9));
       });
 
       test('level 30+ auto-derives hard mode', () {
         final result = generator.generate(50);
 
         expect(result.isSuccess, isTrue);
-        expect(result.value.gridWidth, greaterThanOrEqualTo(6));
-        expect(result.value.gridWidth, lessThanOrEqualTo(18));
+        expect(result.value.gridWidth, greaterThanOrEqualTo(7));
+        expect(result.value.gridWidth, lessThanOrEqualTo(10));
       });
     });
 

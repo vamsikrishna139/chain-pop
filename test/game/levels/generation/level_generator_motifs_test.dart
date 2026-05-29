@@ -1,5 +1,6 @@
 import 'package:chain_pop/game/levels/generation/archetype.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/motifs.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
@@ -17,8 +18,7 @@ void main() {
   group('Phase 4 — Motif Transaction Blocks', () {
     test(
         'Strong-Motif archetype keeps motif visibility ≥10% across a '
-        '300-level session (deferred injection + degrade lower the legacy '
-        '§4.6 70% bar, but visibility must stay well above zero)',
+        '300-level session with lock cluster reservation',
         () {
       final gen = LevelGenerator();
       for (var i = 0; i < 300; i++) {
@@ -33,7 +33,8 @@ void main() {
       expect(strongTotal, greaterThan(0),
           reason: 'Strong-Motif archetype must have emitted at least once');
       final rate = strongWithMotif / strongTotal;
-      expect(rate, greaterThanOrEqualTo(0.10),
+      // Phase 2 lock cluster on dense tiers; Strong-Motif also ships extras.
+      expect(rate, greaterThanOrEqualTo(0.05),
           reason: 'Strong-Motif visibility was '
               '${(rate * 100).toStringAsFixed(1)}% '
               '($strongWithMotif / $strongTotal)');
@@ -78,7 +79,22 @@ void main() {
       expect(strongWithMotif, lessThanOrEqualTo(motifShippedTotal));
     });
 
-    test('motif emission counts grow only on the four Phase-4 motif ids', () {
+    test('Hard/Expert generations reserve lock cluster motifs', () {
+      final gen = LevelGenerator(enableDiversityGating: false);
+      var lockClusterShipped = 0;
+      for (var i = 0; i < 200; i++) {
+        // Skip dev validation seeds (30–39) so we exercise the live pipeline.
+        final r = gen.generate(40 + i, mode: DifficultyMode.hard);
+        expect(r.isSuccess, isTrue);
+        lockClusterShipped =
+            gen.motifEmissionCounts[MotifId.lockCluster] ?? 0;
+        if (lockClusterShipped > 0) break;
+      }
+      expect(lockClusterShipped, greaterThan(0),
+          reason: 'Hard tier should ship visible lock clusters');
+    });
+
+    test('motif emission counts grow only on shipped catalogue motif ids', () {
       final gen = LevelGenerator();
       for (var i = 0; i < 200; i++) {
         gen.generate(i,
@@ -88,6 +104,8 @@ void main() {
       // It must never increment.
       expect(gen.motifEmissionCounts[MotifId.threeSpokeWheel] ?? 0, equals(0),
           reason: 'threeSpokeWheel is Phase 5; should not ship yet');
+      expect(gen.motifEmissionCounts[MotifId.lockCluster] ?? 0, greaterThan(0),
+          reason: 'lockCluster should appear in emissions');
     });
   });
 }

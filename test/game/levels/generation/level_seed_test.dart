@@ -2,6 +2,7 @@ import 'package:chain_pop/game/levels/generation/archetype.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/silhouettes.dart';
+import 'package:chain_pop/game/levels/seeds/seed_registry.dart';
 import 'package:chain_pop/game/levels/seeds/seeds.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -79,12 +80,24 @@ void main() {
       expect(touchesOuter, isTrue);
     });
 
-    test('seed registry covers exactly the documented opening levels', () {
-      expect(seedRegistry.keys.toSet(), equals({1, 2, 3}));
+    test('seed registry covers the opening levels and (when enabled) dense validation seeds', () {
+      // Base opening seeds are always present.
+      expect(seedRegistry.containsKey(1), isTrue);
+      expect(seedRegistry.containsKey(2), isTrue);
+      expect(seedRegistry.containsKey(3), isTrue);
       expect(seedRegistry[1]!.id, equals('opening-1'));
       expect(seedRegistry[2]!.archetypeId,
           equals(GenerationArchetype.cleanAuthored));
       expect(seedRegistry[3]!.silhouetteId, equals(SilhouetteId.cross));
+
+      // Dense Strategy Phase 1E: when validation seeds are enabled,
+      // levels 30–39 are also present.
+      if (useDenseValidationSeeds) {
+        for (var i = 30; i <= 39; i++) {
+          expect(seedRegistry.containsKey(i), isTrue,
+              reason: 'dense validation seed for level $i missing');
+        }
+      }
     });
   });
 }
