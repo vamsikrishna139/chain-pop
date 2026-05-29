@@ -95,10 +95,14 @@ void main() {
     });
 
     test('motif emission counts grow only on shipped catalogue motif ids', () {
-      final gen = LevelGenerator();
+      final gen = LevelGenerator(enableDiversityGating: false);
       for (var i = 0; i < 200; i++) {
         gen.generate(i,
             mode: DifficultyMode.values[i % DifficultyMode.values.length]);
+      }
+      // Lock clusters are reserved on Hard/Expert — exercise dense tier.
+      for (var i = 0; i < 50; i++) {
+        gen.generate(40 + i, mode: DifficultyMode.hard);
       }
       // The 3-spoke wheel is in the enum but not in the catalogue (Phase 5).
       // It must never increment.

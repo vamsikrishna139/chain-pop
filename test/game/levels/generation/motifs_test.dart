@@ -107,8 +107,8 @@ void main() {
         );
         if (motif.id == MotifId.lockCluster) lockCount++;
       }
-      expect(lockCount, greaterThan(80),
-          reason: 'Hard tier should sample lock cluster ~60%');
+      expect(lockCount, inInclusiveRange(40, 80),
+          reason: 'Hard tier should sample lock cluster ~30% (r in [0.40, 0.70))');
     });
   });
 

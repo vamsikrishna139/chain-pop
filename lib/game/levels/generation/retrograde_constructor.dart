@@ -210,7 +210,10 @@ class RetrogradeConstructor {
       final candidate = _finalizeRemovalOrder(forward);
       if (_validatesRemovalOrderIdSequence(candidate)) {
         baseline = candidate;
-        final targetRemovalIdx = (candidate.length * 0.30).round().clamp(3, candidate.length ~/ 3);
+        final third = max(1, candidate.length ~/ 3);
+        final lower = min(3, third);
+        final targetRemovalIdx =
+            (candidate.length * 0.30).round().clamp(lower, max(lower, third)).toInt();
         final startRemoval = max(0, targetRemovalIdx - 2);
         final endRemoval = min(candidate.length - 1, targetRemovalIdx + 2);
         if (startRemoval <= endRemoval) {

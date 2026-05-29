@@ -23,6 +23,7 @@ LevelMetrics _metrics({
     tempoProfile: tempoProfile,
     viablePathCount: -1,
     viablePathCountCapped: false,
+    wavePeelingProfile: const [],
   );
 }
 
@@ -46,7 +47,7 @@ void main() {
         avgBF: 4.0,
         firstLegal: 5,
         cud: 5,
-        fsr: 0.30,
+        fsr: 0.55,
       );
       expect(DifficultyProfile.hard.passes(m), isTrue);
     });
@@ -58,7 +59,7 @@ void main() {
         avgBF: 2.5,
         firstLegal: 5,
         cud: 5,
-        fsr: 0.30,
+        fsr: 0.55,
       );
       expect(DifficultyProfile.hard.passes(m), isFalse);
     });
@@ -70,12 +71,24 @@ void main() {
         avgBF: 4.0,
         firstLegal: 2,
         cud: 5,
+        fsr: 0.55,
+      );
+      expect(DifficultyProfile.hard.passes(m), isFalse);
+    });
+
+    test('Hard rejects FSR below tier minimum', () {
+      final m = _metrics(
+        nodeCount: 24,
+        waveDepth: 6,
+        avgBF: 4.0,
+        firstLegal: 5,
+        cud: 5,
         fsr: 0.30,
       );
       expect(DifficultyProfile.hard.passes(m), isFalse);
     });
 
-    test('Hard skips tier FSR band but keeps universal cap', () {
+    test('Hard accepts FSR within tier band and below universal cap', () {
       final m = _metrics(
         nodeCount: 24,
         waveDepth: 6,
@@ -106,7 +119,7 @@ void main() {
         avgBF: 4.0,
         firstLegal: 6,
         cud: 5,
-        fsr: 0.30,
+        fsr: 0.55,
         tempoProfile: const [8, 7, 6, 4, 2, 1, 1, 2, 1, 6, 8, 10],
       );
       expect(DifficultyProfile.hard.passes(m), isTrue);
@@ -142,9 +155,9 @@ void main() {
         nodeCount: 26,
         waveDepth: 7,
         avgBF: 3.0,
-        firstLegal: 3,
+        firstLegal: 4,
         cud: 6,
-        fsr: 0.32,
+        fsr: 0.60,
         tempoProfile: const [2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
       );
       expect(DifficultyProfile.expert.passes(m), isTrue);
