@@ -16,7 +16,7 @@ import 'components/node_component.dart';
 import '../services/game_sfx.dart';
 import '../theme/app_colors.dart';
 
-/// The core Flame game engine for Chain Pop.
+/// The core Flame game engine for Unbound.
 ///
 /// Key design points:
 ///  • Accept an optional [preloadedLevel] so [GameScreen] can generate the

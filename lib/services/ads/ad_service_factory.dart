@@ -6,6 +6,7 @@ import 'ad_service.dart';
 import 'ads_locator.dart';
 import 'google_mobile_ad_service.dart';
 import 'no_op_ad_service.dart';
+import 'premium_ad_service_decorator.dart';
 
 /// Builds the production [AdService] for the current embedder.
 ///
@@ -22,7 +23,7 @@ AdService createDefaultAdService() {
   switch (defaultTargetPlatform) {
     case TargetPlatform.android:
     case TargetPlatform.iOS:
-      return GoogleMobileAdService();
+      return PremiumAdServiceDecorator(GoogleMobileAdService());
     default:
       return NoOpAdService();
   }

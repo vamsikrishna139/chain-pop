@@ -31,8 +31,8 @@ final class GameAdCoordinator {
           title: const Text('Extra hints'),
           content: Text(
             _s.widget.isDailyChallenge
-                ? 'On Daily Challenge, hints use a quick video ad thanks for supporting Chain Pop!'
-                : 'Hard mode uses video ads for extra hints thanks for supporting Chain Pop!',
+                ? 'On Daily Challenge, hints use a quick video ad thanks for supporting Unbound!'
+                : 'Hard mode uses video ads for extra hints thanks for supporting Unbound!',
             style: Theme.of(ctx).textTheme.bodyMedium,
           ),
           actions: [

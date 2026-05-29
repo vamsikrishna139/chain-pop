@@ -1,4 +1,4 @@
-# Chain Pop
+# Unbound: Arrow Puzzle
 
 A minimalist extraction-based logic puzzle game built with **Flutter + Flame**.
 
@@ -180,6 +180,25 @@ Tapping a 500-level group opens a drill-down showing its 100-level sub-groups. T
 # Run the app
 flutter run
 
+# Run with in-app purchases (RevenueCat) on device
+flutter run \
+  --dart-define=REVENUECAT_GOOGLE_API_KEY=goog_xxx \
+  --dart-define=REVENUECAT_APPLE_API_KEY=appl_xxx
+```
+
+### Build-time configuration
+
+| Define | Purpose |
+|--------|---------|
+| `REVENUECAT_GOOGLE_API_KEY` | RevenueCat public SDK key (Android) — required for Remove Ads |
+| `REVENUECAT_APPLE_API_KEY` | RevenueCat public SDK key (iOS / macOS) |
+| `CHAINPOP_PRIVACY_POLICY_URL` | Override default privacy policy URL |
+| `MOCK_ADS` | Skip real Mobile Ads initialization (`true` / `false`) |
+| `ADMOB_USE_SAMPLE_UNITS` | Use Google sample ad unit IDs |
+
+Premium entitlement id in RevenueCat must be **`Unbound Pro`** (see `lib/config/subscription_config.dart`).
+
+```bash
 # Run all tests
 flutter test
 

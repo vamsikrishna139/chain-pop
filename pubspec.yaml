@@ -22,6 +22,7 @@ dependencies:
   firebase_analytics: ^12.4.1
   webview_flutter: ^4.13.1
   url_launcher: ^6.3.2
+  purchases_flutter: ^10.1.0
   # Mocked logic for later integrations
   # applovin_max: ^...
   # firebase_remote_config: ^...

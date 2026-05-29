@@ -58,7 +58,7 @@ Future<void> showPrivacyRightsSheet({
                         ),
                         const SizedBox(height: 16),
                         const Text(
-                          'Chain Pop is playable without an account. We store game progress, settings, and puzzle activity locally on your device. Ads and diagnostics may use device identifiers, usage data, and approximate region to show, measure, and improve ads.',
+                          'Unbound is playable without an account. We store game progress, settings, and puzzle activity locally on your device. Ads and diagnostics may use device identifiers, usage data, and approximate region to show, measure, and improve ads.',
                           style: TextStyle(
                             color: Colors.white70,
                             height: 1.5,
@@ -138,7 +138,7 @@ Future<void> showPrivacyRightsSheet({
                                 scheme: 'mailto',
                                 path: ChainPopLegal.supportEmail,
                                 queryParameters: {
-                                  'subject': 'Privacy Inquiry - Chain Pop'
+                                  'subject': 'Privacy Inquiry - Unbound'
                                 },
                               );
                               if (await canLaunchUrl(uri)) {

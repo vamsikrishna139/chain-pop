@@ -3,11 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
-    'default privacy policy URL points at hosted gist',
+    'default privacy policy URL points at Unbound hosted policy',
     () {
       expect(
         ChainPopLegal.privacyPolicyUrl,
-        'https://gist.github.com/vamsikrishna139/426c736eb50f35cb125b37f64259f925',
+        'https://sites.google.com/view/unbound-policy/home',
       );
     },
   );

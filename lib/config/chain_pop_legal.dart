@@ -1,11 +1,11 @@
 /// Legal / policy URLs — override at build time with `--dart-define`.
 ///
-/// Default points at the Chain Pop hosted policy; CI/staging builds can override
+/// Default points at the Unbound hosted policy; CI/staging builds can override
 /// with `--dart-define=CHAINPOP_PRIVACY_POLICY_URL=...` when needed.
 abstract final class ChainPopLegal {
   static const privacyPolicyUrl = String.fromEnvironment(
     'CHAINPOP_PRIVACY_POLICY_URL',
-    defaultValue: 'https://sites.google.com/view/mindglow-studios/home',
+    defaultValue: 'https://sites.google.com/view/unbound-policy/home',
   );
 
   /// Note: If you change this email, you must also manually update the contact
