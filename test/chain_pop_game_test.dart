@@ -382,4 +382,55 @@ void main() {
       expect(wins, 1);
     });
   });
+
+  group('relay rotation', () {
+    test('extracting a relay rotates its row clockwise', () {
+      final game = ChainPopGame(
+        levelId: 58,
+        difficulty: DifficultyMode.hard,
+        onWin: () {},
+      );
+      final relay =
+          NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay);
+      final other = NodeData(id: 1, x: 2, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 58,
+        gridWidth: 4,
+        gridHeight: 4,
+        nodes: [relay.clone(), other.clone()],
+      );
+      game.activeNodes.addAll([relay.clone(), other.clone()]);
+
+      game.registerExtraction(relay);
+
+      expect(game.activeNodes.single.dir, Direction.right);
+    });
+
+    test('undo reverses the relay row rotation', () {
+      final game = ChainPopGame(
+        levelId: 58,
+        difficulty: DifficultyMode.hard,
+        onWin: () {},
+      );
+      final relay =
+          NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay);
+      final other = NodeData(id: 1, x: 2, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 58,
+        gridWidth: 4,
+        gridHeight: 4,
+        nodes: [relay.clone(), other.clone()],
+      );
+      game.activeNodes.addAll([relay.clone(), other.clone()]);
+
+      game.registerExtraction(relay);
+      expect(game.undo(), isTrue);
+
+      final restoredOther = game.activeNodes.firstWhere((n) => n.id == 1);
+      expect(restoredOther.dir, Direction.up);
+      final restoredRelay = game.activeNodes.firstWhere((n) => n.id == 0);
+      expect(restoredRelay.dir, Direction.left);
+      expect(restoredRelay.kind, NodeKind.relay);
+    });
+  });
 }
