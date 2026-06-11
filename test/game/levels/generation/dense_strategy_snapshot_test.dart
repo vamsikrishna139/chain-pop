@@ -81,6 +81,24 @@ void main() {
 
     _printDailies();
   });
+
+  test('Hard L30-39 waveZeroWidth gate (informational)', () {
+    final gen = LevelGenerator(enableDiversityGating: false);
+    var waveZeroSum = 0;
+    var waveZeroMax = 0;
+    var successCount = 0;
+    for (var id = 30; id < 40; id++) {
+      final r = gen.generate(id, mode: DifficultyMode.hard);
+      if (!r.isSuccess) continue;
+      successCount++;
+      final m = LevelMetrics.compute(r.value);
+      waveZeroSum += m.waveZeroWidth;
+      waveZeroMax = max(waveZeroMax, m.waveZeroWidth);
+      expect(r.value.gridWidth, lessThanOrEqualTo(8));
+      expect(r.value.gridHeight, lessThanOrEqualTo(8));
+    }
+    expect(successCount, greaterThanOrEqualTo(7));
+  });
 }
 
 List<int> _sampleLevelIds({
@@ -131,6 +149,7 @@ void _printBatch(
   }
 
   var nodes = 0, cud = 0, waves = 0, flm = 0, inBand = 0;
+  var waveZeroSum = 0, waveZeroOver5 = 0;
   var fillSum = 0.0, fsrSum = 0.0, bfSum = 0.0;
   var tempoMinSum = 0, tempoMaxSum = 0;
   final viable = <int>[];
@@ -176,6 +195,8 @@ void _printBatch(
     fsrSum += m.forcedSequenceRatio;
     waves += m.waveDepth;
     flm += m.firstLegalMoveCount;
+    waveZeroSum += m.waveZeroWidth;
+    if (m.waveZeroWidth > 5) waveZeroOver5++;
     bfSum += m.averageBranchingFactor;
     tempoMinSum += tempoMin;
     tempoMaxSum += tempoMax;
@@ -200,7 +221,7 @@ void _printBatch(
       '  L$id: ${level.gridWidth}x${level.gridHeight} '
       'nodes=${m.nodeCount} fill=${(fill * 100).toStringAsFixed(0)}% '
       'CUD=${m.criticalUnlockDepth} FSR=${(m.forcedSequenceRatio * 100).toStringAsFixed(0)}% '
-      'waves=${m.waveDepth} opening=${m.firstLegalMoveCount} '
+      'waves=${m.waveDepth} opening=${m.firstLegalMoveCount} waveZero=${m.waveZeroWidth} '
       'BF=${m.averageBranchingFactor.toStringAsFixed(1)} '
       'tempoMin=$tempoMin tempoMax=$tempoMax '
       'paths=${m.viablePathCount} inBand=$passes '
@@ -218,6 +239,7 @@ void _printBatch(
     '  AVG: nodes=${(nodes / n).toStringAsFixed(0)} fill=${(fillSum / n * 100).toStringAsFixed(0)}% '
     'CUD=${(cud / n).toStringAsFixed(1)} FSR=${(fsrSum / n * 100).toStringAsFixed(0)}% '
     'waves=${(waves / n).toStringAsFixed(1)} opening=${(flm / n).toStringAsFixed(1)} '
+    'waveZero=${(waveZeroSum / n).toStringAsFixed(1)} over5=$waveZeroOver5/${levelIds.length} '
     'BF=${(bfSum / n).toStringAsFixed(1)} '
     'tempoMin=${(tempoMinSum / n).toStringAsFixed(1)} tempoMax=${(tempoMaxSum / n).toStringAsFixed(1)} '
     'inBand=$inBand/${levelIds.length} '
@@ -282,7 +304,7 @@ void _printDailies() {
       '  $key: ${level.gridWidth}x${level.gridHeight} '
       'nodes=${m.nodeCount} fill=${(fill * 100).toStringAsFixed(0)}% '
       'CUD=${m.criticalUnlockDepth} FSR=${(m.forcedSequenceRatio * 100).toStringAsFixed(0)}% '
-      'waves=${m.waveDepth} opening=${m.firstLegalMoveCount} '
+      'waves=${m.waveDepth} opening=${m.firstLegalMoveCount} waveZero=${m.waveZeroWidth} '
       'BF=${m.averageBranchingFactor.toStringAsFixed(1)} inBand=$passes '
       'wavesProfile=${m.wavePeelingProfile}',
     );

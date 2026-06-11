@@ -90,11 +90,11 @@ void main() {
     });
 
     group('difficulty progression', () {
-      test('easy mode produces smaller grids than medium', () {
+      test('easy mode produces smaller or equal grids than medium', () {
         final easyConfig = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
         final mediumConfig = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.medium);
 
-        expect(easyConfig.gridWidth, lessThan(mediumConfig.gridWidth));
+        expect(easyConfig.gridWidth, lessThanOrEqualTo(mediumConfig.gridWidth));
       });
 
       test('easy mode produces fewer nodes than medium', () {
@@ -107,7 +107,7 @@ void main() {
       // With archetypes, a single level may get different grid shapes per mode.
       // Test the *base* grid size relationship instead of archetype-modulated.
       test('hard mode base grid is at least as large as medium at higher levels', () {
-        // Verify across many levels that hard's base cap (10) ≥ medium's (9)
+        // Verify across many levels that hard's base cap (9) ≥ medium's (9)
         final mediumConfig = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.medium);
         final hardConfig = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
 
@@ -265,18 +265,18 @@ void main() {
     });
 
     group('grid dimension caps', () {
-      test('hard mode L30-500 respects 8-10 axis caps', () {
+      test('hard mode L30-500 respects 6-8 axis caps', () {
         for (var levelId = 30; levelId <= 500; levelId++) {
           final config =
               LevelConfiguration.fromLevelId(levelId, mode: DifficultyMode.hard);
           expect(
             config.gridWidth,
-            inInclusiveRange(8, 10),
+            inInclusiveRange(6, 8),
             reason: 'L$levelId width ${config.gridWidth}',
           );
           expect(
             config.gridHeight,
-            inInclusiveRange(8, 10),
+            inInclusiveRange(6, 8),
             reason: 'L$levelId height ${config.gridHeight}',
           );
         }

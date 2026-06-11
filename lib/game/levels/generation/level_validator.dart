@@ -6,6 +6,8 @@ import 'validation_result.dart';
 ///
 /// The validator verifies that nodes can be removed in ID order (0, 1, 2, ...)
 /// by checking that each node's direction is clear when its turn arrives.
+/// Relay pops are simulated with the same row rotation gameplay applies, so a
+/// level only validates if its canonical solution survives the rotation.
 ///
 /// Example usage:
 /// ```dart
@@ -24,16 +26,17 @@ class LevelValidator {
   /// Returns [ValidationResult.success] if the level is solvable,
   /// or [ValidationResult.error] with a descriptive message if validation fails.
   ValidationResult validate(LevelData level) {
-    // Sort nodes by ID to get solution path order
-    final sortedNodes = List<NodeData>.from(level.nodes)
-      ..sort((a, b) => a.id.compareTo(b.id));
+    // Solution path order is ID order (0, 1, 2, ...)
+    final orderedIds = level.nodes.map((n) => n.id).toList()..sort();
 
-    // Clone all nodes to simulate removal
+    // Clone all nodes to simulate removal. Relay rotations mutate directions
+    // mid-simulation, so each step must re-read the node from this list
+    // rather than trust the original snapshot.
     List<NodeData> remainingNodes = level.nodes.map((n) => n.clone()).toList();
 
     // Simulate removing each node in solution path order
-    for (final nodeToRemove in sortedNodes) {
-      // Check if this node can be removed
+    for (final id in orderedIds) {
+      final nodeToRemove = remainingNodes.firstWhere((n) => n.id == id);
       if (!LevelSolver.canRemove(nodeToRemove, remainingNodes, level)) {
         return ValidationResult.error(
           'Node ${nodeToRemove.id} at (${nodeToRemove.x}, ${nodeToRemove.y}) '
@@ -41,8 +44,15 @@ class LevelValidator {
         );
       }
 
-      // Remove the node from remaining nodes
-      remainingNodes.removeWhere((n) => n.id == nodeToRemove.id);
+      // Mirror gameplay: popping a relay rotates its whole row clockwise.
+      if (nodeToRemove.kind == NodeKind.relay) {
+        remainingNodes = [
+          for (final n in remainingNodes)
+            n.y == nodeToRemove.y ? n.copyWith(dir: n.dir.rotatedCw) : n,
+        ];
+      }
+
+      remainingNodes.removeWhere((n) => n.id == id);
     }
 
     // Verify all nodes were removed

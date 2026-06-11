@@ -9,6 +9,7 @@ import 'motifs.dart';
 import 'removal_order.dart';
 import 'sightline_table.dart';
 import 'difficulty_profile.dart';
+import 'metrics.dart';
 
 /// A single committed placement in the retrograde sequence — a board cell
 /// paired with the direction whose ray was clear at the moment of placement.
@@ -103,16 +104,16 @@ class RetrogradeConstructor {
   final DifficultyTier? tier;
 
   static const Map<DifficultyTier, int> _maxOpeningByTier = {
-    DifficultyTier.easy: 12,
-    DifficultyTier.medium: 10,
-    DifficultyTier.hard: 9,
-    DifficultyTier.expert: 15,
+    DifficultyTier.easy: 10,
+    DifficultyTier.medium: 8,
+    DifficultyTier.hard: 5,
+    DifficultyTier.expert: 5,
   };
 
   static const Map<DifficultyTier, int> _minOpeningByTier = {
     DifficultyTier.easy: 5,
     DifficultyTier.medium: 4,
-    DifficultyTier.hard: 4,
+    DifficultyTier.hard: 3,
     DifficultyTier.expert: 3,
   };
 
@@ -254,7 +255,11 @@ class RetrogradeConstructor {
           final maxOpening = _maxOpeningByTier[tier];
           final minOpening = _minOpeningByTier[tier];
           if (maxOpening != null && minOpening != null) {
-             finalResult = _enforceOpeningTarget(finalResult, maxOpening: maxOpening, minOpening: minOpening);
+            finalResult = _enforceOpeningTarget(
+              finalResult,
+              maxOpening: maxOpening,
+              minOpening: minOpening,
+            );
           }
         }
         return finalResult;
@@ -272,7 +277,11 @@ class RetrogradeConstructor {
       final maxOpening = _maxOpeningByTier[tier];
       final minOpening = _minOpeningByTier[tier];
       if (maxOpening != null && minOpening != null) {
-         finalBaseline = _enforceOpeningTarget(finalBaseline, maxOpening: maxOpening, minOpening: minOpening);
+        finalBaseline = _enforceOpeningTarget(
+          finalBaseline,
+          maxOpening: maxOpening,
+          minOpening: minOpening,
+        );
       }
     }
     return finalBaseline;
@@ -890,45 +899,76 @@ class RetrogradeConstructor {
   }) {
     var current = placements.toList();
     for (var attempt = 0; attempt < 20; attempt++) {
-      final freeIndices = <int>[];
-      for (var i = 0; i < current.length; i++) {
-        final target = _firstNodeIdOnRay(current[i].position, current[i].direction, current, selfId: i);
-        if (target == null) freeIndices.add(i);
-      }
-      
-      if (freeIndices.length <= maxOpening) break; 
-      if (freeIndices.length <= minOpening) break; 
+      final opening = _waveZeroWidth(current);
+      if (opening <= maxOpening) break;
+      if (opening <= minOpening) break;
 
+      final freeIndices = _rayFreeIndices(current);
       freeIndices.sort((a, b) => b.compareTo(a));
-      
-      bool flippedAny = false;
+
+      var flippedAny = false;
       for (final i in freeIndices) {
-        if (freeIndices.length <= maxOpening) break;
-        if (freeIndices.length <= minOpening) break;
+        if (_waveZeroWidth(current) <= maxOpening) break;
+        if (_waveZeroWidth(current) <= minOpening) break;
 
         final node = current[i];
-        bool flippedThis = false;
-        
         final dirs = Direction.values.toList()..shuffle(random);
         for (final dir in dirs) {
           if (dir == node.direction) continue;
           final j = _firstNodeIdOnRay(node.position, dir, current, selfId: i);
-          if (j != null && j < i && _directionClearAtRemovalStep(i, dir, current)) {
+          if (j != null &&
+              j < i &&
+              _directionClearAtRemovalStep(i, dir, current)) {
             final next = current.toList();
-            next[i] = RetrogradePlacement(position: node.position, direction: dir);
+            next[i] = RetrogradePlacement(
+              position: node.position,
+              direction: dir,
+            );
             if (_validatesRemovalOrderIdSequence(next)) {
               current = next;
-              flippedThis = true;
               flippedAny = true;
               break;
             }
           }
         }
-        if (flippedThis) break; 
       }
-      if (!flippedAny) break; 
+      if (!flippedAny) break;
     }
     return current;
+  }
+
+  int _waveZeroWidth(List<RetrogradePlacement> placements) {
+    final nodes = <NodeData>[
+      for (var i = 0; i < placements.length; i++)
+        NodeData(
+          id: i,
+          x: placements[i].position.x,
+          y: placements[i].position.y,
+          dir: placements[i].direction,
+        ),
+    ];
+    final level = LevelData(
+      levelId: 0,
+      gridWidth: gridWidth,
+      gridHeight: gridHeight,
+      nodes: nodes,
+    );
+    final profile = computeWavePeelingProfile(level);
+    return profile.isEmpty ? 0 : profile.first;
+  }
+
+  List<int> _rayFreeIndices(List<RetrogradePlacement> current) {
+    final freeIndices = <int>[];
+    for (var i = 0; i < current.length; i++) {
+      final target = _firstNodeIdOnRay(
+        current[i].position,
+        current[i].direction,
+        current,
+        selfId: i,
+      );
+      if (target == null) freeIndices.add(i);
+    }
+    return freeIndices;
   }
 
   bool _validatesRemovalOrderIdSequence(List<RetrogradePlacement> removalOrder) {

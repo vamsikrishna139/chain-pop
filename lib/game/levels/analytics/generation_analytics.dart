@@ -177,6 +177,11 @@ class GenerationSessionSnapshot {
   final int winningBlockingRetryIndex1;
   final int winningBlockingRetryIndex2;
   final int maxAttemptsExhaustedCount;
+  final int rejectAspectCount;
+  final int rejectOccupancyCount;
+  final int rejectComponentsCount;
+  final int rejectSingletonCount;
+  final int rejectBlobVsGridCount;
 
   const GenerationSessionSnapshot({
     required this.retrogradeAttempts,
@@ -200,6 +205,11 @@ class GenerationSessionSnapshot {
     this.winningBlockingRetryIndex1 = 0,
     this.winningBlockingRetryIndex2 = 0,
     this.maxAttemptsExhaustedCount = 0,
+    this.rejectAspectCount = 0,
+    this.rejectOccupancyCount = 0,
+    this.rejectComponentsCount = 0,
+    this.rejectSingletonCount = 0,
+    this.rejectBlobVsGridCount = 0,
   });
 
   /// Convenience: motif visibility rate for the Strong-Motif archetype.
@@ -239,6 +249,11 @@ class GenerationSessionSnapshot {
         'winningBlockingRetryIndex1': winningBlockingRetryIndex1,
         'winningBlockingRetryIndex2': winningBlockingRetryIndex2,
         'maxAttemptsExhaustedCount': maxAttemptsExhaustedCount,
+        'rejectAspectCount': rejectAspectCount,
+        'rejectOccupancyCount': rejectOccupancyCount,
+        'rejectComponentsCount': rejectComponentsCount,
+        'rejectSingletonCount': rejectSingletonCount,
+        'rejectBlobVsGridCount': rejectBlobVsGridCount,
       };
 }
 

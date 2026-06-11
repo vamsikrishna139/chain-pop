@@ -284,4 +284,102 @@ void main() {
       expect(game.canExtract(nodes[0]), isTrue, reason: 'Node 1 is completely free');
     });
   });
+
+  group('Restoration trail lifecycle', () {
+    ChainPopGame buildGame() {
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+      );
+      final n0 = NodeData(id: 0, x: 0, y: 0, dir: Direction.up);
+      final n1 = NodeData(id: 1, x: 4, y: 4, dir: Direction.down);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: [n0.clone(), n1.clone()],
+      );
+      game.activeNodes.addAll([n0.clone(), n1.clone()]);
+      return game;
+    }
+
+    test('extraction marks the vacated cell as restored', () {
+      final game = buildGame();
+      game.registerExtraction(game.levelData.nodes[0]);
+      expect(game.restoredCellsForTest, {(0, 0)});
+    });
+
+    test('undo removes the restored marker', () {
+      final game = buildGame();
+      game.registerExtraction(game.levelData.nodes[0]);
+      expect(game.undo(), isTrue);
+      expect(game.restoredCellsForTest, isEmpty);
+    });
+
+    test('extraction streak is exposed and reset by jam', () {
+      final game = buildGame();
+      expect(game.extractionStreak, 0);
+      game.registerExtraction(game.levelData.nodes[0]);
+      expect(game.extractionStreak, 1);
+      game.reportJam();
+      expect(game.extractionStreak, 0);
+    });
+  });
+
+  group('Core win cascade finale', () {
+    test('core win with unmounted board calls onWin immediately', () {
+      var wins = 0;
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.hard,
+        onWin: () => wins++,
+      );
+      final core = NodeData(id: 0, x: 0, y: 0, dir: Direction.up, isCore: true);
+      final extra = NodeData(id: 1, x: 4, y: 4, dir: Direction.down);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: [core.clone(), extra.clone()],
+      );
+      game.activeNodes.addAll([core.clone(), extra.clone()]);
+
+      game.registerExtraction(core);
+      // Board never laid out → no cascade possible, win must not be lost.
+      expect(game.hasWon, isTrue);
+      expect(game.cascadeFinaleActive, isFalse);
+      expect(wins, 1);
+      expect(game.networkIntegrity, 100);
+
+      // Re-entry stays idempotent.
+      game.checkWinCondition();
+      expect(wins, 1);
+    });
+
+    test('core extraction restores integrity to 100 on win', () {
+      var wins = 0;
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.hard,
+        onWin: () => wins++,
+      );
+      final core = NodeData(id: 0, x: 0, y: 0, dir: Direction.up, isCore: true);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 3,
+        gridHeight: 3,
+        nodes: [core.clone()],
+      );
+      game.activeNodes.add(core.clone());
+      game.reportJam();
+      expect(game.networkIntegrity, 92);
+
+      game.registerExtraction(core);
+      expect(game.hasWon, isTrue);
+      expect(game.networkIntegrity, 100);
+      expect(game.restoredCellsForTest, isNotEmpty);
+      expect(wins, 1);
+    });
+  });
 }

@@ -296,5 +296,49 @@ void main() {
         expect(result.isValid, isTrue);
       });
     });
+
+    group('relay rotation simulation', () {
+      test('fails when relay rotation spins a row into a face-off', () {
+        // Without rotation this is ID-order solvable: relay 0 exits left,
+        // node 1 exits up, node 2 exits down. But popping the relay rotates
+        // row 0 clockwise: node 1 becomes →, node 2 becomes ←, and node 1's
+        // ray now hits node 2 — the exact deadlock seen in gameplay.
+        final level = LevelData(
+          levelId: 51,
+          gridWidth: 4,
+          gridHeight: 4,
+          nodes: [
+            NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay),
+            NodeData(id: 1, x: 2, y: 0, dir: Direction.up),
+            NodeData(id: 2, x: 3, y: 0, dir: Direction.down),
+          ],
+        );
+
+        final result = validator.validate(level);
+
+        expect(result.isValid, isFalse);
+        expect(result.message, contains('Node 1'));
+      });
+
+      test('passes when relay rotation is what clears the path', () {
+        // Node 1 points down into node 2, so the level is unsolvable in ID
+        // order *unless* the relay pop rotates row 0 (down → left), proving
+        // the validator applies the same rotation gameplay does.
+        final level = LevelData(
+          levelId: 51,
+          gridWidth: 4,
+          gridHeight: 4,
+          nodes: [
+            NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay),
+            NodeData(id: 1, x: 2, y: 0, dir: Direction.down),
+            NodeData(id: 2, x: 2, y: 1, dir: Direction.left),
+          ],
+        );
+
+        final result = validator.validate(level);
+
+        expect(result.isValid, isTrue);
+      });
+    });
   });
 }

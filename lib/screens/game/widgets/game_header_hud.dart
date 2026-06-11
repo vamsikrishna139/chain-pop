@@ -4,6 +4,7 @@ import '../../../game/levels/generation/difficulty_mode.dart';
 import '../../../models/difficulty.dart';
 import 'difficulty_label.dart';
 import 'lives_display.dart';
+import 'phase_progress_bar.dart';
 import 'timer_pause_chip.dart';
 
 class GameHeaderHud extends StatelessWidget {
@@ -14,10 +15,16 @@ class GameHeaderHud extends StatelessWidget {
   final int livesRemaining;
   final DifficultyMode difficulty;
 
-  /// When non-null, shown instead of [DifficultyLabel] (e.g. daily challenge).
+  /// When non-null, shown instead of [DifficultyLabel] (e.g. daily incident).
   final String? headerModeLabel;
+
+  /// Secondary line under mode label (world mission, incident objective).
+  final String? missionLabel;
   final int removedNodes;
   final int totalNodes;
+  final int? coresRestored;
+  final int? totalCores;
+  final int? networkIntegrity;
   final int? timeLeftSec;
   final int? timeLimitSec;
   final Duration elapsed;
@@ -31,8 +38,12 @@ class GameHeaderHud extends StatelessWidget {
     required this.livesRemaining,
     required this.difficulty,
     this.headerModeLabel,
+    this.missionLabel,
     required this.removedNodes,
     required this.totalNodes,
+    this.coresRestored,
+    this.totalCores,
+    this.networkIntegrity,
     required this.timeLeftSec,
     required this.timeLimitSec,
     required this.elapsed,
@@ -42,7 +53,10 @@ class GameHeaderHud extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = difficulty.color;
-    final progress = totalNodes > 0 ? removedNodes / totalNodes : 0.0;
+    final usesCores = (totalCores ?? 0) > 0;
+    final progressLabel = usesCores
+        ? 'Cores: ${coresRestored ?? 0}/${totalCores ?? 0}'
+        : '$removedNodes / $totalNodes nodes';
 
     return SafeArea(
       child: Padding(
@@ -67,7 +81,17 @@ class GameHeaderHud extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                const SizedBox.shrink(),
+                if (networkIntegrity != null)
+                  Text(
+                    'Integrity: $networkIntegrity%',
+                    style: TextStyle(
+                      color: _integrityColor(networkIntegrity!)
+                          .withValues(alpha: 0.9),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
                 const Spacer(),
                 IconButton(
                   onPressed: onOpenSettings,
@@ -86,25 +110,46 @@ class GameHeaderHud extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (headerModeLabel != null)
-                    Text(
-                      headerModeLabel!,
-                      style: TextStyle(
-                        color: accent,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    )
-                  else
-                    DifficultyLabel(difficulty: difficulty),
-                  const Spacer(),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (headerModeLabel != null)
+                          Text(
+                            headerModeLabel!,
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.1,
+                            ),
+                          )
+                        else
+                          DifficultyLabel(difficulty: difficulty),
+                        if (missionLabel != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            missionLabel!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.55),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.4,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '$removedNodes / $totalNodes nodes',
+                        progressLabel,
                         style: TextStyle(
                           color: accent.withValues(alpha: 0.7),
                           fontSize: 11,
@@ -113,23 +158,13 @@ class GameHeaderHud extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      SizedBox(
-                        width: 80,
-                        height: 3,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            value: progress.clamp(0.0, 1.0),
-                            backgroundColor: Colors.white12,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              accent.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ),
+                      PhaseProgressBar(
+                        removedNodes: removedNodes,
+                        totalNodes: totalNodes,
                       ),
                     ],
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   TimerPauseChip(
                     timeLeftSec: timeLeftSec,
                     timeLimitSec: timeLimitSec,
@@ -144,5 +179,11 @@ class GameHeaderHud extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  static Color _integrityColor(int value) {
+    if (value >= 70) return const Color(0xFF00FF87);
+    if (value >= 50) return const Color(0xFFFFC371);
+    return const Color(0xFFFF5252);
   }
 }

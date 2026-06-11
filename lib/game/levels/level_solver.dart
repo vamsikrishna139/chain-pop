@@ -153,6 +153,9 @@ class LevelSolver {
     Set<int> otherPositions,
     LevelData level,
   ) {
+    if (node.kind == NodeKind.locked && _lockedNeighborsRemain(node, otherPositions, level)) {
+      return false;
+    }
     var x = node.x;
     var y = node.y;
     final gw = level.gridWidth;
@@ -172,5 +175,21 @@ class LevelSolver {
       if (x < 0 || x >= gw || y < 0 || y >= gh) return true;
       if (otherPositions.contains(gridCellKey(x, y))) return false;
     }
+  }
+
+  static bool _lockedNeighborsRemain(
+    NodeData node,
+    Set<int> otherPositions,
+    LevelData level,
+  ) {
+    for (final (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)]) {
+      final nx = node.x + dx;
+      final ny = node.y + dy;
+      if (nx < 0 || nx >= level.gridWidth || ny < 0 || ny >= level.gridHeight) {
+        continue;
+      }
+      if (otherPositions.contains(gridCellKey(nx, ny))) return true;
+    }
+    return false;
   }
 }

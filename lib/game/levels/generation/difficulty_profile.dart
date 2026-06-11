@@ -121,7 +121,7 @@ class DifficultyProfile {
     nodeCount: MetricRange(25, 50),
     waveDepth: MetricRange(5, 8),
     averageBranchingFactor: MetricRange(3.0, 8.0),
-    firstLegalMoveCount: MetricRange(4, 10),
+    firstLegalMoveCount: MetricRange(3, 5),
     criticalUnlockDepth: MetricRange(5, 12),
     forcedSequenceRatio: MetricRange(0.45, 0.90),
     tempoShape: TempoProfileShape.dramatic,
@@ -139,7 +139,7 @@ class DifficultyProfile {
     nodeCount: MetricRange(28, 55),
     waveDepth: MetricRange(6, 10),
     averageBranchingFactor: MetricRange(3.0, 9.0),
-    firstLegalMoveCount: MetricRange(4, 15),
+    firstLegalMoveCount: MetricRange(3, 5),
     criticalUnlockDepth: MetricRange(6, 14),
     forcedSequenceRatio: MetricRange(0.50, 0.85),
     tempoShape: TempoProfileShape.compression,
@@ -194,7 +194,11 @@ class DifficultyProfile {
         metrics.forcedSequenceRatio > fsrCapValue) {
       return false;
     }
-    
+    if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
+      final w0 = metrics.waveZeroWidth;
+      if (w0 < 3 || w0 > 5) return false;
+    }
+
     // Temporary: Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
     // if ((tier == DifficultyTier.hard || tier == DifficultyTier.expert) &&
     //     metrics.tempoProfile.isNotEmpty &&

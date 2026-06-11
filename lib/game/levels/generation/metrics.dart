@@ -64,6 +64,10 @@ class LevelMetrics {
     required this.wavePeelingProfile,
   });
 
+  /// Width of the opening parallel-removal wave (turn-one choice count).
+  int get waveZeroWidth =>
+      wavePeelingProfile.isEmpty ? 0 : wavePeelingProfile.first;
+
   /// Computes all metrics. Set [includeViablePath] = true to also run the
   /// bounded DFS — typically only worth it after cheaper gates have passed.
   static LevelMetrics compute(

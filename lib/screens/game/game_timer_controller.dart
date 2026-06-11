@@ -11,6 +11,9 @@ final class GameTimerController {
     _s._timers.countdownTimer?.cancel();
     _s._timers.countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!_s.mounted || _s._hasWon || _s._isPaused) return;
+      // Engine wins before the Flutter overlay during the cascade finale —
+      // don't let the countdown expire a level that is already won.
+      if (_s._game?.hasWon ?? false) return;
       _s.patchState(() {
         _s._timeLeftSec = ((_s._timeLeftSec ?? _s._timeLimitSec!) - 1)
             .clamp(0, _s._timeLimitSec!);

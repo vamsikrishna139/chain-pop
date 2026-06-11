@@ -66,8 +66,8 @@ const double kHardEffectiveFillMax = 0.60;
 const double kDailyEffectiveFillMin = 0.50;
 const double kDailyEffectiveFillMax = 0.65;
 
-/// Maximum width or height for daily-challenge grids.
-const int kDailyChallengeMaxGridSpan = 11;
+/// Maximum width or height for daily-challenge grids (packed 6–8 span).
+const int kDailyChallengeMaxGridSpan = 8;
 
 /// First-roll chance to attempt an irregular [playCells] mask (blobs, zigzag, etc.).
 const double kDailyChallengeIrregularProbability = 0.95;
@@ -282,12 +282,17 @@ class LevelConfiguration {
 
   /// Returns `(width, height)` for the bounding grid.  Most archetypes use a
   /// square grid; [LevelArchetype.corridor] produces a rectangular one.
+  /// Returns `(width, height)` for the bounding grid.  Most archetypes use a
+  /// square grid; [LevelArchetype.corridor] produces a rectangular one.
   static (int, int) _calculateGridDimensions(
     int levelId,
     DifficultyMode mode,
     LevelArchetype archetype,
   ) {
-    final base = _baseGridSize(levelId, mode);
+    final difficulty = DifficultyParameters.fromLevelId(levelId, mode: mode);
+    // Estimated nodes using baseline baseCount calculation logic
+    final baseCount = difficulty.minNodes + (levelId * 0.5).floor();
+    final base = _packedGridSpan(baseCount, mode);
 
     switch (archetype) {
       case LevelArchetype.standard:
@@ -301,8 +306,8 @@ class LevelConfiguration {
         final s = min(20, base + 2);
         return _clampGridDimensions(s, s, mode);
       case LevelArchetype.corridor:
-        final longAxis = (base * 1.45).round();
-        final shortAxis = (base * 0.65).round();
+        final longAxis = (base * 1.35).round();
+        final shortAxis = (base * 0.70).round();
         final (w, h) = levelId.isEven
             ? (shortAxis, longAxis)
             : (longAxis, shortAxis);
@@ -311,6 +316,18 @@ class LevelConfiguration {
         final s = max(5, base);
         return _clampGridDimensions(s, s, mode);
     }
+  }
+
+  /// Calculates packed grid span based on estimated node count.
+  static int _packedGridSpan(int estimatedNodes, DifficultyMode mode) {
+    if (mode == DifficultyMode.easy) {
+      return estimatedNodes <= 10 ? 6 : 7;
+    }
+    if (estimatedNodes <= 20) return 6;
+    if (estimatedNodes <= 25) return 7;
+    if (estimatedNodes <= 32) return 8;
+    if (estimatedNodes <= 42) return 8;
+    return 8;
   }
 
   /// Post-archetype dual-axis clamp per difficulty mode.
@@ -323,7 +340,7 @@ class LevelConfiguration {
     final (minSpan, maxSpan) = switch (mode) {
       DifficultyMode.easy => (6, 8),
       DifficultyMode.medium => (6, 9),
-      DifficultyMode.hard => isDaily ? (9, 11) : (8, 10),
+      DifficultyMode.hard => (6, 8),
     };
     return (w.clamp(minSpan, maxSpan), h.clamp(minSpan, maxSpan));
   }
@@ -337,7 +354,7 @@ class LevelConfiguration {
       case DifficultyMode.medium:
         return (6 + logLevel * 0.60).floor().clamp(6, 9);
       case DifficultyMode.hard:
-        return (6 + logLevel * 0.75).floor().clamp(7, 10);
+        return (6 + logLevel * 0.75).floor().clamp(6, 8);
     }
   }
 

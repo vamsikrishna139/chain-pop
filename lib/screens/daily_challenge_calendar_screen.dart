@@ -116,7 +116,7 @@ class _DailyChallengeCalendarScreenState
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          DailyChallenge.monthYearTitle(y, m),
+          'Network Incidents · ${DailyChallenge.monthYearTitle(y, m)}',
           style: const TextStyle(fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
@@ -130,13 +130,13 @@ class _DailyChallengeCalendarScreenState
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 children: [
                   Text(
-                    'Daily challenges',
+                    'Network incidents',
                     style:
                         tt.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Today is free. Tap any earlier day to replay—after you confirm, a short ad unlocks that date once.',
+                    'Each day is a critical incident. Today is free. Earlier days replay after a short ad unlock.',
                     style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),

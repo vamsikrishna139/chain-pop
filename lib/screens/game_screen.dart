@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../game/chain_pop_game.dart';
 import '../game/daily_challenge.dart';
+import '../game/world_registry.dart';
 import '../game/difficulty_exports.dart';
 import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
@@ -27,6 +28,7 @@ import '../services/storage/chain_pop_progress_store.dart';
 import '../services/storage/chain_pop_storage.dart';
 import '../services/storage/storage_locator.dart';
 import '../theme/app_colors.dart';
+import '../theme/world_theme.dart';
 import 'game/game_screen_constants.dart';
 import 'game/game_screen_timer_coordinator.dart';
 import 'game/game_time_limit.dart';
@@ -312,6 +314,11 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _buildGame() {
+    // Daily/tutorial level ids don't map to campaign worlds — use the
+    // difficulty accent there; campaign levels get their world's accent.
+    final accent = widget.isDailyChallenge || widget.isTutorial
+        ? widget.difficulty.color
+        : worldForLevel(widget.level).accent;
     _game = ChainPopGame(
       levelId: widget.isDailyChallenge
           ? widget.dailyDayKey!
@@ -321,13 +328,16 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       onJam: _handleFoul,
       onNodeRemoved: _handleNodeRemoved,
       preloadedLevel: _levelData!,
+      theme: WorldTheme.fromAccent(accent),
     );
     _pushFeedbackToGame();
   }
 
   void _handleFoul() {
     if (_hasWon) return;
-    setState(() => _livesRemaining--);
+    setState(() {
+      _livesRemaining--;
+    });
     _timerController.resetGhostHintTimer();
     if (_livesRemaining <= 0) {
       _adCoordinator.handleGameOver();
@@ -341,6 +351,27 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _totalNodes = total;
     });
     _timerController.resetGhostHintTimer();
+  }
+
+  String? _headerModeLabel() {
+    if (widget.isTutorial) return 'TUTORIAL ${widget.tutorialIndex + 1}/5';
+    if (widget.isDailyChallenge) {
+      return DailyChallenge.incidentTitle(widget.dailyDayKey!);
+    }
+    if (widget.difficulty == DifficultyMode.hard) {
+      return worldHudLabel(widget.level);
+    }
+    return null;
+  }
+
+  String? _missionLabel() {
+    if (widget.isDailyChallenge) {
+      return DailyChallenge.incidentObjective(widget.dailyDayKey!);
+    }
+    if (!widget.isTutorial && widget.difficulty == DifficultyMode.hard) {
+      return missionForLevel(widget.level);
+    }
+    return null;
   }
 
   /// Invokes the same path as the win rail **Next** control (for automated tests).
@@ -431,7 +462,7 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   String _tutorialHintText() {
     switch (widget.tutorialIndex) {
       case 0:
-        return 'Tap the glowing arrow and clear the board before the countdown reaches zero. '
+        return 'Tap an arrow whose path is clear to the edge and clear the board before the countdown reaches zero. '
             'Pinch or tap Zoom in for a closer look; Reset zoom snaps back to the full board.';
       case 1:
         return 'Arrows block each other—clear a free exit first and watch the countdown. '
@@ -482,17 +513,9 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       body: Stack(
         key: _bodyStackKey,
         children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment.center,
-                  radius: 1.0,
-                  colors: [accent.withValues(alpha: 0.05), Colors.transparent],
-                ),
-              ),
-            ),
-          ),
+          // Ambient backdrop (world gradient, vignette, motes) is rendered by
+          // AmbientBackgroundComponent inside the Flame layer — the GameWidget
+          // paints an opaque background, so nothing behind it would show.
           Positioned.fill(child: GameWidget(game: _game!)),
           if (_hasWon)
             Positioned.fill(
@@ -506,13 +529,16 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             onOpenSettings: _openSettings,
             livesRemaining: _livesRemaining,
             difficulty: widget.difficulty,
-            headerModeLabel: widget.isDailyChallenge
-                ? 'DAILY CHALLENGE'
-                : (widget.isTutorial
-                    ? 'TUTORIAL ${widget.tutorialIndex + 1}/5'
-                    : null),
+            headerModeLabel: _headerModeLabel(),
+            missionLabel: _missionLabel(),
             removedNodes: _removedNodes,
             totalNodes: _totalNodes,
+            coresRestored:
+                _engine.usesCoreWin ? _engine.coresRestored : null,
+            totalCores: _engine.usesCoreWin ? _engine.totalCores : null,
+            networkIntegrity: _hardOrDailyFeatures && !widget.isTutorial
+                ? _engine.networkIntegrity
+                : null,
             timeLeftSec: _timeLeftSec,
             timeLimitSec: _timeLimitSec,
             elapsed: _stopwatch.elapsed,
@@ -621,7 +647,9 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   showNextAndAutoAdvance: !widget.isDailyChallenge &&
                       (!widget.isTutorial || widget.tutorialIndex < 4),
                   titleLine: widget.isDailyChallenge
-                      ? 'DAILY CHALLENGE · ${DailyChallenge.compactDateLabelFromKey(widget.dailyDayKey!)}'
+                      ? DailyChallenge.incidentResolvedTitle(
+                          widget.dailyDayKey!,
+                        )
                       : (widget.isTutorial
                           ? 'TUTORIAL · STEP ${widget.tutorialIndex + 1} / 5'
                           : null),

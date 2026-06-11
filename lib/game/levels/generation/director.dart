@@ -131,10 +131,11 @@ class Director {
     LevelConfiguration config,
     Random random, {
     DifficultyTier? overrideTier,
+    GenerationArchetype? overrideArchetype,
   }) {
     final tier =
         overrideTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
-    final archetype = GenerationArchetypeSpec.sampleForTier(random, tier);
+    final archetype = overrideArchetype ?? GenerationArchetypeSpec.sampleForTier(random, tier);
     // Dense Strategy Phase 1B: clamp isolation penalty + temperature for
     // Hard/Expert so high-isolation or high-temperature archetypes don't
     // produce sparse boards.
@@ -383,8 +384,8 @@ class Director {
       return true;
     }
 
-    // Phase 2B: every Hard/Expert level attempts one cascade hub first.
-    if (isDenseTier) {
+    // Phase 2B: Hard/Expert attempts cascade hub first ~45% of the time.
+    if (isDenseTier && random.nextDouble() < 0.45) {
       final cascadeHub = motifById(MotifId.cascadeHub);
       if (cascadeHub != null) {
         tryPlace(cascadeHub);

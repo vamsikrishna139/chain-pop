@@ -9,7 +9,7 @@ import '../../services/game_sfx.dart';
 
 class NodeComponent extends PositionComponent
     with TapCallbacks, HasGameReference<ChainPopGame> {
-  final NodeData data;
+  NodeData data;
   final double cellSize;
 
   bool isPopping = false;
@@ -19,6 +19,7 @@ class NodeComponent extends PositionComponent
   Vector2 _originalPos = Vector2.zero();
   double _shakeTimer = 0.0;
   double _highlightTimer = 0.0; // replaces Future.delayed — lifecycle-safe
+  double _nudgeTimer = -1.0; // < 0 = idle
   bool _longPressActive = false;
 
   late Rect _rect;
@@ -35,6 +36,7 @@ class NodeComponent extends PositionComponent
   static const double _shakeDuration = 0.3;
   static const double _highlightDuration = 2.0;
   static const double _highlightPulseCount = 3.0;
+  static const double _nudgeDuration = 0.12;
   static const double _speed = 1500.0;
 
   static final Vector2 _dirUp = Vector2(0, -1);
@@ -144,9 +146,29 @@ class NodeComponent extends PositionComponent
     );
   }
 
+  void updateData(NodeData next) {
+    data = next;
+    _buildRenderCaches();
+  }
+
   void highlight() {
     isHighlighted = true;
     _highlightTimer = 0.0;
+  }
+
+  /// Brief scale dip when a 4-adjacent neighbor is extracted — makes chains
+  /// feel physically connected.
+  void nudge() {
+    if (isPopping || isJamming) return;
+    _nudgeTimer = 0.0;
+  }
+
+  /// Pops this node as part of the core-win cascade finale (no extraction
+  /// bookkeeping — the game has already won and drives the sequence).
+  void triggerCascadePop() {
+    if (isPopping) return;
+    isPopping = true;
+    isJamming = false;
   }
 
   void _syncColorsFromSettings() {
@@ -173,6 +195,44 @@ class NodeComponent extends PositionComponent
       canvas.drawRRect(_rrect, _fillPaint);
       canvas.drawRRect(_rrect, _gradientPaint);
       canvas.drawPath(_arrowPath, _arrowPaintNormal);
+      _renderKindBadges(canvas);
+    }
+  }
+
+  void _renderKindBadges(Canvas canvas) {
+    if (data.isCore) {
+      _ringPaint
+        ..color = const Color(0xFFFFD54F).withValues(alpha: 0.85)
+        ..strokeWidth = cellSize * 0.07;
+      canvas.drawRRect(_rrect, _ringPaint);
+    }
+    if (data.kind == NodeKind.locked) {
+      final lockPaint = Paint()
+        ..color = Colors.white.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = cellSize * 0.06;
+      final cx = _rect.center.dx;
+      final cy = _rect.center.dy - cellSize * 0.04;
+      final sh = cellSize * 0.12;
+      canvas.drawArc(
+        Rect.fromCenter(center: Offset(cx, cy), width: sh * 1.4, height: sh),
+        math.pi,
+        math.pi,
+        false,
+        lockPaint,
+      );
+      canvas.drawLine(
+        Offset(cx, cy),
+        Offset(cx, cy + sh * 0.9),
+        lockPaint,
+      );
+    }
+    if (data.kind == NodeKind.relay) {
+      final relayPaint = Paint()
+        ..color = const Color(0xFF00FF87).withValues(alpha: 0.75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = cellSize * 0.05;
+      canvas.drawCircle(_rect.center, cellSize * 0.1, relayPaint);
     }
   }
 
@@ -232,6 +292,18 @@ class NodeComponent extends PositionComponent
       if (_highlightTimer >= _highlightDuration) {
         isHighlighted = false;
         _highlightTimer = 0.0;
+      }
+    }
+
+    // ── Neighbor-extraction nudge (60–120ms scale dip) ──────────────────────
+    if (_nudgeTimer >= 0) {
+      _nudgeTimer += dt;
+      if (_nudgeTimer >= _nudgeDuration) {
+        _nudgeTimer = -1.0;
+        scale.setAll(1.0);
+      } else {
+        final t = _nudgeTimer / _nudgeDuration;
+        scale.setAll(1.0 - 0.05 * math.sin(math.pi * t));
       }
     }
 

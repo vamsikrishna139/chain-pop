@@ -11,6 +11,7 @@ LevelMetrics _metrics({
   required int cud,
   required double fsr,
   List<int> tempoProfile = const [],
+  List<int> wavePeelingProfile = const [4],
 }) {
   return LevelMetrics(
     nodeCount: nodeCount,
@@ -23,7 +24,7 @@ LevelMetrics _metrics({
     tempoProfile: tempoProfile,
     viablePathCount: -1,
     viablePathCountCapped: false,
-    wavePeelingProfile: const [],
+    wavePeelingProfile: wavePeelingProfile,
   );
 }
 
@@ -64,7 +65,20 @@ void main() {
       expect(DifficultyProfile.hard.passes(m), isFalse);
     });
 
-    test('Hard rejects opening below 4 first-legals', () {
+    test('Hard rejects waveZeroWidth above 5', () {
+      final m = _metrics(
+        nodeCount: 24,
+        waveDepth: 6,
+        avgBF: 4.0,
+        firstLegal: 5,
+        cud: 5,
+        fsr: 0.55,
+        wavePeelingProfile: const [9, 3, 2],
+      );
+      expect(DifficultyProfile.hard.passes(m), isFalse);
+    });
+
+    test('Hard rejects opening below 3 first-legals', () {
       final m = _metrics(
         nodeCount: 24,
         waveDepth: 6,
@@ -117,10 +131,11 @@ void main() {
         nodeCount: 24,
         waveDepth: 6,
         avgBF: 4.0,
-        firstLegal: 6,
+        firstLegal: 4,
         cud: 5,
         fsr: 0.55,
         tempoProfile: const [8, 7, 6, 4, 2, 1, 1, 2, 1, 6, 8, 10],
+        wavePeelingProfile: const [4],
       );
       expect(DifficultyProfile.hard.passes(m), isTrue);
     });
