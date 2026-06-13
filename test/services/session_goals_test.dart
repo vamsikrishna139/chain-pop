@@ -64,6 +64,61 @@ void main() {
     });
   });
 
+  group('SessionGoals — core/flawless/nodes goals', () {
+    test('Restore 5 reactors accumulates cores across wins', () {
+      forceGoal(SessionGoalKind.restoreCores);
+      expect(SessionGoals.recordCoresRestored(3), isFalse);
+      expect(SessionGoals.progress, 3);
+      // A 0-core (non-core) win never advances it.
+      expect(SessionGoals.recordCoresRestored(0), isFalse);
+      expect(SessionGoals.progress, 3);
+      expect(SessionGoals.recordCoresRestored(3), isTrue);
+      expect(SessionGoals.isComplete, isTrue);
+    });
+
+    test('Clear 120 nodes accumulates node counts', () {
+      forceGoal(SessionGoalKind.clearNodes);
+      expect(SessionGoals.recordNodesCleared(70), isFalse);
+      expect(SessionGoals.recordNodesCleared(49), isFalse);
+      expect(SessionGoals.progress, 119);
+      expect(SessionGoals.recordNodesCleared(1), isTrue);
+    });
+
+    test('Win 2 levels jam-free completes on the second flawless win', () {
+      forceGoal(SessionGoalKind.flawlessClear);
+      expect(SessionGoals.recordFlawlessWin(), isFalse);
+      expect(SessionGoals.recordFlawlessWin(), isTrue);
+      expect(SessionGoals.isComplete, isTrue);
+    });
+
+    test('each goal ignores the other signal types', () {
+      forceGoal(SessionGoalKind.restoreCores);
+      expect(SessionGoals.recordNodesCleared(200), isFalse);
+      expect(SessionGoals.recordFlawlessWin(), isFalse);
+      expect(SessionGoals.recordWin(surge: true), isFalse);
+      expect(SessionGoals.progress, 0);
+    });
+  });
+
+  group('SessionGoals.seedRotation', () {
+    test('seeds the opening goal by day and is idempotent', () {
+      SessionGoals.debugReset();
+      // dayKey % 6 == 3 → restoreCores.
+      SessionGoals.seedRotation(3);
+      expect(SessionGoals.active, SessionGoalKind.restoreCores);
+      // A second seed in the same run is ignored.
+      SessionGoals.seedRotation(0);
+      expect(SessionGoals.active, SessionGoalKind.restoreCores);
+    });
+
+    test('does nothing once a goal is already active', () {
+      SessionGoals.debugReset();
+      final opening = SessionGoals.active; // forces _active (index 0).
+      SessionGoals.seedRotation(3);
+      expect(SessionGoals.active, opening);
+    });
+  });
+
   group('DefaultSessionGoalsController', () {
     test('exposes active goal, clamped progress, and target', () {
       forceGoal(SessionGoalKind.winThree);

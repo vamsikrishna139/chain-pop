@@ -42,7 +42,21 @@ final class GameFlowController {
     } else {
       _s._streak.onCampaignWin();
       _s._pacing.onCampaignWin();
+      // One session goal is active at a time, so at most one of these advances;
+      // OR their completion so the toast fires whichever it was.
+      final engine = _s._engine;
+      final flawless = _s._livesRemaining == GameScreenConstants.maxLives;
       goalCompleted = _s._goals.recordWin(surge: _s._isSurge);
+      if (engine.totalCores > 0 &&
+          _s._goals.recordCoresRestored(engine.totalCores)) {
+        goalCompleted = true;
+      }
+      if (_s._goals.recordNodesCleared(engine.levelData.nodes.length)) {
+        goalCompleted = true;
+      }
+      if (flawless && _s._goals.recordFlawlessWin()) {
+        goalCompleted = true;
+      }
       await _s._progress.incrementLifetimeCampaignClears();
       CampaignInterstitialFrustrationGate.noteCampaignWin();
       await _s._progress.saveStars(_s.widget.difficulty, _s.widget.level, earned);

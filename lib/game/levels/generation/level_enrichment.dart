@@ -15,7 +15,7 @@ LevelData enrichLevel(
   DifficultyTier tier,
 ) {
   var nodes = level.nodes.map((n) => n.clone()).toList();
-  nodes = _markCoreNodes(nodes, tier);
+  nodes = _markCoreNodes(nodes, tier, level);
   nodes = _markSpecialNodes(nodes, config, level);
   return LevelData(
     levelId: level.levelId,
@@ -26,12 +26,139 @@ LevelData enrichLevel(
   );
 }
 
-List<NodeData> _markCoreNodes(List<NodeData> nodes, DifficultyTier tier) {
+/// Removal-wave percentile band a core must fall in. Mid-route by design: the
+/// player must clear a meaningful slice of the board to expose a core, but the
+/// win still fires with ~35% of the board standing so the cascade finale is a
+/// real payoff rather than a 2-node mop-up. (The old behaviour — the three
+/// highest-id, i.e. last-popped, nodes — made the core-win fire at ~92% cleared,
+/// so "going for the cores" was indistinguishable from clearing everything.)
+const double _kCoreBandLo = 0.35;
+const double _kCoreBandHi = 0.65;
+
+/// Widened band tried once before falling back to the legacy highest-id picks,
+/// so an adversarial board never ships with fewer than three cores.
+const double _kCoreBandLoRelaxed = 0.25;
+const double _kCoreBandHiRelaxed = 0.78;
+
+/// Rebuilds a [LevelData] with [nodes] but [level]'s geometry — used to query
+/// the solver against a working node list.
+LevelData _withNodes(LevelData level, List<NodeData> nodes) => LevelData(
+      levelId: level.levelId,
+      gridWidth: level.gridWidth,
+      gridHeight: level.gridHeight,
+      playCells: level.playCells,
+      nodes: nodes,
+    );
+
+List<NodeData> _markCoreNodes(
+  List<NodeData> nodes,
+  DifficultyTier tier,
+  LevelData level,
+) {
   if (tier != DifficultyTier.hard && tier != DifficultyTier.expert) {
     return nodes;
   }
   if (nodes.length < 6) return nodes;
 
+  final probe = _withNodes(level, nodes);
+  final waves = LevelSolver.nodeWaveIndices(probe);
+  final maxWave =
+      waves.isEmpty ? 0 : waves.values.reduce((a, b) => a > b ? a : b);
+
+  // No wave depth (every node exits immediately) ⇒ percentile bands are
+  // meaningless; keep the original last-node behaviour.
+  Set<int> coreIds = maxWave <= 0
+      ? _legacyCoreIds(nodes)
+      : _climaxBandCoreIds(nodes, probe, waves, maxWave);
+  if (coreIds.length < 3) coreIds = _legacyCoreIds(nodes);
+
+  return [
+    for (final n in nodes) n.copyWith(isCore: coreIds.contains(n.id)),
+  ];
+}
+
+/// Picks up to three guarded, mid-route, spread-out, central nodes as cores by
+/// removal-wave percentile. One core is drawn from each third of the band when
+/// possible (a reach-1 → reach-2 → climax arc), then the selection tops up from
+/// the whole band and, if still short, a widened band. Fully deterministic — no
+/// RNG, a pure function of [probe].
+Set<int> _climaxBandCoreIds(
+  List<NodeData> nodes,
+  LevelData probe,
+  Map<int, int> waves,
+  int maxWave,
+) {
+  // Board centroid, for a centrality tie-break: central cores read as the
+  // "heart" the player routes toward.
+  var sx = 0, sy = 0;
+  for (final n in nodes) {
+    sx += n.x;
+    sy += n.y;
+  }
+  final cx = sx / nodes.length;
+  final cy = sy / nodes.length;
+  double centrality(NodeData n) =>
+      (n.x - cx) * (n.x - cx) + (n.y - cy) * (n.y - cy);
+
+  // Candidates in a [lo, hi] percentile slice: normal, guarded (not removable
+  // from the opening state, so reaching them needs deliberate setup), sorted
+  // central-first with a stable id tie-break.
+  List<NodeData> qualifying(double lo, double hi) {
+    final out = <NodeData>[];
+    for (final n in nodes) {
+      if (n.kind != NodeKind.normal) continue;
+      final w = waves[n.id];
+      if (w == null) continue;
+      final pct = w / maxWave;
+      if (pct < lo || pct > hi) continue;
+      if (LevelSolver.canRemove(n, nodes, probe)) continue;
+      out.add(n);
+    }
+    out.sort((a, b) {
+      final d = centrality(a).compareTo(centrality(b));
+      return d != 0 ? d : b.id.compareTo(a.id);
+    });
+    return out;
+  }
+
+  final picks = <NodeData>[];
+  bool spreadOk(NodeData n) =>
+      picks.every((p) => (p.x - n.x).abs() + (p.y - n.y).abs() >= 2);
+  void take(Iterable<NodeData> ordered) {
+    for (final n in ordered) {
+      if (picks.length >= 3) break;
+      if (picks.any((p) => p.id == n.id)) continue;
+      if (spreadOk(n)) picks.add(n);
+    }
+  }
+
+  // Pass 1: one core per equal third of the strict band → difficulty arc.
+  const step = (_kCoreBandHi - _kCoreBandLo) / 3;
+  for (var i = 0; i < 3; i++) {
+    final lo = _kCoreBandLo + i * step;
+    final hi = i == 2 ? _kCoreBandHi : _kCoreBandLo + (i + 1) * step;
+    for (final n in qualifying(lo, hi)) {
+      if (picks.any((p) => p.id == n.id)) continue;
+      if (spreadOk(n)) {
+        picks.add(n);
+        break;
+      }
+    }
+  }
+  // Pass 2: top up from the full strict band.
+  if (picks.length < 3) take(qualifying(_kCoreBandLo, _kCoreBandHi));
+  // Pass 3: relax the band once before giving up to the legacy fallback.
+  if (picks.length < 3) {
+    take(qualifying(_kCoreBandLoRelaxed, _kCoreBandHiRelaxed));
+  }
+
+  return picks.map((n) => n.id).toSet();
+}
+
+/// Original highest-id (last-popped) core picks. Retained only as the last-resort
+/// fallback so a board with no wave depth — or no qualifying in-band guarded
+/// nodes — still ships with three cores.
+Set<int> _legacyCoreIds(List<NodeData> nodes) {
   final sorted = List<NodeData>.from(nodes)..sort((a, b) => b.id.compareTo(a.id));
   final picks = <NodeData>[];
   for (final n in sorted) {
@@ -43,11 +170,7 @@ List<NodeData> _markCoreNodes(List<NodeData> nodes, DifficultyTier tier) {
     final next = sorted[picks.length];
     if (!picks.contains(next)) picks.add(next);
   }
-
-  final coreIds = picks.map((n) => n.id).toSet();
-  return [
-    for (final n in nodes) n.copyWith(isCore: coreIds.contains(n.id)),
-  ];
+  return picks.map((n) => n.id).toSet();
 }
 
 List<NodeData> _markSpecialNodes(

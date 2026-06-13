@@ -5,6 +5,7 @@ import 'package:chain_pop/game/levels/generation/level_configuration.dart';
 import 'package:chain_pop/game/levels/generation/level_enrichment.dart';
 import 'package:chain_pop/game/levels/generation/level_validator.dart';
 import 'package:chain_pop/game/levels/level.dart';
+import 'package:chain_pop/game/levels/level_solver.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 LevelConfiguration _hardConfig(int levelId) => LevelConfiguration(
@@ -112,6 +113,83 @@ void main() {
       expect(relays, hasLength(1));
       expect(relays.single.id, isNot(2),
           reason: 'node 2 rotating row 2 would block node 3 behind core 4');
+      expect(LevelValidator().validate(enriched).isValid, isTrue);
+    });
+  });
+
+  group('enrichLevel core placement', () {
+    // Three parallel right-pointing chains on rows 0/2/4 of a 6×5 board. Each
+    // chain is a clean linear dependency — the rightmost node (x=5) exits
+    // first, x=4 only after it, … x=0 last — so removal waves run 0..5 across
+    // the columns and nodes are spread vertically by 2. Ids are assigned in
+    // wave order (id 0 = first popped) to mirror the real generator, so the
+    // deepest (last-popped) nodes carry the highest ids.
+    LevelData chainBoard() {
+      final nodes = <NodeData>[];
+      var id = 0;
+      // wave w corresponds to column x = 5 - w.
+      for (var w = 0; w <= 5; w++) {
+        final x = 5 - w;
+        for (final y in const [0, 2, 4]) {
+          nodes.add(NodeData(id: id++, x: x, y: y, dir: Direction.right));
+        }
+      }
+      return LevelData(
+        levelId: 10, // < 26 ⇒ enrichment adds cores only (no locks/relays).
+        gridWidth: 6,
+        gridHeight: 5,
+        nodes: nodes,
+      );
+    }
+
+    test('cores are guarded, mid-band, and never the deepest nodes', () {
+      final level = chainBoard();
+      final enriched = enrichLevel(level, _hardConfig(10), DifficultyTier.hard);
+      final cores = enriched.nodes.where((n) => n.isCore).toList();
+      expect(cores, hasLength(3));
+
+      final waves = LevelSolver.nodeWaveIndices(enriched);
+      final maxWave = waves.values.reduce((a, b) => a > b ? a : b);
+
+      for (final c in cores) {
+        // Guarded: cannot be popped from the opening state — needs setup.
+        expect(LevelSolver.canRemove(c, enriched.nodes, enriched), isFalse,
+            reason: 'core ${c.id} should not be immediately extractable');
+        // In the climax band [0.35, 0.65].
+        final pct = waves[c.id]! / maxWave;
+        expect(pct, inInclusiveRange(0.35, 0.65),
+            reason: 'core ${c.id} wave percentile $pct out of band');
+        // Never the deepest (old behaviour put cores at the very end).
+        expect(waves[c.id]!, lessThan(maxWave),
+            reason: 'core ${c.id} sits at the deepest wave');
+      }
+
+      // Regression lock: the old selector picked the three highest ids; the new
+      // one must not.
+      final maxId =
+          enriched.nodes.map((n) => n.id).reduce((a, b) => a > b ? a : b);
+      expect(cores.any((c) => c.id == maxId), isFalse,
+          reason: 'the last-popped node must no longer be a core');
+
+      expect(LevelValidator().validate(enriched).isValid, isTrue);
+    });
+
+    test('falls back to three cores when the board has no wave depth', () {
+      // Every node points left from x=0 ⇒ all exit immediately (wave 0), so the
+      // percentile bands are meaningless and the legacy picks must still yield
+      // exactly three cores.
+      final level = LevelData(
+        levelId: 10,
+        gridWidth: 6,
+        gridHeight: 6,
+        nodes: [
+          for (var i = 0; i < 6; i++)
+            NodeData(id: i, x: 0, y: i, dir: Direction.left),
+        ],
+      );
+
+      final enriched = enrichLevel(level, _hardConfig(10), DifficultyTier.hard);
+      expect(enriched.nodes.where((n) => n.isCore), hasLength(3));
       expect(LevelValidator().validate(enriched).isValid, isTrue);
     });
   });

@@ -272,6 +272,14 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     );
     WidgetsBinding.instance.addObserver(this);
 
+    // Vary the session's opening goal by day so it isn't always "Win 3 levels".
+    // Idempotent for the app run; later resetSession calls advance from here.
+    if (_isCampaign) {
+      _goals.seedRotation(
+        DateTime.now().millisecondsSinceEpoch ~/ Duration.millisecondsPerDay,
+      );
+    }
+
     _gameStorage = widget.storage ?? StorageLocator.instance;
     _progress = widget.progressStore ??
         HiveChainPopProgressStore(widget.storage);
