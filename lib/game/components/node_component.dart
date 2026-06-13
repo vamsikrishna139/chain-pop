@@ -20,7 +20,16 @@ class NodeComponent extends PositionComponent
   double _shakeTimer = 0.0;
   double _highlightTimer = 0.0; // replaces Future.delayed — lifecycle-safe
   double _nudgeTimer = -1.0; // < 0 = idle
+  double _freedTimer = -1.0; // < 0 = idle; one-shot "now freed" chain pulse
+  double _blockerFlashTimer = -1.0; // < 0 = idle; "this is blocking you" flash
+  double _arrowSpin = 0.0; // current arrow rotation offset (rad), eases to 0
+  double _arrowSpinTimer = -1.0; // < 0 = idle; relay-rotation arrow animation
   bool _longPressActive = false;
+
+  double _clock = 0.0;
+  double _relayRotation = 0.0;
+  bool _isLockActive = true;
+  bool _lastLockActive = false;
 
   late Rect _rect;
   late RRect _rrect;
@@ -37,6 +46,9 @@ class NodeComponent extends PositionComponent
   static const double _highlightDuration = 2.0;
   static const double _highlightPulseCount = 3.0;
   static const double _nudgeDuration = 0.12;
+  static const double _freedDuration = 0.5;
+  static const double _blockerFlashDuration = 0.6;
+  static const double _arrowSpinDuration = 0.18;
   static const double _speed = 1500.0;
 
   static final Vector2 _dirUp = Vector2(0, -1);
@@ -60,6 +72,20 @@ class NodeComponent extends PositionComponent
   Future<void> onLoad() async {
     _updatePositionFromGrid();
     _buildRenderCaches();
+    _isLockActive = data.kind == NodeKind.locked && _hasActiveNeighbors();
+    _lastLockActive = _isLockActive;
+  }
+
+  bool _hasActiveNeighbors() {
+    for (final other in game.activeNodes) {
+      if (other.id == data.id) continue;
+      final dx = (other.x - data.x).abs();
+      final dy = (other.y - data.y).abs();
+      if ((dx == 1 && dy == 0) || (dx == 0 && dy == 1)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void _buildRenderCaches() {
@@ -151,6 +177,30 @@ class NodeComponent extends PositionComponent
     _buildRenderCaches();
   }
 
+  /// Updates to [next] (the post-rotation direction) and animates the arrow
+  /// spinning into place over [_arrowSpinDuration], rather than snapping. Used
+  /// when a relay rotates its row so the change reads as motion.
+  void animateRotationTo(NodeData next, {required bool clockwise}) {
+    updateData(next);
+    // Start the rendered arrow a quarter-turn back from the new direction and
+    // ease to 0, so it visually rotates the way the row turned.
+    _arrowSpin = clockwise ? -math.pi / 2 : math.pi / 2;
+    _arrowSpinTimer = 0.0;
+  }
+
+  /// Brief warning ring — flags this node as the blocker stopping a repeatedly
+  /// jammed node, turning a frustrating dead-end into a readable hint.
+  void flashAsBlocker() {
+    if (isPopping) return;
+    _blockerFlashTimer = 0.0;
+  }
+
+  @visibleForTesting
+  bool get isFlashingBlocker => _blockerFlashTimer >= 0;
+
+  @visibleForTesting
+  double get arrowSpin => _arrowSpin;
+
   void highlight() {
     isHighlighted = true;
     _highlightTimer = 0.0;
@@ -163,6 +213,16 @@ class NodeComponent extends PositionComponent
     _nudgeTimer = 0.0;
   }
 
+  /// One-shot accent ring pulse when this node becomes extractable because a
+  /// neighbor was just removed — telegraphs the chain so cause→effect reads.
+  void telegraphFreed() {
+    if (isPopping || isJamming) return;
+    _freedTimer = 0.0;
+  }
+
+  @visibleForTesting
+  bool get isTelegraphingFreed => _freedTimer >= 0;
+
   /// Pops this node as part of the core-win cascade finale (no extraction
   /// bookkeeping — the game has already won and drives the sequence).
   void triggerCascadePop() {
@@ -172,9 +232,18 @@ class NodeComponent extends PositionComponent
   }
 
   void _syncColorsFromSettings() {
-    final effective = game.effectiveNodeColor(data);
-    if (_cachedEffectiveColor == effective) return;
+    var effective = game.effectiveNodeColor(data);
+    final activeLock = data.kind == NodeKind.locked && _isLockActive;
+    if (activeLock) {
+      final hsl = HSLColor.fromColor(effective);
+      effective = hsl
+          .withSaturation((hsl.saturation * 0.45).clamp(0.0, 1.0))
+          .withLightness((hsl.lightness * 0.60).clamp(0.0, 1.0))
+          .toColor();
+    }
+    if (_cachedEffectiveColor == effective && _lastLockActive == activeLock) return;
     _cachedEffectiveColor = effective;
+    _lastLockActive = activeLock;
     _fillPaint.color = effective.withValues(alpha: 1.0);
     _shadowGlowColor = effective.withValues(alpha: 0.55);
   }
@@ -185,6 +254,9 @@ class NodeComponent extends PositionComponent
     if (isHighlighted) {
       _renderHighlighted(canvas);
     } else {
+      if (isPopping) {
+        _renderGhostTrails(canvas);
+      }
       // Uniform brightness — legal moves are not telegraphed; wrong taps jam.
       canvas.drawShadow(
         _shadowPath,
@@ -194,45 +266,174 @@ class NodeComponent extends PositionComponent
       );
       canvas.drawRRect(_rrect, _fillPaint);
       canvas.drawRRect(_rrect, _gradientPaint);
-      canvas.drawPath(_arrowPath, _arrowPaintNormal);
+      _drawArrow(canvas);
       _renderKindBadges(canvas);
+      if (_freedTimer >= 0) _renderFreedPulse(canvas);
+      if (_blockerFlashTimer >= 0) _renderBlockerFlash(canvas);
     }
+  }
+
+  /// Draws fading, scaling ghost nodes behind the current popping node position.
+  void _renderGhostTrails(Canvas canvas) {
+    final dir = _directionVector();
+    final ghostPaint = Paint()..style = PaintingStyle.fill;
+    final baseColor = _fillPaint.color;
+    final center = _rect.center;
+    for (var i = 1; i <= 3; i++) {
+      final distance = cellSize * 0.24 * i;
+      final offset = Offset(-dir.x * distance, -dir.y * distance);
+      final alpha = (0.55 - i * 0.15).clamp(0.0, 1.0);
+      final scaleAmt = 1.0 - i * 0.12;
+      ghostPaint.color = baseColor.withValues(alpha: alpha);
+
+      canvas.save();
+      canvas.translate(offset.dx, offset.dy);
+      canvas.translate(center.dx, center.dy);
+      canvas.scale(scaleAmt, scaleAmt);
+      canvas.translate(-center.dx, -center.dy);
+      canvas.drawRRect(_rrect, ghostPaint);
+      canvas.restore();
+    }
+  }
+
+  /// Draws the direction arrow, applying the relay-rotation spin offset when
+  /// one is active so the arrow appears to rotate into place.
+  void _drawArrow(Canvas canvas) {
+    if (_arrowSpin == 0.0) {
+      canvas.drawPath(_arrowPath, _arrowPaintNormal);
+      return;
+    }
+    final c = _rect.center;
+    canvas.save();
+    canvas.translate(c.dx, c.dy);
+    canvas.rotate(_arrowSpin);
+    canvas.translate(-c.dx, -c.dy);
+    canvas.drawPath(_arrowPath, _arrowPaintNormal);
+    canvas.restore();
+  }
+
+  /// Pulsing red ring — "this node is what's blocking you."
+  void _renderBlockerFlash(Canvas canvas) {
+    final t = (_blockerFlashTimer / _blockerFlashDuration).clamp(0.0, 1.0);
+    // Two quick pulses over the lifetime.
+    final pulse = (math.sin(t * math.pi * 2) * 0.5 + 0.5);
+    final opacity = (1.0 - t) * (0.5 + 0.4 * pulse);
+    if (opacity <= 0.005) return;
+    _ringPaint
+      ..color = const Color(0xFFFF5252).withValues(alpha: opacity)
+      ..strokeWidth = cellSize * 0.08;
+    canvas.drawRRect(_rrect, _ringPaint);
+  }
+
+  /// Expanding accent ring radiating once from the node when it becomes
+  /// extractable via a chain. Fades over [_freedDuration]; no scale (distinct
+  /// from the hint highlight).
+  void _renderFreedPulse(Canvas canvas) {
+    final t = (_freedTimer / _freedDuration).clamp(0.0, 1.0);
+    final base = _rect.width * 0.5;
+    final radius = base + t * base * 0.7;
+    final opacity = (1.0 - t) * 0.6;
+    if (opacity <= 0.005) return;
+    _ringPaint
+      ..color = game.theme.accent.withValues(alpha: opacity)
+      ..strokeWidth = (cellSize * 0.06) * (1.0 - t * 0.5);
+    canvas.drawCircle(_rect.center, radius, _ringPaint);
   }
 
   void _renderKindBadges(Canvas canvas) {
     if (data.isCore) {
+      final pulse = 0.55 + 0.4 * math.sin(_clock * math.pi);
       _ringPaint
-        ..color = const Color(0xFFFFD54F).withValues(alpha: 0.85)
+        ..color = Colors.black.withValues(alpha: 0.45 * pulse)
+        ..strokeWidth = cellSize * 0.12;
+      canvas.drawRRect(_rrect, _ringPaint);
+      _ringPaint
+        ..color = const Color(0xFFFFD54F).withValues(alpha: 0.55 + 0.4 * pulse)
         ..strokeWidth = cellSize * 0.07;
       canvas.drawRRect(_rrect, _ringPaint);
     }
     if (data.kind == NodeKind.locked) {
-      final lockPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.9)
+      final bracketPaint = Paint()
+        ..color = Colors.white.withValues(alpha: _isLockActive ? 0.85 : 0.35)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = cellSize * 0.06;
-      final cx = _rect.center.dx;
-      final cy = _rect.center.dy - cellSize * 0.04;
-      final sh = cellSize * 0.12;
-      canvas.drawArc(
-        Rect.fromCenter(center: Offset(cx, cy), width: sh * 1.4, height: sh),
-        math.pi,
-        math.pi,
-        false,
-        lockPaint,
+        ..strokeWidth = cellSize * 0.06
+        ..strokeCap = StrokeCap.round;
+
+      final padding = cellSize * 0.08;
+      final l = _rect.left + padding;
+      final r = _rect.right - padding;
+      final t = _rect.top + padding;
+      final b = _rect.bottom - padding;
+      final len = cellSize * 0.16;
+
+      // Top-Left corner
+      canvas.drawPath(
+        Path()
+          ..moveTo(l + len, t)
+          ..lineTo(l, t)
+          ..lineTo(l, t + len),
+        bracketPaint,
       );
-      canvas.drawLine(
-        Offset(cx, cy),
-        Offset(cx, cy + sh * 0.9),
-        lockPaint,
+      // Top-Right corner
+      canvas.drawPath(
+        Path()
+          ..moveTo(r - len, t)
+          ..lineTo(r, t)
+          ..lineTo(r, t + len),
+        bracketPaint,
+      );
+      // Bottom-Left corner
+      canvas.drawPath(
+        Path()
+          ..moveTo(l + len, b)
+          ..lineTo(l, b)
+          ..lineTo(l, b - len),
+        bracketPaint,
+      );
+      // Bottom-Right corner
+      canvas.drawPath(
+        Path()
+          ..moveTo(r - len, b)
+          ..lineTo(r, b)
+          ..lineTo(r, b - len),
+        bracketPaint,
       );
     }
     if (data.kind == NodeKind.relay) {
-      final relayPaint = Paint()
-        ..color = const Color(0xFF00FF87).withValues(alpha: 0.75)
+      final c = _rect.center;
+      final r = cellSize * 0.12;
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(_relayRotation);
+
+      final bgPaint = Paint()
+        ..color = Colors.black.withValues(alpha: 0.45)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = cellSize * 0.05;
-      canvas.drawCircle(_rect.center, cellSize * 0.1, relayPaint);
+        ..strokeWidth = cellSize * 0.08;
+      canvas.drawCircle(Offset.zero, r, bgPaint);
+
+      final strokePaint = Paint()
+        ..color = const Color(0xFF00FF87).withValues(alpha: 0.95)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = cellSize * 0.04
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset.zero, radius: r),
+        0.1,
+        math.pi - 0.2,
+        false,
+        strokePaint,
+      );
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset.zero, radius: r),
+        math.pi + 0.1,
+        math.pi - 0.2,
+        false,
+        strokePaint,
+      );
+
+      canvas.restore();
     }
   }
 
@@ -279,13 +480,28 @@ class NodeComponent extends PositionComponent
     );
     canvas.drawRRect(_rrect, _fillPaint);
     canvas.drawRRect(_rrect, _gradientPaint);
-    canvas.drawPath(_arrowPath, _arrowPaintNormal);
+    _drawArrow(canvas);
 
     canvas.restore();
   }
 
   @override
   void update(double dt) {
+    _clock += dt;
+
+    if (data.kind == NodeKind.relay) {
+      _relayRotation += dt * 1.5;
+    }
+
+    if (data.kind == NodeKind.locked && !isPopping) {
+      final active = _hasActiveNeighbors();
+      if (_isLockActive && !active) {
+        // Unlocked!
+        telegraphFreed();
+      }
+      _isLockActive = active;
+    }
+
     // ── Highlight timeout (replaces Future.delayed — no memory leak) ─────────
     if (isHighlighted) {
       _highlightTimer += dt;
@@ -304,6 +520,33 @@ class NodeComponent extends PositionComponent
       } else {
         final t = _nudgeTimer / _nudgeDuration;
         scale.setAll(1.0 - 0.05 * math.sin(math.pi * t));
+      }
+    }
+
+    // ── "Now freed" chain telegraph (one-shot accent ring) ──────────────────
+    if (_freedTimer >= 0) {
+      _freedTimer += dt;
+      if (_freedTimer >= _freedDuration) _freedTimer = -1.0;
+    }
+
+    // ── Blocker flash (one-shot warning ring) ───────────────────────────────
+    if (_blockerFlashTimer >= 0) {
+      _blockerFlashTimer += dt;
+      if (_blockerFlashTimer >= _blockerFlashDuration) _blockerFlashTimer = -1.0;
+    }
+
+    // ── Relay arrow rotation (ease the spin offset back to 0) ────────────────
+    if (_arrowSpinTimer >= 0) {
+      _arrowSpinTimer += dt;
+      if (_arrowSpinTimer >= _arrowSpinDuration) {
+        _arrowSpinTimer = -1.0;
+        _arrowSpin = 0.0;
+      } else {
+        final t = _arrowSpinTimer / _arrowSpinDuration;
+        // Ease-out: fraction of the original offset still remaining.
+        final remaining = (1.0 - t) * (1.0 - t);
+        final sign = _arrowSpin >= 0 ? 1.0 : -1.0;
+        _arrowSpin = sign * (math.pi / 2) * remaining;
       }
     }
 
@@ -340,6 +583,14 @@ class NodeComponent extends PositionComponent
     }
   }
 
+  /// Dev autoplay only: extract this node as if validly tapped (no haptics).
+  void debugAutoExtract() {
+    if (isPopping || isJamming || game.hasWon || game.isGameOver) return;
+    isPopping = true;
+    game.registerExtraction(data);
+    game.playSfx(GameSfx.pop, playbackRate: game.popPlaybackRate);
+  }
+
   void _performTapAction() {
     if (isPopping || isJamming || game.hasWon || game.isGameOver) return;
 
@@ -360,7 +611,18 @@ class NodeComponent extends PositionComponent
         Haptics.vibrate(HapticsType.heavy);
       }
       game.playSfx(GameSfx.jam);
-      game.reportJam();
+      game.reportJam(data);
+    }
+  }
+
+  @override
+  void onTapDown(TapDownEvent event) {
+    if (isPopping || isJamming || game.hasWon || game.isGameOver) return;
+    // Faint aim guide on press (before release): shows this node's exit path /
+    // first blocker so a jam is a choice, not a surprise. A long press below
+    // upgrades it to the full-intensity ray.
+    if (game.showAimRay) {
+      game.showRayPreview(data, intensity: 0.42);
     }
   }
 

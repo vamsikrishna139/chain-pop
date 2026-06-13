@@ -114,6 +114,61 @@ void main() {
     });
   });
 
+  group('BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid', () {
+    test('caps so the full grid never overflows the band (sparse board)', () {
+      // Tutorial-like: one node in a 4×4 grid → occupied bbox (with pad 1) is
+      // 3×3. The raw bounds fit would zoom in until the 4-wide grid spills off.
+      const bandW = 288.0; // ≈ 320px small phone minus margins
+      const bandH = 600.0;
+      final raw = BoardLayoutMetrics.fitCellSizeForBounds(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 3,
+        bboxHeight: 3,
+        targetFill: 0.80,
+      );
+      final capped = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 3,
+        bboxHeight: 3,
+        gridWidth: 4,
+        gridHeight: 4,
+        targetFill: 0.80,
+      );
+      // Raw fit overflows the band when the full 4×4 grid is rendered…
+      expect(raw * 4, greaterThan(bandW));
+      // …but the capped fit guarantees the full grid fits.
+      expect(capped * 4, lessThanOrEqualTo(bandW + 1e-6));
+      expect(capped * 4, lessThanOrEqualTo(bandH + 1e-6));
+      expect(capped, lessThan(raw));
+    });
+
+    test('leaves dense boards untouched (cap does not bind)', () {
+      // Fully occupied 6×6: bbox ≈ grid, so the 0.8 target fill already keeps
+      // the grid within the band and the cap should not shrink it further.
+      const bandW = 500.0;
+      const bandH = 500.0;
+      final raw = BoardLayoutMetrics.fitCellSizeForBounds(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 6,
+        bboxHeight: 6,
+        targetFill: 0.80,
+      );
+      final capped = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 6,
+        bboxHeight: 6,
+        gridWidth: 6,
+        gridHeight: 6,
+        targetFill: 0.80,
+      );
+      expect(capped, closeTo(raw, 1e-6));
+    });
+  });
+
   group('LevelData.layoutValidationMessage', () {
     test('null when valid', () {
       final level = LevelData(

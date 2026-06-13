@@ -15,12 +15,17 @@ class RayPreviewComponent extends PositionComponent
   final RayTraceResult trace;
   final double cellSize;
 
+  /// 0..1 opacity multiplier. Touch-down aim shows a faint ray (~0.4); a long
+  /// press shows the full ray (1.0).
+  final double intensity;
+
   RayPreviewComponent({
     required this.source,
     required this.trace,
     required this.cellSize,
     required int gridWidth,
     required int gridHeight,
+    this.intensity = 1.0,
   }) : super(
           size: Vector2(gridWidth * cellSize, gridHeight * cellSize),
           anchor: Anchor.topLeft,
@@ -49,12 +54,12 @@ class RayPreviewComponent extends PositionComponent
       );
       canvas.drawRRect(
         RRect.fromRectAndRadius(rect, Radius.circular(cellSize * 0.16)),
-        Paint()..color = _blockerTint,
+        Paint()..color = _blockerTint.withValues(alpha: 0.4 * intensity),
       );
       canvas.drawRRect(
         RRect.fromRectAndRadius(rect, Radius.circular(cellSize * 0.16)),
         Paint()
-          ..color = AppColors.accentMedium.withValues(alpha: 0.85)
+          ..color = AppColors.accentMedium.withValues(alpha: 0.85 * intensity)
           ..style = PaintingStyle.stroke
           ..strokeWidth = (cellSize * 0.05).clamp(1.5, 3.5),
       );
@@ -95,7 +100,7 @@ class RayPreviewComponent extends PositionComponent
     final unitY = dy / length;
 
     final paint = Paint()
-      ..color = _rayColor
+      ..color = _rayColor.withValues(alpha: 0.8 * intensity)
       ..strokeWidth = (cellSize * 0.045).clamp(1.5, 3.0)
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;

@@ -193,10 +193,14 @@ class Director {
     // Seeded levels never roll the Experimental greedy-path coin so that the
     // seed's intent is honoured deterministically.
     const useLegacy = false;
+    // Hand-authored seeds pin a deliberate silhouette; honour the canonical
+    // rendering (no shape-pool variety) so the showcase looks as designed and
+    // the seed's RNG stream stays byte-stable.
     final mask = _buildOrFallbackMask(
       silhouette: seed.silhouetteId,
       config: config,
       random: random,
+      varied: false,
     );
     final profile = DifficultyProfile.forTier(seed.difficultyTier);
     final target = seed.targetNodeCount ??
@@ -460,19 +464,13 @@ class Director {
     DifficultyTier? tier,
   }) {
     final pool = spec.preferredSilhouettes;
-    // Dense Strategy Phase 1C: for Hard/Expert, bias 70% toward dense
-    // silhouettes and demote sparse ones (Archipelago, Organic Blob).
+    // Dense Strategy Phase 1C: for Hard/Expert, bias 40% toward dense
+    // silhouettes to keep structured tension, but allow full variety.
     if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
       final denseInPool =
           pool.where((s) => _denseSilhouettes.contains(s)).toList();
-      if (denseInPool.isNotEmpty && random.nextDouble() < 0.70) {
+      if (denseInPool.isNotEmpty && random.nextDouble() < 0.40) {
         return denseInPool[random.nextInt(denseInPool.length)];
-      }
-      // If the 30% non-dense roll fires, pick from non-sparse entries first.
-      final nonSparse =
-          pool.where((s) => !_sparseSilhouettes.contains(s)).toList();
-      if (nonSparse.isNotEmpty) {
-        return nonSparse[random.nextInt(nonSparse.length)];
       }
     }
     return pool[random.nextInt(pool.length)];
@@ -513,6 +511,7 @@ class Director {
     required SilhouetteId silhouette,
     required LevelConfiguration config,
     required Random random,
+    bool varied = true,
   }) {
     final minCells = config.difficulty.minNodes;
     final mask = buildSilhouetteMask(
@@ -521,6 +520,10 @@ class Director {
       gridHeight: config.gridHeight,
       random: random,
       minCells: minCells,
+      varied: varied,
+      // Level-isolated jitter seed (procedural path only). +1 so level 0 still
+      // jitters; does not consume from `random`, so the stream is unchanged.
+      jitterSeed: varied ? config.levelId + 1 : 0,
     );
     if (mask != null && mask.length >= minCells) return mask;
     onMaskRectangleFallback?.call(silhouette, SilhouetteId.rectangle);
@@ -547,6 +550,12 @@ class Director {
       // Dense Strategy: Hard/Expert target 28–40% silhouette fill.
       // Fixes sparse boards when the mask has many more cells
       // than the old 20–30 node cap allowed.
+      //
+      // NOTE: the resulting node count clamps up to the band floor (25) on the
+      // 49–64-cell masks Hard uses, so Hard boards ship ~25 nodes. This is
+      // deliberate and load-bearing — raising it trips evaluator rule 3
+      // (nodeCount > 28 ⇒ FSR ≤ 40%), seed byte-stability, and the generation
+      // perf budget. Unpinning node count is a coordinated retune, not a knob.
       if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
         // Small masks / opening seeds: `lo` (minNodes) can exceed `hi`.
         if (hi <= lo) return hi.clamp(1, mask.length);

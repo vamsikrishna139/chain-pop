@@ -24,6 +24,8 @@ import '../services/ads/undo_ad_policy.dart';
 import '../services/game_audio.dart';
 import '../services/game_sfx.dart';
 import '../services/session_campaign_streak.dart';
+import '../services/session_goals.dart';
+import '../services/session_pacing.dart';
 import '../services/storage/chain_pop_progress_store.dart';
 import '../services/storage/chain_pop_storage.dart';
 import '../services/storage/storage_locator.dart';
@@ -37,6 +39,8 @@ import 'game/widgets/game_dialogs.dart';
 import 'game/widgets/game_header_hud.dart';
 import 'game/widgets/game_pause_overlay.dart';
 import 'game/widgets/game_settings_sheet.dart';
+import 'game/widgets/quick_win_banner.dart';
+import 'game/widgets/session_goal_chip.dart';
 import 'game/widgets/win_celebration_overlay.dart';
 import 'game/widgets/win_panel.dart';
 
@@ -78,6 +82,12 @@ class GameScreen extends StatefulWidget {
   /// Overrides session streak tracker ([SessionCampaignStreak] default).
   final CampaignStreakTracker? campaignStreak;
 
+  /// Overrides session pacing / surge tracker ([SessionPacing] default).
+  final SessionPacingController? sessionPacing;
+
+  /// Overrides session-goal tracker ([SessionGoals] default).
+  final SessionGoalsController? sessionGoals;
+
   /// Overrides [StorageLocator] reads/writes for settings and ad-coach flags
   /// (widget tests with a fake [ChainPopStorage]).
   final ChainPopStorage? storage;
@@ -90,6 +100,11 @@ class GameScreen extends StatefulWidget {
   /// When true, skip starting countdown / HUD tick / ghost-hint timers. Used by
   /// automated screenshot and widget tests so the test binding can idle.
   final bool suppressGameplayTimers;
+
+  /// Dev on-device playtest: auto-solve via the engine solver and report wins
+  /// to [onAutoplayWin] instead of the normal win/ads/advance flow.
+  final bool autoplay;
+  final VoidCallback? onAutoplayWin;
 
   const GameScreen({
     super.key,
@@ -104,15 +119,20 @@ class GameScreen extends StatefulWidget {
     this.audioHandleFactory,
     this.progressStore,
     this.campaignStreak,
+    this.sessionPacing,
+    this.sessionGoals,
     this.storage,
     this.campaignLevelBuilder,
     this.suppressGameplayTimers = false,
+    this.autoplay = false,
+    this.onAutoplayWin,
   }) : assert(
           !isDailyChallenge || (dailyDayKey != null && fixedLevel != null),
         ),
         assert(!isTutorial || fixedLevel != null),
         assert(!isTutorial || !isDailyChallenge),
-        assert(!isTutorial || (tutorialIndex >= 0 && tutorialIndex < 5));
+        assert(!isTutorial ||
+            (tutorialIndex >= 0 && tutorialIndex < tutorialStepCount));
 
   @override
   State<GameScreen> createState() => GameScreenState();
@@ -128,11 +148,22 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   final GameScreenTimerCoordinator _timers = GameScreenTimerCoordinator();
 
+  /// Dev autoplay tick (solver-driven). Null outside [GameScreen.autoplay].
+  Timer? _autoplayTimer;
+
   int _totalNodes = 0;
   int _removedNodes = 0;
 
   int _livesRemaining = GameScreenConstants.maxLives;
   bool _hasWon = false;
+
+  /// Win was a fast clear → show the lightweight [QuickWinBanner] and
+  /// auto-advance, instead of the full [WinPanel] + confetti.
+  bool _quickWin = false;
+
+  /// This level is an in-session surge (tighter countdown + SURGE label).
+  bool _isSurge = false;
+
   late final Stopwatch _stopwatch;
   int _earnedStars = 0;
 
@@ -161,6 +192,42 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   CampaignStreakTracker get _streak =>
       widget.campaignStreak ?? defaultCampaignStreakTracker;
+
+  SessionPacingController get _pacing =>
+      widget.sessionPacing ?? defaultSessionPacingController;
+
+  SessionGoalsController get _goals =>
+      widget.sessionGoals ?? defaultSessionGoalsController;
+
+  /// True for plain campaign levels (where session goals/surges apply).
+  bool get _isCampaign => !widget.isTutorial && !widget.isDailyChallenge;
+
+  void _showGoalCompleteToast() {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(milliseconds: 1800),
+        backgroundColor: AppColors.surfaceDialog,
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.emoji_events_rounded,
+                color: Color(0xFF00FF87), size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Session goal complete!',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.95),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   bool _needsDeferredCampaignGeneration() =>
       widget.fixedLevel == null &&
@@ -262,6 +329,18 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         widget.level,
       );
     }
+
+    // In-session surge: the upcoming level gets a tighter countdown (read once
+    // at level start; campaign only).
+    _isSurge = !widget.isTutorial &&
+        !widget.isDailyChallenge &&
+        _pacing.surgeForUpcomingLevel() == SurgeKind.timed;
+    if (_isSurge && _timeLimitSec != null) {
+      _timeLimitSec = (_timeLimitSec! * SessionPacing.timedSurgeFactor)
+          .round()
+          .clamp(SessionPacing.timedSurgeFloorSec, _timeLimitSec!);
+    }
+
     _timeLeftSec = _timeLimitSec;
 
     if (!_stopwatch.isRunning) _stopwatch.start();
@@ -277,6 +356,14 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _adCoordinator.preloadForLevelStartup();
     _adCoordinator.scheduleRewardedHintsEntryCoachIfNeeded();
 
+    if (widget.autoplay) {
+      _autoplayTimer?.cancel();
+      _autoplayTimer = Timer.periodic(const Duration(milliseconds: 55), (_) {
+        if (!mounted) return;
+        _engine.autoSolveStep();
+      });
+    }
+
     setState(() {});
   }
 
@@ -284,6 +371,7 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _goingNext = false;
+    _autoplayTimer?.cancel();
     _gameFlow.flushLifetimeGameplayDelta(clearTrackedAfter: true);
     _timers.disposeAll();
     unawaited(_audio.dispose());
@@ -309,6 +397,8 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     g.soundEnabled = _settings.soundEnabled;
     g.hapticsEnabled = _settings.hapticsEnabled;
     g.colorblindPalette = _settings.colorblindFriendly;
+    g.showAimRay = _settings.showAimRay;
+    g.ambientMotion = _settings.ambientMotion;
     g.onSfx = (sfx, {double playbackRate = 1.0}) =>
         unawaited(_audio.play(sfx, playbackRate: playbackRate));
   }
@@ -324,7 +414,9 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           ? widget.dailyDayKey!
           : (widget.isTutorial ? widget.tutorialIndex : widget.level),
       difficulty: widget.difficulty,
-      onWin: () => unawaited(_gameFlow.handleWin()),
+      onWin: widget.autoplay
+          ? () => widget.onAutoplayWin?.call()
+          : () => unawaited(_gameFlow.handleWin()),
       onJam: _handleFoul,
       onNodeRemoved: _handleNodeRemoved,
       preloadedLevel: _levelData!,
@@ -350,11 +442,17 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _removedNodes = removed;
       _totalNodes = total;
     });
+    if (_isCampaign && _goals.recordStreak(_engine.extractionStreak)) {
+      _showGoalCompleteToast();
+    }
     _timerController.resetGhostHintTimer();
   }
 
   String? _headerModeLabel() {
-    if (widget.isTutorial) return 'TUTORIAL ${widget.tutorialIndex + 1}/5';
+    if (_isSurge) return '⚡ SURGE';
+    if (widget.isTutorial) {
+      return 'TUTORIAL ${widget.tutorialIndex + 1}/${tutorialLevels.length}';
+    }
     if (widget.isDailyChallenge) {
       return DailyChallenge.incidentTitle(widget.dailyDayKey!);
     }
@@ -468,12 +566,25 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         return 'Arrows block each other—clear a free exit first and watch the countdown. '
             'Tap the grid button for alignment lines along shared rows and columns.';
       case 2:
-        return 'Chain good pops in a safe order. The timer only counts down; pops do not add time.';
+        return 'Chain good pops in a safe order—the timer only counts down, pops never add time. '
+            'Unsure what is safe? Tap the lightbulb hint and a removable arrow PULSES to show a move.';
       case 3:
         return 'Bigger board: plan clears and watch the countdown—zoom or alignment lines help scan paths.';
-      default:
-        return 'Final recap: 8 arrows—clear everything before the 45s countdown hits zero. '
+      case 4:
+        return 'Recap: 8 arrows—clear everything before the 45s countdown hits zero. '
             'Pinch out or Reset zoom if you need the full board again.';
+      case 5:
+        return 'Gold-ringed arrows are CORES—extract all three to win. The other two point at '
+            'each other and can never move; popping the last core auto-clears them. '
+            'Watch INTEGRITY (top-left): your network health drops if you misfire a blocked '
+            'arrow and rises as you restore cores.';
+      case 6:
+        return 'The arrow with the green ring is a RELAY. Popping it spins every arrow in its '
+            'row a quarter turn clockwise—fire it to free the pair stuck face-to-face, '
+            'then clear what remains.';
+      default:
+        return 'The padlocked arrow is LOCKED until the tiles around it are empty. '
+            'Clear its two neighbors first, then send it on its way.';
     }
   }
 
@@ -517,10 +628,19 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           // AmbientBackgroundComponent inside the Flame layer — the GameWidget
           // paints an opaque background, so nothing behind it would show.
           Positioned.fill(child: GameWidget(game: _game!)),
-          if (_hasWon)
+          if (_hasWon && !_quickWin)
             Positioned.fill(
               child: IgnorePointer(
                 child: WinCelebrationOverlay(accent: accent),
+              ),
+            ),
+          if (_hasWon && _quickWin)
+            Positioned.fill(
+              child: QuickWinBanner(
+                stars: _earnedStars,
+                levelLabel: 'LEVEL ${widget.level} CLEAR',
+                sessionWins: _pacing.winsThisSession,
+                accent: accent,
               ),
             ),
           GameHeaderHud(
@@ -536,14 +656,35 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             coresRestored:
                 _engine.usesCoreWin ? _engine.coresRestored : null,
             totalCores: _engine.usesCoreWin ? _engine.totalCores : null,
-            networkIntegrity: _hardOrDailyFeatures && !widget.isTutorial
-                ? _engine.networkIntegrity
-                : null,
+            // Tutorial: surface Integrity from the cores step on, so the player
+            // sees it react live (drops on a misfire, rises as cores restore).
+            networkIntegrity: widget.isTutorial
+                ? (widget.tutorialIndex >= 5 ? _engine.networkIntegrity : null)
+                : (_hardOrDailyFeatures ? _engine.networkIntegrity : null),
             timeLeftSec: _timeLeftSec,
             timeLimitSec: _timeLimitSec,
             elapsed: _stopwatch.elapsed,
             onTogglePause: _togglePause,
           ),
+          // Hide once complete: the completion is celebrated by the goal-
+          // complete toast on the winning level, so a persistent "DONE" chip on
+          // every later level of the session is just visual clutter.
+          if (_isCampaign && !_hasWon && !_goals.isComplete)
+            Positioned(
+              top: _tutorialHintTop,
+              left: 0,
+              right: 0,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: SessionGoalChip(
+                  label: _goals.activeGoal.label,
+                  progress: _goals.progress,
+                  target: _goals.target,
+                  complete: _goals.isComplete,
+                  accent: accent,
+                ),
+              ),
+            ),
           if (widget.isTutorial && !_hasWon)
             Positioned(
               top: _tutorialHintTop,
@@ -624,11 +765,11 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   : _ads.buildGamePauseBanner(context),
             ),
           AnimatedSlide(
-            offset: _hasWon ? Offset.zero : const Offset(0, 1),
+            offset: (_hasWon && !_quickWin) ? Offset.zero : const Offset(0, 1),
             duration: const Duration(milliseconds: 450),
             curve: Curves.easeOutQuart,
             child: AnimatedOpacity(
-              opacity: _hasWon ? 1.0 : 0.0,
+              opacity: (_hasWon && !_quickWin) ? 1.0 : 0.0,
               duration: const Duration(milliseconds: 300),
               child: Align(
                 alignment: Alignment.bottomCenter,
@@ -645,13 +786,15 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                   onRetry: _gameFlow.resetForRetry,
                   onNext: () => unawaited(_gameFlow.goNextLevel()),
                   showNextAndAutoAdvance: !widget.isDailyChallenge &&
-                      (!widget.isTutorial || widget.tutorialIndex < 4),
+                      (!widget.isTutorial ||
+                          widget.tutorialIndex < tutorialLevels.length - 1),
                   titleLine: widget.isDailyChallenge
                       ? DailyChallenge.incidentResolvedTitle(
                           widget.dailyDayKey!,
                         )
                       : (widget.isTutorial
-                          ? 'TUTORIAL · STEP ${widget.tutorialIndex + 1} / 5'
+                          ? 'TUTORIAL · STEP ${widget.tutorialIndex + 1} '
+                              '/ ${tutorialLevels.length}'
                           : null),
                 ),
               ),

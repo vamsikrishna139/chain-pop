@@ -47,9 +47,9 @@ class WorldTheme {
     return WorldTheme._(
       accent: accent,
       backgroundTint: lift(AppColors.background, 0.0, 0.05),
-      tileFill: lift(AppColors.surface, 0.05, 0.06),
-      tileBorder: Colors.white.withValues(alpha: 0.08),
-      silhouetteGlow: accent.withValues(alpha: 0.22),
+      tileFill: lift(AppColors.surface, 0.18, 0.14),
+      tileBorder: Colors.white.withValues(alpha: 0.15),
+      silhouetteGlow: accent.withValues(alpha: 0.38),
       restoredFill: accent.withValues(alpha: 0.10),
       restoredTrace: accent.withValues(alpha: 0.16),
     );

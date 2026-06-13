@@ -342,12 +342,14 @@ class LevelGenerator {
   Result<LevelData, GenerationError> generate(
     int levelId, {
     DifficultyMode? mode,
+    Duration? timeBudget,
   }) {
     final config = LevelConfiguration.fromLevelId(levelId, mode: mode);
     return generateFromConfiguration(
       config,
       primarySeed: levelId,
       applyMilestones: true,
+      timeBudget: timeBudget,
     );
   }
 
@@ -364,6 +366,7 @@ class LevelGenerator {
     bool applyMilestones = true,
     int maxAttempts = 40,
     DifficultyTier? targetTier,
+    Duration? timeBudget,
   }) {
     final validation = config.validate();
     if (!validation.isValid) {
@@ -443,11 +446,33 @@ class LevelGenerator {
     );
 
     // ── Normal generation with retries ────────────────────────────────
+    // Optional latency budget: levels are generated at load, and a small tail
+    // of seeds burn all [maxAttempts] chasing the ideal removal-wave band
+    // (~1s worst case). When [timeBudget] is set, once we're over budget we
+    // ship the best fully-validated level found so far, relaxing only the
+    // wave-band *preference* — solvability/layout are still enforced. Off by
+    // default → behaviour is byte-identical for the generation test suites.
+    final budgetWatch = timeBudget != null ? (Stopwatch()..start()) : null;
+    LevelData? budgetFallback;
+
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
+      final overBudgetNow =
+          budgetWatch != null && budgetWatch.elapsed >= timeBudget!;
+      if (overBudgetNow && budgetFallback != null) {
+        _discardPendingEmission();
+        return Result.success(budgetFallback);
+      }
+      // Once over budget, fast-forward to the most-relaxed regime (low node
+      // count, clean archetype) so the attempt *constructs* quickly — the
+      // in-iteration budget escape below then ships the first valid level.
+      // This bounds the silhouette-starved tail that otherwise burns every
+      // attempt at full node count before succeeding.
+      final regimeAttempt =
+          overBudgetNow ? max(attempt, maxAttempts - 4) : attempt;
       final rng = Random(primarySeed * 31337 + attempt * 999983);
 
-      final nodeCountScale = 1.0 - (attempt ~/ 2) * 0.15;
-      final scaledConfig = attempt < 2
+      final nodeCountScale = 1.0 - (regimeAttempt ~/ 2) * 0.15;
+      final scaledConfig = regimeAttempt < 2
           ? config
           : () {
               var scaledTarget =
@@ -473,7 +498,7 @@ class LevelGenerator {
               );
             }();
 
-      final currentArchetype = attempt < maxAttempts - 10
+      final currentArchetype = regimeAttempt < maxAttempts - 10
           ? lockedArchetype
           : GenerationArchetype.cleanAuthored;
 
@@ -482,6 +507,9 @@ class LevelGenerator {
         rng,
         targetTier: targetTier,
         overrideArchetype: currentArchetype,
+        overBudget: budgetWatch == null
+            ? null
+            : () => budgetWatch.elapsed >= timeBudget!,
       );
       if (result.isSuccess) {
         final enriched = _enrichLevel(result.value, scaledConfig, targetTier);
@@ -489,6 +517,20 @@ class LevelGenerator {
         if (!validationResult.isValid) {
           _discardPendingEmission();
           continue;
+        }
+
+        // Over budget: ship this freshly-staged valid level immediately
+        // (commits its telemetry + ledger record), skipping the wave-band
+        // preference. Bounds worst-case generation latency.
+        if (budgetWatch != null && budgetWatch.elapsed >= timeBudget!) {
+          _assertGeneratedLayout(enriched);
+          final milestone = applyMilestones ? _getMilestoneType(config) : null;
+          if (milestone != null) {
+            _commitPendingMilestoneEmission(milestone);
+          } else {
+            _commitPendingEmission();
+          }
+          return Result.success(enriched);
         }
 
         final waves = LevelSolver.countRemovalWaves(enriched);
@@ -514,8 +556,10 @@ class LevelGenerator {
           }
           return Result.success(enriched);
         }
-        // Out-of-band wave count — drop the staged event so the next attempt
-        // can stage afresh.
+        // Out-of-band wave count — retain as a budget fallback (valid +
+        // solvable, just not in the ideal wave band) before dropping the
+        // staged event so the next attempt can stage afresh.
+        budgetFallback ??= enriched;
         _discardPendingEmission();
       }
     }
@@ -565,12 +609,14 @@ class LevelGenerator {
     Random random, {
     DifficultyTier? targetTier,
     GenerationArchetype? overrideArchetype,
+    bool Function()? overBudget,
   }) {
     return _attemptDirectorDrivenGeneration(
       config,
       random,
       targetTier: targetTier,
       overrideArchetype: overrideArchetype,
+      overBudget: overBudget,
     );
   }
 
@@ -592,6 +638,7 @@ class LevelGenerator {
     DifficultyTier? targetTier,
     LevelSeed? seed,
     GenerationArchetype? overrideArchetype,
+    bool Function()? overBudget,
   }) {
     _retrogradeAttemptCount++;
 
@@ -621,6 +668,16 @@ class LevelGenerator {
     final lockedArchetype = overrideArchetype ?? (seed == null ? GenerationArchetypeSpec.sampleForTier(random, evaluatorTier) : null);
 
     for (var k = 0; k < _evaluatorRetryBudget; k++) {
+      // Latency budget: once over budget, stop spending evaluator iterations
+      // as soon as we have *something* shippable this attempt — the selection
+      // block below returns the best candidate found.
+      if (overBudget != null &&
+          overBudget() &&
+          (inBandCandidates.isNotEmpty ||
+              novelOutOfBand != null ||
+              nonNovelFallback != null)) {
+        break;
+      }
       // Derive a per-iteration RNG so successive retries diverge
       // deterministically without consuming unbounded state from `random`.
       final iterationRandom = Random(random.nextInt(0x7fffffff));
@@ -646,6 +703,9 @@ class LevelGenerator {
         once = run.result;
         runTelemetry = run.telemetry;
         if (once.isSuccess) break;
+        // Over budget: stop renegotiating (each renegotiation re-runs the full
+        // construction) — take what this iteration produced and move on.
+        if (overBudget != null && overBudget()) break;
         final greedyFailed = _legacyGreedyFailure(once, plan);
         final renegotiated = greedyFailed
             ? _director.renegotiateAfterGreedyFailure(
@@ -1193,14 +1253,51 @@ class LevelGenerator {
       final nodes = <NodeData>[];
       for (var i = 0; i < placements.length; i++) {
         final p = placements[i];
-        final colorSlot = random.nextInt(palette.length);
         nodes.add(NodeData(
           id: i,
           x: p.position.x,
           y: p.position.y,
           dir: p.direction,
-          color: palette[colorSlot],
+          color: palette[0],
+          colorSlot: 0,
+        ));
+      }
+
+      // Compute waves to determine depth-tinting.
+      final tempLevel = LevelData(
+        levelId: config.levelId,
+        gridWidth: config.gridWidth,
+        gridHeight: config.gridHeight,
+        playCells: silhouetteToPlayCells(
+          plan.silhouetteMask,
+          gridWidth: config.gridWidth,
+          gridHeight: config.gridHeight,
+        ),
+        nodes: nodes,
+      );
+
+      final waveMap = LevelSolver.nodeWaveIndices(tempLevel);
+      var maxWave = 0;
+      for (final w in waveMap.values) {
+        if (w > maxWave) maxWave = w;
+      }
+
+      final finalNodes = <NodeData>[];
+      for (var i = 0; i < nodes.length; i++) {
+        final node = nodes[i];
+        final wave = waveMap[node.id] ?? 0;
+        final depth = maxWave > 0 ? wave / maxWave : 0.0;
+        int colorSlot;
+        if (depth <= 0.33) {
+          colorSlot = 2 + random.nextInt(2); // 2 or 3 (warm)
+        } else if (depth <= 0.66) {
+          colorSlot = random.nextInt(2); // 0 or 1 (green/cyan)
+        } else {
+          colorSlot = 4 + random.nextInt(2); // 4 or 5 (blue/purple)
+        }
+        finalNodes.add(node.copyWith(
           colorSlot: colorSlot,
+          color: palette[colorSlot],
         ));
       }
       return (
@@ -1213,7 +1310,7 @@ class LevelGenerator {
             gridWidth: config.gridWidth,
             gridHeight: config.gridHeight,
           ),
-          nodes: nodes,
+          nodes: finalNodes,
         )),
         telemetry: telemetry,
       );
@@ -1396,18 +1493,51 @@ class LevelGenerator {
 
       if (direction == null) return null;
 
-      final colorSlot = random.nextInt(palette.length);
       nodes.add(NodeData(
         id: i,
         x: position.x,
         y: position.y,
         dir: direction,
-        color: palette[colorSlot],
-        colorSlot: colorSlot,
+        color: palette[0],
+        colorSlot: 0,
       ));
     }
 
-    return nodes;
+    // Compute waves to determine depth-tinting.
+    final tempLevel = LevelData(
+      levelId: 0,
+      gridWidth: gridWidth,
+      gridHeight: gridHeight,
+      playCells: null,
+      nodes: nodes,
+    );
+
+    final waveMap = LevelSolver.nodeWaveIndices(tempLevel);
+    var maxWave = 0;
+    for (final w in waveMap.values) {
+      if (w > maxWave) maxWave = w;
+    }
+
+    final finalNodes = <NodeData>[];
+    for (var i = 0; i < nodes.length; i++) {
+      final node = nodes[i];
+      final wave = waveMap[node.id] ?? 0;
+      final depth = maxWave > 0 ? wave / maxWave : 0.0;
+      int colorSlot;
+      if (depth <= 0.33) {
+        colorSlot = 2 + random.nextInt(2); // 2 or 3 (warm)
+      } else if (depth <= 0.66) {
+        colorSlot = random.nextInt(2); // 0 or 1 (green/cyan)
+      } else {
+        colorSlot = 4 + random.nextInt(2); // 4 or 5 (blue/purple)
+      }
+      finalNodes.add(node.copyWith(
+        colorSlot: colorSlot,
+        color: palette[colorSlot],
+      ));
+    }
+
+    return finalNodes;
   }
 
   /// Finds a direction whose ray does not hit any [futureNodes], using

@@ -141,8 +141,8 @@ class AmbientBackgroundComponent extends PositionComponent
       _scatterMotes();
     }
 
-    // Freeze drift while the player is aiming with the ray preview.
-    if (!game.rayPreviewActive) {
+    // Freeze drift while the player is aiming with the ray preview or if disabled by user settings.
+    if (game.ambientMotion && !game.rayPreviewActive) {
       final w = game.size.x;
       final h = game.size.y;
       for (final m in _motes) {

@@ -36,6 +36,8 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   static const String _settingsSoundKey = 'settings_sound';
   static const String _settingsHapticsKey = 'settings_haptics';
   static const String _settingsColorblindKey = 'settings_colorblind';
+  static const String _settingsAimRayKey = 'settings_aim_ray';
+  static const String _settingsAmbientMotionKey = 'settings_ambient_motion';
 
   static const String _hintRewardCoachSeenKey = 'hint_reward_coach_seen';
 
@@ -114,6 +116,14 @@ final class HiveChainPopPersistence implements ChainPopStorage {
           _box.get(_settingsColorblindKey),
           fallback: false,
         ),
+        showAimRay: coerceHiveBool(
+          _box.get(_settingsAimRayKey),
+          fallback: true,
+        ),
+        ambientMotion: coerceHiveBool(
+          _box.get(_settingsAmbientMotionKey),
+          fallback: true,
+        ),
       );
 
   @override
@@ -121,6 +131,8 @@ final class HiveChainPopPersistence implements ChainPopStorage {
     await _box.put(_settingsSoundKey, settings.soundEnabled);
     await _box.put(_settingsHapticsKey, settings.hapticsEnabled);
     await _box.put(_settingsColorblindKey, settings.colorblindFriendly);
+    await _box.put(_settingsAimRayKey, settings.showAimRay);
+    await _box.put(_settingsAmbientMotionKey, settings.ambientMotion);
   }
 
   @override

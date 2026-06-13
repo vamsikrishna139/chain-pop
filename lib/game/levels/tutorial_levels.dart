@@ -3,16 +3,24 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import 'level.dart';
 
-/// Five hand-authored onboarding boards (fixed [LevelData], not procedural).
+/// Compile-time mirror of [tutorialLevels.length] for const asserts
+/// (e.g. [GameScreen]'s `tutorialIndex` range check).
+const int tutorialStepCount = 8;
+
+/// Eight hand-authored onboarding boards (fixed [LevelData], not procedural).
 ///
 /// Progressive focus: single pop → ordered pair → parallel wave + column
-/// follow-up → mixed 5×5 → larger 6×6 recap.
+/// follow-up → mixed 5×5 → larger 6×6 recap → cores (gold ring win
+/// condition) → relay (row rotation) → locked node (padlock).
 final List<LevelData> tutorialLevels = [
   _tutorial0,
   _tutorial1,
   _tutorial2,
   _tutorial3,
   _tutorial4,
+  _tutorial5,
+  _tutorial6,
+  _tutorial7,
 ];
 
 Color _c(int slot) => AppColors.nodePalette[slot % AppColors.nodePalette.length];
@@ -205,6 +213,131 @@ final LevelData _tutorial4 = LevelData(
       dir: Direction.up,
       color: _c(1),
       colorSlot: 1,
+    ),
+  ],
+);
+
+/// Cores: the three gold-ringed arrows are the win condition. The two normal
+/// arrows face each other (permanently stuck) on purpose — the cascade finale
+/// clears them once the last core pops.
+final LevelData _tutorial5 = LevelData(
+  levelId: 9005,
+  gridWidth: 5,
+  gridHeight: 5,
+  nodes: [
+    NodeData(
+      id: 0,
+      x: 1,
+      y: 1,
+      dir: Direction.up,
+      color: _c(0),
+      colorSlot: 0,
+      isCore: true,
+    ),
+    NodeData(
+      id: 1,
+      x: 3,
+      y: 1,
+      dir: Direction.up,
+      color: _c(1),
+      colorSlot: 1,
+      isCore: true,
+    ),
+    NodeData(
+      id: 2,
+      x: 2,
+      y: 3,
+      dir: Direction.down,
+      color: _c(2),
+      colorSlot: 2,
+      isCore: true,
+    ),
+    NodeData(
+      id: 3,
+      x: 1,
+      y: 2,
+      dir: Direction.right,
+      color: _c(3),
+      colorSlot: 3,
+    ),
+    NodeData(
+      id: 4,
+      x: 3,
+      y: 2,
+      dir: Direction.left,
+      color: _c(4),
+      colorSlot: 4,
+    ),
+  ],
+);
+
+/// Relay: the two right-column arrows point at each other and can never exit
+/// on their own. Popping the green-ringed relay rotates its row clockwise,
+/// turning the lower arrow toward the open right edge.
+final LevelData _tutorial6 = LevelData(
+  levelId: 9006,
+  gridWidth: 5,
+  gridHeight: 5,
+  nodes: [
+    NodeData(
+      id: 0,
+      x: 0,
+      y: 2,
+      dir: Direction.left,
+      color: _c(0),
+      colorSlot: 0,
+      kind: NodeKind.relay,
+    ),
+    NodeData(
+      id: 1,
+      x: 3,
+      y: 2,
+      dir: Direction.up,
+      color: _c(1),
+      colorSlot: 1,
+    ),
+    NodeData(
+      id: 2,
+      x: 3,
+      y: 0,
+      dir: Direction.down,
+      color: _c(2),
+      colorSlot: 2,
+    ),
+  ],
+);
+
+/// Locked node: the padlocked arrow refuses to move until both occupied
+/// neighbor cells are cleared, then exits upward.
+final LevelData _tutorial7 = LevelData(
+  levelId: 9007,
+  gridWidth: 4,
+  gridHeight: 4,
+  nodes: [
+    NodeData(
+      id: 0,
+      x: 0,
+      y: 1,
+      dir: Direction.left,
+      color: _c(0),
+      colorSlot: 0,
+    ),
+    NodeData(
+      id: 1,
+      x: 1,
+      y: 2,
+      dir: Direction.down,
+      color: _c(1),
+      colorSlot: 1,
+    ),
+    NodeData(
+      id: 2,
+      x: 1,
+      y: 1,
+      dir: Direction.up,
+      color: _c(2),
+      colorSlot: 2,
+      kind: NodeKind.locked,
     ),
   ],
 );

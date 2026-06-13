@@ -143,6 +143,37 @@ class BoardLayoutMetrics {
     return s;
   }
 
+  /// [fitCellSizeForBounds] zooms into the occupied bbox, which on sparse
+  /// boards (e.g. a single node in a 4×4 tutorial grid) inflates the cell until
+  /// the *full* rendered grid spills past the band edges. This caps the result
+  /// so `cell × gridWidth ≤ bandW` and `cell × gridHeight ≤ bandH` — the whole
+  /// grid always fits at base zoom; the player can still pinch-zoom afterward.
+  static double fitCellSizeForBoundsCappedToGrid({
+    required double bandW,
+    required double bandH,
+    required int bboxWidth,
+    required int bboxHeight,
+    required int gridWidth,
+    required int gridHeight,
+    required double targetFill,
+    double maxCell = 96.0,
+    double minPreferredCell = 26.0,
+  }) {
+    final fit = fitCellSizeForBounds(
+      bandW: bandW,
+      bandH: bandH,
+      bboxWidth: bboxWidth,
+      bboxHeight: bboxHeight,
+      targetFill: targetFill,
+      maxCell: maxCell,
+      minPreferredCell: minPreferredCell,
+    );
+    if (gridWidth <= 0 || gridHeight <= 0) return fit;
+    final gridCap = math.min(bandW / gridWidth, bandH / gridHeight);
+    if (gridCap <= 0) return fit;
+    return math.min(fit, gridCap);
+  }
+
   /// [topReserved] / [bottomReserved] are distances from screen edges to the
   /// playfield band (same convention as [ChainPopGame]).
   static BoardLayoutMetrics compute({

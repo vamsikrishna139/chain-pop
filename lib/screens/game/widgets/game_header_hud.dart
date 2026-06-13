@@ -80,19 +80,29 @@ class GameHeaderHud extends StatelessWidget {
                     ),
                   ),
                 ),
-                const Spacer(),
-                if (networkIntegrity != null)
-                  Text(
-                    'Integrity: $networkIntegrity%',
-                    style: TextStyle(
-                      color: _integrityColor(networkIntegrity!)
-                          .withValues(alpha: 0.9),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                const Spacer(),
+                // Centered between back and settings. FittedBox scales the
+                // label down on very narrow phones (≈320px) so the row never
+                // overflows when Integrity shows alongside lives + cores.
+                Expanded(
+                  child: networkIntegrity == null
+                      ? const SizedBox.shrink()
+                      : Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'Integrity: $networkIntegrity%',
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: _integrityColor(networkIntegrity!)
+                                    .withValues(alpha: 0.9),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
                 IconButton(
                   onPressed: onOpenSettings,
                   tooltip: 'Settings',

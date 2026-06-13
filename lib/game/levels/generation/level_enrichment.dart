@@ -1,6 +1,8 @@
 import 'dart:math';
 
+import '../grid_cell_key.dart';
 import '../level.dart';
+import '../level_solver.dart';
 import 'difficulty_mode.dart';
 import 'difficulty_profile.dart';
 import 'level_configuration.dart';
@@ -80,10 +82,16 @@ List<NodeData> _markSpecialNodes(
 
   if (lvl >= 51) {
     // A relay rotates its whole row when popped, which can spin arrows into
-    // permanent face-offs. Keep relays out of core rows (a stranded core is
-    // unwinnable), and only accept a candidate whose rotation the relay-aware
-    // validator confirms still leaves the canonical solution playable. If no
-    // candidate survives, ship the level without a relay.
+    // permanent face-offs. Relay-free Chain Pop can never soft-lock (removing a
+    // node only ever frees rays), so a relay is the *only* mechanic that can
+    // strand the board — and the danger is that the player pops it at the wrong
+    // moment, not just in the canonical order. Keep relays out of core rows (a
+    // stranded core is unwinnable) and only accept a candidate that
+    // [_relayIsSoftlockSafe] proves stays solvable no matter when it is popped
+    // AND that keeps the canonical ID-order solution valid — [LevelGenerator]
+    // re-runs [LevelValidator] on the enriched output, so a candidate that
+    // breaks ID order would get the whole level discarded downstream.
+    // If no candidate survives, ship the level without a relay.
     final coreRows = {for (final n in result.where((n) => n.isCore)) n.y};
     final sorted = List<NodeData>.from(result)..sort((a, b) => b.id.compareTo(a.id));
     final relayCandidates = sorted
@@ -109,7 +117,8 @@ List<NodeData> _markSpecialNodes(
         playCells: level.playCells,
         nodes: withRelay,
       );
-      if (validator.validate(probe).isValid) {
+      if (_relayIsSoftlockSafe(probe, candidate.id) &&
+          validator.validate(probe).isValid) {
         result = withRelay;
         break;
       }
@@ -117,6 +126,91 @@ List<NodeData> _markSpecialNodes(
   }
 
   return result;
+}
+
+/// True if [level] — which must contain exactly the single relay [relayId] —
+/// can never be soft-locked, no matter when the player pops the relay.
+///
+/// Why this is sound and O(n) rather than an exhaustive playout: relay-free
+/// Chain Pop is *monotone* — removing a node only clears blockers from other
+/// nodes' rays, so a solvable board stays solvable under any legal-move order.
+/// The relay's row rotation is the one non-monotone event. Before it fires the
+/// board is effectively relay-free, so the set of nodes that *must* already be
+/// gone for the relay to be poppable is fixed: the occupants of the relay's ray
+/// plus, transitively, the occupants of *their* rays (and a locked node's
+/// neighbours). Call that closure `must`. The largest — therefore hardest —
+/// reachable state in which the relay is poppable is exactly `allNodes \ must`;
+/// every other poppable state has *more* nodes removed and is easier by
+/// monotonicity. So if popping the relay from that worst case leaves a solvable
+/// (now relay-free) board, every reachable pop is safe too.
+bool _relayIsSoftlockSafe(LevelData level, int relayId) {
+  final byCell = <int, NodeData>{
+    for (final n in level.nodes) gridCellKey(n.x, n.y): n,
+  };
+  final relay = level.nodes.firstWhere((n) => n.id == relayId);
+
+  final must = <int>{};
+  final stack = <NodeData>[];
+  void requireOccupant(int cell) {
+    final occ = byCell[cell];
+    if (occ != null && occ.id != relay.id && must.add(occ.id)) stack.add(occ);
+  }
+
+  for (final c in _rayCellKeys(relay, level)) {
+    requireOccupant(c);
+  }
+  while (stack.isNotEmpty) {
+    final node = stack.removeLast();
+    for (final c in _rayCellKeys(node, level)) {
+      requireOccupant(c);
+    }
+    // A locked node can only be removed once all four neighbours are gone, so
+    // those are prerequisites of clearing it too.
+    if (node.kind == NodeKind.locked) {
+      for (final (dx, dy) in const [(0, -1), (0, 1), (-1, 0), (1, 0)]) {
+        requireOccupant(gridCellKey(node.x + dx, node.y + dy));
+      }
+    }
+  }
+
+  // Worst-case poppable state with the relay removed and its row rotated. The
+  // result is relay-free, so monotone solvability ([LevelSolver.isSolvable])
+  // is exact.
+  final afterPop = <NodeData>[
+    for (final n in level.nodes)
+      if (!must.contains(n.id) && n.id != relay.id)
+        (n.y == relay.y ? n.copyWith(dir: n.dir.rotatedCw) : n),
+  ];
+  return LevelSolver.isSolvable(LevelData(
+    levelId: level.levelId,
+    gridWidth: level.gridWidth,
+    gridHeight: level.gridHeight,
+    playCells: level.playCells,
+    nodes: afterPop,
+  ));
+}
+
+/// Grid-cell keys the node's facing ray passes through, edge-clipped. Rays
+/// cross the full bounding grid — `playCells` voids do not stop them.
+List<int> _rayCellKeys(NodeData n, LevelData level) {
+  final cells = <int>[];
+  var x = n.x;
+  var y = n.y;
+  while (true) {
+    switch (n.dir) {
+      case Direction.up:
+        y--;
+      case Direction.down:
+        y++;
+      case Direction.left:
+        x--;
+      case Direction.right:
+        x++;
+    }
+    if (x < 0 || x >= level.gridWidth || y < 0 || y >= level.gridHeight) break;
+    cells.add(gridCellKey(x, y));
+  }
+  return cells;
 }
 
 bool _canSafelyLock(NodeData node, List<NodeData> nodes, LevelData level) {

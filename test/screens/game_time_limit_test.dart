@@ -4,10 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('computeTutorialCountdownSec', () {
-    test('first four steps get 60s, final step 45s', () {
+    test('movement steps get 60s, recap 45s, mechanic intros 60s', () {
       expect(computeTutorialCountdownSec(0), 60);
       expect(computeTutorialCountdownSec(3), 60);
       expect(computeTutorialCountdownSec(4), 45);
+      expect(computeTutorialCountdownSec(5), 60);
+      expect(computeTutorialCountdownSec(7), 60);
     });
   });
 

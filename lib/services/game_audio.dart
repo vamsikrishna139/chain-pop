@@ -43,10 +43,10 @@ class GameAudioController implements GameAudioHandle {
   GameAudioController({int voiceCount = 4})
       : _players = List.generate(
           voiceCount,
-          (_) => AudioPlayer(),
+          (_) => _AudioPlayerPool.getPlayer(),
         ),
-        _hudPlayer = AudioPlayer(),
-        _ambientPlayer = AudioPlayer() {
+        _hudPlayer = _AudioPlayerPool.getPlayer(),
+        _ambientPlayer = _AudioPlayerPool.getPlayer() {
     for (final p in _players) {
       p.setReleaseMode(ReleaseMode.stop);
       p.setPlayerMode(PlayerMode.mediaPlayer);
@@ -224,10 +224,40 @@ class GameAudioController implements GameAudioHandle {
     _disposed = true;
     _gameplayAmbientArmed = false;
     await stopAmbient();
-    await _ambientPlayer.dispose();
-    await _hudPlayer.dispose();
+
+    final futures = <Future<void>>[];
+    try {
+      futures.add(_hudPlayer.stop());
+    } catch (_) {}
     for (final p in _players) {
-      await p.dispose();
+      try {
+        futures.add(p.stop());
+      } catch (_) {}
     }
+    await Future.wait(futures).timeout(
+      const Duration(milliseconds: 300),
+      onTimeout: () => [],
+    );
+
+    _AudioPlayerPool.recycle(_ambientPlayer);
+    _AudioPlayerPool.recycle(_hudPlayer);
+    for (final p in _players) {
+      _AudioPlayerPool.recycle(p);
+    }
+  }
+}
+
+abstract final class _AudioPlayerPool {
+  static final List<AudioPlayer> _pool = [];
+
+  static AudioPlayer getPlayer() {
+    if (_pool.isNotEmpty) {
+      return _pool.removeLast();
+    }
+    return AudioPlayer();
+  }
+
+  static void recycle(AudioPlayer player) {
+    _pool.add(player);
   }
 }

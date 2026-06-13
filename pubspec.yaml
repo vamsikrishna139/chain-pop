@@ -17,9 +17,9 @@ dependencies:
   google_fonts: ^8.0.2
   audioplayers: ^6.6.0
   google_mobile_ads: ^8.0.0
-  firebase_core: ^4.9.0
-  firebase_crashlytics: ^5.2.2
-  firebase_analytics: ^12.4.1
+  firebase_core: ^4.10.0
+  firebase_crashlytics: ^5.2.3
+  firebase_analytics: ^12.4.2
   webview_flutter: ^4.13.1
   url_launcher: ^6.3.2
   purchases_flutter: ^10.1.0

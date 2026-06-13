@@ -85,9 +85,11 @@ void main() {
 
     test('rejects relay candidates whose rotation breaks the solution', () {
       // Cores are ids 6/5/4 (rows 5, 3, 1). If node 2 became the relay,
-      // popping it would rotate row 2 and spin node 3 (←) into ↑, where it
-      // rays straight into core 4 at (4,1) — stranding it. Nodes 1 and 3 are
-      // safe relay picks (their rotations touch no later node).
+      // popping it in canonical ID order would rotate row 2 and spin node 3
+      // (←) into ↑, raying straight into core 4 at (4,1) — invalid for the
+      // generator's ID-order validation contract (a player could rescue it by
+      // popping core 4 early, but the canonical solution must work as-is).
+      // Nodes 1 and 3 are safe picks (their rotations touch no later node).
       final level = LevelData(
         levelId: 58,
         gridWidth: 6,

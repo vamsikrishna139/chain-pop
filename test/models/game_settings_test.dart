@@ -8,6 +8,7 @@ void main() {
       expect(s.soundEnabled, isTrue);
       expect(s.hapticsEnabled, isTrue);
       expect(s.colorblindFriendly, isFalse);
+      expect(s.showAimRay, isTrue);
     });
 
     test('copyWith overrides only provided fields', () {
@@ -16,6 +17,7 @@ void main() {
       expect(a.soundEnabled, isFalse);
       expect(a.hapticsEnabled, isTrue);
       expect(a.colorblindFriendly, isFalse);
+      expect(a.showAimRay, isTrue);
 
       final b = base.copyWith(
         hapticsEnabled: false,
@@ -24,6 +26,11 @@ void main() {
       expect(b.soundEnabled, isTrue);
       expect(b.hapticsEnabled, isFalse);
       expect(b.colorblindFriendly, isTrue);
+      expect(b.showAimRay, isTrue);
+
+      final c = base.copyWith(showAimRay: false);
+      expect(c.showAimRay, isFalse);
+      expect(c.soundEnabled, isTrue);
     });
   });
 }

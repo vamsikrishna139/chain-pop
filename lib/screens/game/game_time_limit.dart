@@ -2,10 +2,11 @@ import 'dart:math' show log;
 
 import '../../game/levels/generation/difficulty_mode.dart';
 
-/// First four tutorial steps (indices 0–3): generous **60s** each.
+/// Movement-tutorial steps (indices 0–3) and the mechanic intros (cores,
+/// relay, locked — indices 5+): generous **60s** each.
 const int tutorialCountdownEarlySec = 60;
 
-/// Final tutorial recap (index 4): short but forgiving (**45s**).
+/// Movement recap (index 4): short but forgiving (**45s**).
 const int tutorialCountdownFinalSec = 45;
 
 /// Campaign Easy countdown ceiling (four minutes).
@@ -44,10 +45,10 @@ const int hardCampaignTimerClampHighSec = 150;
 /// Virtual level index for daily puzzles — stabilizes pacing vs calendar keys.
 const int dailyChallengeVirtualLevelIndex = 40;
 
-/// Onboarding steps 0–3 use [tutorialCountdownEarlySec]; step 4 uses
-/// [tutorialCountdownFinalSec].
+/// Onboarding steps use [tutorialCountdownEarlySec] except the movement
+/// recap (index 4), which uses [tutorialCountdownFinalSec].
 int computeTutorialCountdownSec(int tutorialIndex) =>
-    tutorialIndex >= 4 ? tutorialCountdownFinalSec : tutorialCountdownEarlySec;
+    tutorialIndex == 4 ? tutorialCountdownFinalSec : tutorialCountdownEarlySec;
 
 /// Per-mode **countdown** seconds (time runs **down** to zero in [GameScreen]).
 ///

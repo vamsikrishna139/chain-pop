@@ -58,6 +58,35 @@ class LevelSolver {
     }
   }
 
+  /// Returns a map of node ID to its parallel-removal wave index.
+  ///
+  /// Solves the level in waves (similar to [countRemovalWaves]) and records the
+  /// wave index at which each node is extracted. If a node cannot be cleared,
+  /// its ID will not be in the map.
+  static Map<int, int> nodeWaveIndices(LevelData level) {
+    final nodes = level.nodes.map((n) => n.clone()).toList();
+    final positions = <int>{for (final n in nodes) gridCellKey(n.x, n.y)};
+    final waveIndices = <int, int>{};
+    var waves = 0;
+
+    while (true) {
+      final wave = [
+        for (final n in nodes)
+          if (_canRemoveWithSet(n, positions, level)) n,
+      ];
+      if (wave.isEmpty) {
+        break;
+      }
+      for (final n in wave) {
+        waveIndices[n.id] = waves;
+        nodes.remove(n);
+        positions.remove(gridCellKey(n.x, n.y));
+      }
+      waves++;
+    }
+    return waveIndices;
+  }
+
   /// Finds the first currently-removable node for the hint system.
   ///
   /// Rays are clipped to [gridWidth] × [gridHeight] so down/right scans stay

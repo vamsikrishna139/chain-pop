@@ -18,6 +18,16 @@ migrate_working_dir/
 *.iws
 .idea/
 
+# AI assistant / editor scratch dirs
+.cursor/
+.kiro/
+
+# Local planning notes and standalone debug scripts (not for release)
+/IMPLEMENTATION_PLAN.md
+/LAUNCH_WEEK_PLAN.md
+/IMMERSION_STRATEGY.md
+/bin/
+
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
