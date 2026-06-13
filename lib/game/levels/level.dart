@@ -3,6 +3,27 @@ import '../../theme/app_colors.dart';
 
 enum Direction { up, down, left, right }
 
+/// 90° rotations, shared by relay gameplay ([NodeKind.relay] pops rotate the
+/// row clockwise; undo rotates it back) and by solver/validator simulation.
+extension DirectionRotation on Direction {
+  Direction get rotatedCw => switch (this) {
+        Direction.up => Direction.right,
+        Direction.right => Direction.down,
+        Direction.down => Direction.left,
+        Direction.left => Direction.up,
+      };
+
+  Direction get rotatedCcw => switch (this) {
+        Direction.up => Direction.left,
+        Direction.left => Direction.down,
+        Direction.down => Direction.right,
+        Direction.right => Direction.up,
+      };
+}
+
+/// Gameplay role of a board node.
+enum NodeKind { normal, locked, relay }
+
 /// Immutable data for a single board node.
 ///
 /// [x] and [y] are `final` — grid coordinates never change after placement.
@@ -17,6 +38,12 @@ class NodeData {
   /// [AppColors.matchNodePaletteIndex] for colorblind remapping only.
   final int colorSlot;
 
+  /// Locked until all 4-neighbors are cleared; relay rotates its row on extract.
+  final NodeKind kind;
+
+  /// Critical network node — restoring all cores can win the level.
+  final bool isCore;
+
   NodeData({
     required this.id,
     required this.x,
@@ -24,6 +51,8 @@ class NodeData {
     required this.dir,
     this.color = AppColors.nodeDefault,
     this.colorSlot = -1,
+    this.kind = NodeKind.normal,
+    this.isCore = false,
   });
 
   NodeData clone() => NodeData(
@@ -33,6 +62,29 @@ class NodeData {
         dir: dir,
         color: color,
         colorSlot: colorSlot,
+        kind: kind,
+        isCore: isCore,
+      );
+
+  NodeData copyWith({
+    int? id,
+    int? x,
+    int? y,
+    Direction? dir,
+    Color? color,
+    int? colorSlot,
+    NodeKind? kind,
+    bool? isCore,
+  }) =>
+      NodeData(
+        id: id ?? this.id,
+        x: x ?? this.x,
+        y: y ?? this.y,
+        dir: dir ?? this.dir,
+        color: color ?? this.color,
+        colorSlot: colorSlot ?? this.colorSlot,
+        kind: kind ?? this.kind,
+        isCore: isCore ?? this.isCore,
       );
 
   @override

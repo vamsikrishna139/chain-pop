@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../grid_cell_key.dart';
 import 'archetype.dart';
+import 'candidate_scorer.dart';
 import 'difficulty_mode.dart';
 import 'difficulty_profile.dart';
 import 'level_configuration.dart';
@@ -9,6 +10,21 @@ import 'level_seed.dart';
 import 'motifs.dart';
 import 'sightline_table.dart';
 import 'silhouettes.dart';
+
+/// Dense silhouettes favoured by the Phase 1C bias for Hard/Expert tiers.
+/// These shapes produce tight boards with minimal dead canvas space.
+const List<SilhouetteId> _denseSilhouettes = [
+  SilhouetteId.ring,
+  SilhouetteId.cross,
+  SilhouetteId.diamond,
+  SilhouetteId.rectangle,
+];
+
+/// Silhouettes demoted under Phase 1C bias — they tend toward sparse layouts.
+const List<SilhouetteId> _sparseSilhouettes = [
+  SilhouetteId.archipelago,
+  SilhouetteId.organicBlob,
+];
 
 /// Concrete generation plan the Director hands to one Retrograde (or legacy)
 /// attempt. Immutable; the Director produces a fresh [GenerationPlan] on
@@ -115,20 +131,24 @@ class Director {
     LevelConfiguration config,
     Random random, {
     DifficultyTier? overrideTier,
+    GenerationArchetype? overrideArchetype,
   }) {
-    final archetype =
-        GenerationArchetypeSpec.sample(random, config.difficulty.mode);
-    final spec = GenerationArchetypeSpec.forArchetype(archetype);
+    final tier =
+        overrideTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
+    final archetype = overrideArchetype ?? GenerationArchetypeSpec.sampleForTier(random, tier);
+    // Dense Strategy Phase 1B: clamp isolation penalty + temperature for
+    // Hard/Expert so high-isolation or high-temperature archetypes don't
+    // produce sparse boards.
+    var spec = GenerationArchetypeSpec.forArchetype(archetype);
+    spec = _applyDensityOverrides(spec, tier);
     final useLegacy = archetype == GenerationArchetype.experimental &&
         random.nextDouble() < spec.legacyGreedyProbability;
-    final silhouette = _pickSilhouette(spec, random);
+    final silhouette = _pickSilhouette(spec, random, tier: tier);
     final mask = _buildOrFallbackMask(
       silhouette: silhouette,
       config: config,
       random: random,
     );
-    final tier =
-        overrideTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
     final profile = DifficultyProfile.forTier(tier);
     final target = _pickTargetNodeCount(
       config: config,
@@ -138,13 +158,14 @@ class Director {
     );
     final motifs = _reserveMotifs(
       spec: spec,
+      tier: tier,
       useLegacyGreedyPath: useLegacy,
       config: config,
       mask: mask,
       target: target,
       random: random,
     );
-    return GenerationPlan(
+    var plan = GenerationPlan(
       archetype: archetype,
       spec: spec,
       silhouette: silhouette,
@@ -155,6 +176,8 @@ class Director {
       useLegacyGreedyPath: useLegacy,
       motifs: motifs,
     );
+    plan = _refinePlanMaskDensity(plan, config, random);
+    return plan;
   }
 
   /// §9 Phase 5 — builds a plan from a hand-authored [LevelSeed], bypassing
@@ -170,10 +193,14 @@ class Director {
     // Seeded levels never roll the Experimental greedy-path coin so that the
     // seed's intent is honoured deterministically.
     const useLegacy = false;
+    // Hand-authored seeds pin a deliberate silhouette; honour the canonical
+    // rendering (no shape-pool variety) so the showcase looks as designed and
+    // the seed's RNG stream stays byte-stable.
     final mask = _buildOrFallbackMask(
       silhouette: seed.silhouetteId,
       config: config,
       random: random,
+      varied: false,
     );
     final profile = DifficultyProfile.forTier(seed.difficultyTier);
     final target = seed.targetNodeCount ??
@@ -239,19 +266,21 @@ class Director {
     // than blocking renegotiation entirely.
     final remappedMotifs = _reserveMotifs(
       spec: previous.spec,
+      tier: previous.tier,
       useLegacyGreedyPath: previous.useLegacyGreedyPath,
       config: config,
       mask: nextMask,
       target: downscaled,
       random: random,
     );
-    return previous.copyWith(
+    var plan = previous.copyWith(
       silhouette: nextSilhouette,
       silhouetteMask: nextMask,
       targetNodeCount: downscaled,
       renegotiationDepth: previous.renegotiationDepth + 1,
       motifs: remappedMotifs,
     );
+    return _refinePlanMaskDensity(plan, config, random);
   }
 
   /// After the legacy greedy path honestly fails elimination ordering, relax
@@ -297,19 +326,21 @@ class Director {
 
     final remappedMotifs = _reserveMotifs(
       spec: previous.spec,
+      tier: previous.tier,
       useLegacyGreedyPath: previous.useLegacyGreedyPath,
       config: config,
       mask: nextMask,
       target: downscaled,
       random: random,
     );
-    return previous.copyWith(
+    var plan = previous.copyWith(
       silhouette: nextSilhouette,
       silhouetteMask: nextMask,
       targetNodeCount: downscaled,
       renegotiationDepth: previous.renegotiationDepth + 1,
       motifs: remappedMotifs,
     );
+    return _refinePlanMaskDensity(plan, config, random);
   }
 
   /// §4.6 — picks the per-attempt motif count (`1..motifBudget`) and tries to
@@ -317,20 +348,17 @@ class Director {
   /// archetype has no budget, the level is too small, or every roll failed.
   List<MotifPlacement> _reserveMotifs({
     required GenerationArchetypeSpec spec,
+    required DifficultyTier tier,
     required bool useLegacyGreedyPath,
     required LevelConfiguration config,
     required Set<int> mask,
     required int target,
     required Random random,
   }) {
-    if (spec.motifBudget <= 0) return const [];
-    // The legacy greedy path cannot honour reservations.
     if (useLegacyGreedyPath) return const [];
-    // Don't burn half the level on motif cells — keep at most ~40% reserved.
     final maxReservationCells = (target * 0.4).floor();
     if (maxReservationCells < 3) return const [];
 
-    final desired = 1 + random.nextInt(spec.motifBudget);
     final sightlines = SightlineTable.forGrid(
       config.gridWidth,
       config.gridHeight,
@@ -339,9 +367,10 @@ class Director {
     final placed = <MotifPlacement>[];
     final usedCells = <int>{};
     var reservedSoFar = 0;
-    final catalogue = [...motifCatalogue()]..shuffle(random);
-    for (final motif in catalogue) {
-      if (placed.length >= desired) break;
+    final isDenseTier =
+        tier == DifficultyTier.hard || tier == DifficultyTier.expert;
+
+    bool tryPlace(Motif motif) {
       final placement = motif.place(
         gridWidth: config.gridWidth,
         gridHeight: config.gridHeight,
@@ -349,30 +378,140 @@ class Director {
         sightlines: sightlines,
         random: random,
       );
-      if (placement == null) continue;
-      // Reject overlaps with already-reserved motifs and over-budget rolls.
+      if (placement == null) return false;
       final keys = placement.reservations.map((r) => r.cellKey).toSet();
-      if (keys.any(usedCells.contains)) continue;
-      if (reservedSoFar + keys.length > maxReservationCells) continue;
+      if (keys.any(usedCells.contains)) return false;
+      if (reservedSoFar + keys.length > maxReservationCells) return false;
       placed.add(placement);
       usedCells.addAll(keys);
       reservedSoFar += keys.length;
+      return true;
+    }
+
+    // Phase 2B: Hard/Expert attempts cascade hub first ~45% of the time.
+    if (isDenseTier && random.nextDouble() < 0.45) {
+      final cascadeHub = motifById(MotifId.cascadeHub);
+      if (cascadeHub != null) {
+        tryPlace(cascadeHub);
+      }
+    }
+
+    if (spec.motifBudget <= 0) return placed;
+
+    final desiredTotal = isDenseTier
+        ? max(placed.length + 1, 1 + random.nextInt(spec.motifBudget))
+        : 1 + random.nextInt(spec.motifBudget);
+
+    var attempts = 0;
+    while (placed.length < desiredTotal && attempts < desiredTotal * 8) {
+      attempts++;
+      final hasLockCluster =
+          placed.any((p) => p.id == MotifId.lockCluster);
+      final motif = sampleMotifForTier(
+        tier,
+        random,
+        excludeLockCluster: hasLockCluster,
+      );
+      tryPlace(motif);
     }
     return placed;
   }
 
-  SilhouetteId _pickSilhouette(
-    GenerationArchetypeSpec spec,
+  /// Phase 1C — when mask area exceeds 1.15× target, prefer a tighter dense
+  /// silhouette so Hard/Expert boards avoid large voids.
+  GenerationPlan _refinePlanMaskDensity(
+    GenerationPlan plan,
+    LevelConfiguration config,
     Random random,
   ) {
+    if (plan.tier != DifficultyTier.hard &&
+        plan.tier != DifficultyTier.expert) {
+      return plan;
+    }
+    final maxArea = (plan.targetNodeCount * 1.15).ceil();
+    if (plan.silhouetteMask.length <= maxArea) return plan;
+
+    for (final sid in _denseSilhouettes) {
+      if (sid == plan.silhouette) continue;
+      final mask = _buildOrFallbackMask(
+        silhouette: sid,
+        config: config,
+        random: random,
+      );
+      if (mask.length <= maxArea && mask.length >= plan.targetNodeCount) {
+        final remapped = _reserveMotifs(
+          spec: plan.spec,
+          tier: plan.tier,
+          useLegacyGreedyPath: plan.useLegacyGreedyPath,
+          config: config,
+          mask: mask,
+          target: plan.targetNodeCount,
+          random: random,
+        );
+        return plan.copyWith(
+          silhouette: sid,
+          silhouetteMask: mask,
+          motifs: remapped,
+        );
+      }
+    }
+    return plan;
+  }
+
+  SilhouetteId _pickSilhouette(
+    GenerationArchetypeSpec spec,
+    Random random, {
+    DifficultyTier? tier,
+  }) {
     final pool = spec.preferredSilhouettes;
+    // Dense Strategy Phase 1C: for Hard/Expert, bias 40% toward dense
+    // silhouettes to keep structured tension, but allow full variety.
+    if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
+      final denseInPool =
+          pool.where((s) => _denseSilhouettes.contains(s)).toList();
+      if (denseInPool.isNotEmpty && random.nextDouble() < 0.40) {
+        return denseInPool[random.nextInt(denseInPool.length)];
+      }
+    }
     return pool[random.nextInt(pool.length)];
+  }
+
+  /// Dense Strategy Phase 1B: for Hard/Expert tiers, clamp isolation penalty
+  /// to 0.5 (prevents high-isolation archetypes from carving sparse voids)
+  /// and cap temperature at 1.0 (prevents Organic Messy's 1.6 from exploding
+  /// into sparse chaos).
+  static GenerationArchetypeSpec _applyDensityOverrides(
+    GenerationArchetypeSpec spec,
+    DifficultyTier tier,
+  ) {
+    if (tier != DifficultyTier.hard && tier != DifficultyTier.expert) {
+      return spec;
+    }
+    final w = spec.scorerWeights;
+    final clampedIsolation =
+        w.isolationPenalty > 0.5 ? 0.5 : w.isolationPenalty;
+    final clampedTemp = w.temperature > 1.0 ? 1.0 : w.temperature;
+    if (clampedIsolation == w.isolationPenalty &&
+        clampedTemp == w.temperature) {
+      return spec; // no change needed
+    }
+    return GenerationArchetypeSpec(
+      kind: spec.kind,
+      scorerWeights: w.copyWith(
+        isolationPenalty: clampedIsolation,
+        temperature: clampedTemp,
+      ),
+      motifBudget: spec.motifBudget,
+      preferredSilhouettes: spec.preferredSilhouettes,
+      legacyGreedyProbability: spec.legacyGreedyProbability,
+    );
   }
 
   Set<int> _buildOrFallbackMask({
     required SilhouetteId silhouette,
     required LevelConfiguration config,
     required Random random,
+    bool varied = true,
   }) {
     final minCells = config.difficulty.minNodes;
     final mask = buildSilhouetteMask(
@@ -381,6 +520,10 @@ class Director {
       gridHeight: config.gridHeight,
       random: random,
       minCells: minCells,
+      varied: varied,
+      // Level-isolated jitter seed (procedural path only). +1 so level 0 still
+      // jitters; does not consume from `random`, so the stream is unchanged.
+      jitterSeed: varied ? config.levelId + 1 : 0,
     );
     if (mask != null && mask.length >= minCells) return mask;
     onMaskRectangleFallback?.call(silhouette, SilhouetteId.rectangle);
@@ -400,13 +543,28 @@ class Director {
     required DifficultyTier tier,
     required Random random,
   }) {
-    // Phase 3 puts node-count selection inside the §6 band so the Evaluator's
-    // ≥ 90% in-band criterion becomes reachable. We honour `minNodes` as a
-    // floor (because tests assert it) but otherwise sample uniformly in the
-    // intersection of `[bandMin, bandMax]` and `[minNodes, mask.length]`.
     final profile = DifficultyProfile.forTier(tier);
     final lo = max(profile.nodeCount.min, config.difficulty.minNodes);
     final hi = min(profile.nodeCount.max, mask.length);
+
+      // Dense Strategy: Hard/Expert target 28–40% silhouette fill.
+      // Fixes sparse boards when the mask has many more cells
+      // than the old 20–30 node cap allowed.
+      //
+      // NOTE: the resulting node count clamps up to the band floor (25) on the
+      // 49–64-cell masks Hard uses, so Hard boards ship ~25 nodes. This is
+      // deliberate and load-bearing — raising it trips evaluator rule 3
+      // (nodeCount > 28 ⇒ FSR ≤ 40%), seed byte-stability, and the generation
+      // perf budget. Unpinning node count is a coordinated retune, not a knob.
+      if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
+        // Small masks / opening seeds: `lo` (minNodes) can exceed `hi`.
+        if (hi <= lo) return hi.clamp(1, mask.length);
+        final fillRatio = 0.28 + random.nextDouble() * 0.12;
+        final densityTarget = (mask.length * fillRatio).round();
+        return densityTarget.clamp(lo, hi);
+      }
+
+    // Easy/Medium: sample uniformly in the §6 node-count band.
     if (hi <= lo) return lo.clamp(1, mask.length);
     return lo + random.nextInt(hi - lo + 1);
   }
@@ -422,9 +580,13 @@ class Director {
     required int target,
     required Random random,
   }) {
+    final isDenseTier =
+        seed.difficultyTier == DifficultyTier.hard ||
+        seed.difficultyTier == DifficultyTier.expert;
     if (seed.motifMixId == null) {
       return _reserveMotifs(
         spec: spec,
+        tier: seed.difficultyTier,
         useLegacyGreedyPath: false,
         config: config,
         mask: mask,
@@ -436,26 +598,56 @@ class Director {
       config.gridWidth,
       config.gridHeight,
     );
-    Motif? preferred;
-    for (final m in motifCatalogue()) {
-      if (m.id == seed.motifMixId) {
-        preferred = m;
-        break;
-      }
+    final preferred = motifById(seed.motifMixId!);
+    if (preferred == null) {
+      return isDenseTier
+          ? _reserveMotifs(
+              spec: spec,
+              tier: seed.difficultyTier,
+              useLegacyGreedyPath: false,
+              config: config,
+              mask: mask,
+              target: target,
+              random: random,
+            )
+          : const [];
     }
-    if (preferred == null) return const [];
     final maxReservationCells = (target * 0.4).floor();
     if (maxReservationCells < 3) return const [];
-    final placement = preferred.place(
-      gridWidth: config.gridWidth,
-      gridHeight: config.gridHeight,
-      silhouette: mask,
-      sightlines: sightlines,
-      random: random,
-    );
-    if (placement == null) return const [];
-    if (placement.reservations.length > maxReservationCells) return const [];
-    return [placement];
+
+    final placed = <MotifPlacement>[];
+    final usedCells = <int>{};
+    var reservedSoFar = 0;
+
+    bool tryPlace(Motif motif) {
+      final placement = motif.place(
+        gridWidth: config.gridWidth,
+        gridHeight: config.gridHeight,
+        silhouette: mask,
+        sightlines: sightlines,
+        random: random,
+      );
+      if (placement == null) return false;
+      if (placement.reservations.length > maxReservationCells) return false;
+      final keys = placement.reservations.map((r) => r.cellKey).toSet();
+      if (keys.any(usedCells.contains)) return false;
+      if (reservedSoFar + keys.length > maxReservationCells) return false;
+      placed.add(placement);
+      usedCells.addAll(keys);
+      reservedSoFar += keys.length;
+      return true;
+    }
+
+    if (isDenseTier) {
+      final cascadeHub = motifById(MotifId.cascadeHub);
+      if (cascadeHub != null) {
+        tryPlace(cascadeHub);
+      }
+    }
+    if (!placed.any((p) => p.id == seed.motifMixId)) {
+      tryPlace(preferred);
+    }
+    return placed;
   }
 
   /// Maps the legacy [DifficultyMode] to its tier (helper exposed for

@@ -60,6 +60,7 @@ Set<String>? buildLayoutMask(
   int w,
   int h, {
   Random? random,
+  Random? jitter,
 }) {
   switch (kind) {
     case LayoutMaskKind.fullRect:
@@ -71,13 +72,13 @@ Set<String>? buildLayoutMask(
     case LayoutMaskKind.cShape:
       return _cShape(w, h, random);
     case LayoutMaskKind.diamond:
-      return _diamond(w, h, random);
+      return _diamond(w, h, random, jitter: jitter);
     case LayoutMaskKind.cross:
-      return _cross(w, h, random);
+      return _cross(w, h, random, jitter: jitter);
     case LayoutMaskKind.lShape:
       return _lShapeCells(w, h, random);
     case LayoutMaskKind.donut:
-      return _donut(w, h, random);
+      return _donut(w, h, random, jitter: jitter);
     case LayoutMaskKind.zigzag:
       return _zigzag(w, h, random);
     case LayoutMaskKind.randomBlob:
@@ -89,9 +90,9 @@ Set<String>? buildLayoutMask(
     case LayoutMaskKind.spiral:
       return _spiralCells(w, h, random);
     case LayoutMaskKind.hollowDiamond:
-      return _hollowDiamond(w, h, random);
+      return _hollowDiamond(w, h, random, jitter: jitter);
     case LayoutMaskKind.xShape:
-      return _xShape(w, h, random);
+      return _xShape(w, h, random, jitter: jitter);
   }
 }
 
@@ -222,15 +223,26 @@ Set<String> _cShape(int w, int h, Random? random) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Rhombus — cells within Manhattan distance of the centre.
-Set<String> _diamond(int w, int h, Random? random) {
+///
+/// [jitter] (a level-isolated RNG that does not touch the main generation
+/// stream) varies the centre and gives the two axes independent radii, so the
+/// diamond reads as a lozenge/off-centre rhombus instead of the same centred
+/// octagon every level.
+Set<String> _diamond(int w, int h, Random? random, {Random? jitter}) {
   final cells = <String>{};
-  final cx = w / 2.0;
-  final cy = h / 2.0;
-  final jitter = (random?.nextDouble() ?? 0.5) * 0.15;
-  final radius = min(w, h) / 2.0 - 0.3 + jitter;
+  // Preserve the original main-stream draw so non-jittered output is unchanged.
+  final wobble = (random?.nextDouble() ?? 0.5) * 0.15;
+  final j = jitter;
+  final cx = w / 2.0 + (j == null ? 0.0 : (j.nextDouble() - 0.5) * w * 0.18);
+  final cy = h / 2.0 + (j == null ? 0.0 : (j.nextDouble() - 0.5) * h * 0.18);
+  final base = min(w, h) / 2.0 - 0.3 + wobble;
+  final rx = j == null ? base : base * (0.78 + j.nextDouble() * 0.5);
+  final ry = j == null ? base : base * (0.78 + j.nextDouble() * 0.5);
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
-      if ((x + 0.5 - cx).abs() + (y + 0.5 - cy).abs() <= radius) {
+      // Weighted Manhattan ball: |dx|/rx + |dy|/ry ≤ 1 (reduces to the plain
+      // Manhattan ball when rx == ry == base).
+      if ((x + 0.5 - cx).abs() / rx + (y + 0.5 - cy).abs() / ry <= 1.0) {
         cells.add('$x,$y');
       }
     }
@@ -239,13 +251,23 @@ Set<String> _diamond(int w, int h, Random? random) {
   return cells;
 }
 
-/// Plus / cross — two intersecting bars of ~35% grid width.
-Set<String> _cross(int w, int h, Random? random) {
+/// Plus / cross — two intersecting bars.
+///
+/// [jitter] (level-isolated RNG) varies each arm's thickness independently and
+/// nudges the centre, so the plus isn't the same fixed glyph every level. It
+/// draws nothing from the main [random] stream, so non-jittered output is
+/// byte-identical to the original fixed 38%-arm cross.
+Set<String> _cross(int w, int h, Random? random, {Random? jitter}) {
   final cells = <String>{};
-  final armW = max(1, (w * 0.38).round());
-  final armH = max(1, (h * 0.38).round());
-  final cx = w ~/ 2;
-  final cy = h ~/ 2;
+  final j = jitter;
+  final fracW = j == null ? 0.38 : 0.26 + j.nextDouble() * 0.26; // 0.26–0.52
+  final fracH = j == null ? 0.38 : 0.26 + j.nextDouble() * 0.26;
+  final armW = max(1, (w * fracW).round());
+  final armH = max(1, (h * fracH).round());
+  final offX = j == null ? 0 : j.nextInt(3) - 1; // -1, 0, +1
+  final offY = j == null ? 0 : j.nextInt(3) - 1;
+  final cx = (w ~/ 2 + offX).clamp(1, max(1, w - 2));
+  final cy = (h ~/ 2 + offY).clamp(1, max(1, h - 2));
   final halfW = armW ~/ 2;
   final halfH = armH ~/ 2;
   for (var y = 0; y < h; y++) {
@@ -255,7 +277,7 @@ Set<String> _cross(int w, int h, Random? random) {
       }
     }
   }
-  if (cells.length < 9) return _diamond(w, h, random);
+  if (cells.length < 9) return _diamond(w, h, random, jitter: jitter);
   return cells;
 }
 
@@ -285,14 +307,23 @@ Set<String> _lShapeCells(int w, int h, Random? random) {
   return cells;
 }
 
-/// Donut — full rectangle with a rectangular hole in the centre.
-Set<String> _donut(int w, int h, Random? random) {
+/// Donut — full rectangle with a rectangular hole.
+///
+/// [jitter] (level-isolated RNG) varies the hole's size on each axis and slides
+/// it off-centre, so the ring isn't the same concentric frame every level.
+/// The original main-stream draw is preserved for the non-jittered path.
+Set<String> _donut(int w, int h, Random? random, {Random? jitter}) {
   final cells = <String>{};
-  final jitter = (random?.nextDouble() ?? 0.5) * 0.06;
-  final holeW = max(1, (w * (0.32 + jitter)).round());
-  final holeH = max(1, (h * (0.32 + jitter)).round());
-  final ox = (w - holeW) ~/ 2;
-  final oy = (h - holeH) ~/ 2;
+  final wobble = (random?.nextDouble() ?? 0.5) * 0.06;
+  final j = jitter;
+  final fracW = j == null ? 0.32 + wobble : 0.22 + j.nextDouble() * 0.28;
+  final fracH = j == null ? 0.32 + wobble : 0.22 + j.nextDouble() * 0.28;
+  final holeW = max(1, min(w - 2, (w * fracW).round()));
+  final holeH = max(1, min(h - 2, (h * fracH).round()));
+  final maxOx = w - holeW;
+  final maxOy = h - holeH;
+  final ox = j == null ? maxOx ~/ 2 : j.nextInt(maxOx + 1);
+  final oy = j == null ? maxOy ~/ 2 : j.nextInt(maxOy + 1);
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
       final inHole = x >= ox && x < ox + holeW && y >= oy && y < oy + holeH;
@@ -408,12 +439,17 @@ Set<String> _spiralCells(int w, int h, Random? random) {
 }
 
 /// Hollow diamond — Manhattan annulus.
-Set<String> _hollowDiamond(int w, int h, Random? random) {
+///
+/// [jitter] (level-isolated RNG) varies the band thickness (inner-radius ratio)
+/// and nudges the centre. Draws nothing from the main [random] stream.
+Set<String> _hollowDiamond(int w, int h, Random? random, {Random? jitter}) {
   final cells = <String>{};
-  final cx = w / 2.0;
-  final cy = h / 2.0;
+  final j = jitter;
+  final cx = w / 2.0 + (j == null ? 0.0 : (j.nextDouble() - 0.5) * w * 0.12);
+  final cy = h / 2.0 + (j == null ? 0.0 : (j.nextDouble() - 0.5) * h * 0.12);
   final radius = min(w, h) / 2.0;
-  final innerRadius = max(1.0, radius * 0.4);
+  final innerRatio = j == null ? 0.4 : 0.30 + j.nextDouble() * 0.30; // 0.30–0.60
+  final innerRadius = max(1.0, radius * innerRatio);
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
       final dist = (x + 0.5 - cx).abs() + (y + 0.5 - cy).abs();
@@ -422,16 +458,21 @@ Set<String> _hollowDiamond(int w, int h, Random? random) {
       }
     }
   }
-  if (cells.length < 9) return _donut(w, h, random);
+  if (cells.length < 9) return _donut(w, h, random, jitter: jitter);
   return cells;
 }
 
 /// X shape — thick diagonals.
-Set<String> _xShape(int w, int h, Random? random) {
+///
+/// [jitter] (level-isolated RNG) varies the diagonal thickness. Draws nothing
+/// from the main [random] stream.
+Set<String> _xShape(int w, int h, Random? random, {Random? jitter}) {
   final cells = <String>{};
   final cx = w / 2.0;
   final cy = h / 2.0;
-  final thickness = max(1.0, min(w, h) * 0.15);
+  final j = jitter;
+  final thickFrac = j == null ? 0.15 : 0.11 + j.nextDouble() * 0.12; // 0.11–0.23
+  final thickness = max(1.0, min(w, h) * thickFrac);
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
       final normX = (x + 0.5 - cx) / w;
@@ -443,6 +484,6 @@ Set<String> _xShape(int w, int h, Random? random) {
       }
     }
   }
-  if (cells.length < 9) return _cross(w, h, random);
+  if (cells.length < 9) return _cross(w, h, random, jitter: jitter);
   return cells;
 }

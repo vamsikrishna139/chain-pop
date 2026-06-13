@@ -56,7 +56,18 @@ enum DirectionBiasType {
 
 /// Minimum fraction of the grid that must hold nodes (clamped by medium caps).
 /// Kept moderate so generation still succeeds unlike the earlier ~0.78 floor.
-const double kDailyChallengeMinFillRatio = 0.80;
+const double kDailyChallengeMinFillRatio = 0.55;
+
+/// Effective fill band for Hard campaign boards (Director / evaluator).
+const double kHardEffectiveFillMin = 0.45;
+const double kHardEffectiveFillMax = 0.60;
+
+/// Effective fill band for Daily / Expert boards.
+const double kDailyEffectiveFillMin = 0.50;
+const double kDailyEffectiveFillMax = 0.65;
+
+/// Maximum width or height for daily-challenge grids (packed 6–8 span).
+const int kDailyChallengeMaxGridSpan = 8;
 
 /// First-roll chance to attempt an irregular [playCells] mask (blobs, zigzag, etc.).
 const double kDailyChallengeIrregularProbability = 0.95;
@@ -140,12 +151,22 @@ class LevelConfiguration {
     return LevelConfiguration.fromLevelId(levelId, mode: mode);
   }
 
-  /// Daily puzzle: starts from [fromLevelId] (medium) for grid, archetype, and
+  /// Daily puzzle: starts from [fromLevelId] (**hard**) for grid, archetype, and
   /// chain bounds, then enforces [kDailyChallengeMinFillRatio] and biased
   /// irregular silhouettes without replacing the whole generator.
+  ///
+  /// Dense Strategy Phase 1D: structural params now derive from Hard (not
+  /// Medium) so daily boards match the Expert evaluator's density expectations.
+  /// The UI label (`DifficultyMode.medium`) and timer formula are unchanged.
   factory LevelConfiguration.forDailyChallenge(int dayKey) {
-    final base = LevelConfiguration.fromLevelId(dayKey, mode: DifficultyMode.medium);
-    final area = base.gridWidth * base.gridHeight;
+    final base = LevelConfiguration.fromLevelId(dayKey, mode: DifficultyMode.hard);
+    final (gw, gh) = _clampGridDimensions(
+      min(base.gridWidth, kDailyChallengeMaxGridSpan),
+      min(base.gridHeight, kDailyChallengeMaxGridSpan),
+      DifficultyMode.hard,
+      isDaily: true,
+    );
+    final area = gw * gh;
     final cap = min(base.difficulty.maxNodes, area - 1);
     final minByFill = max(
       base.difficulty.minNodes,
@@ -158,8 +179,8 @@ class LevelConfiguration {
 
     return LevelConfiguration(
       levelId: dayKey,
-      gridWidth: base.gridWidth,
-      gridHeight: base.gridHeight,
+      gridWidth: gw,
+      gridHeight: gh,
       targetNodeCount: target,
       difficulty: base.difficulty,
       archetype: base.archetype,
@@ -247,11 +268,9 @@ class LevelConfiguration {
       DifficultyMode.hard => const [
           LevelArchetype.standard,
           LevelArchetype.claustrophobic,
-          LevelArchetype.openField,
           LevelArchetype.corridor,
           LevelArchetype.fortress,
           LevelArchetype.chaos,
-          LevelArchetype.sniper,
         ],
     };
 
@@ -263,34 +282,67 @@ class LevelConfiguration {
 
   /// Returns `(width, height)` for the bounding grid.  Most archetypes use a
   /// square grid; [LevelArchetype.corridor] produces a rectangular one.
+  /// Returns `(width, height)` for the bounding grid.  Most archetypes use a
+  /// square grid; [LevelArchetype.corridor] produces a rectangular one.
   static (int, int) _calculateGridDimensions(
     int levelId,
     DifficultyMode mode,
     LevelArchetype archetype,
   ) {
-    final base = _baseGridSize(levelId, mode);
+    final difficulty = DifficultyParameters.fromLevelId(levelId, mode: mode);
+    // Estimated nodes using baseline baseCount calculation logic
+    final baseCount = difficulty.minNodes + (levelId * 0.5).floor();
+    final base = _packedGridSpan(baseCount, mode);
 
     switch (archetype) {
       case LevelArchetype.standard:
       case LevelArchetype.chaos:
-        return (base, base);
+        return _clampGridDimensions(base, base, mode);
       case LevelArchetype.claustrophobic:
         final s = max(3, base - 1);
-        return (s, s);
+        return _clampGridDimensions(s, s, mode);
       case LevelArchetype.openField:
       case LevelArchetype.sniper:
         final s = min(20, base + 2);
-        return (s, s);
+        return _clampGridDimensions(s, s, mode);
       case LevelArchetype.corridor:
-        final longAxis = min(20, (base * 1.45).round());
-        final shortAxis = max(3, (base * 0.65).round());
-        return levelId.isEven
+        final longAxis = (base * 1.35).round();
+        final shortAxis = (base * 0.70).round();
+        final (w, h) = levelId.isEven
             ? (shortAxis, longAxis)
             : (longAxis, shortAxis);
+        return _clampGridDimensions(w, h, mode);
       case LevelArchetype.fortress:
         final s = max(5, base);
-        return (s, s);
+        return _clampGridDimensions(s, s, mode);
     }
+  }
+
+  /// Calculates packed grid span based on estimated node count.
+  static int _packedGridSpan(int estimatedNodes, DifficultyMode mode) {
+    if (mode == DifficultyMode.easy) {
+      return estimatedNodes <= 10 ? 6 : 7;
+    }
+    if (estimatedNodes <= 20) return 6;
+    if (estimatedNodes <= 25) return 7;
+    if (estimatedNodes <= 32) return 8;
+    if (estimatedNodes <= 42) return 8;
+    return 8;
+  }
+
+  /// Post-archetype dual-axis clamp per difficulty mode.
+  static (int, int) _clampGridDimensions(
+    int w,
+    int h,
+    DifficultyMode mode, {
+    bool isDaily = false,
+  }) {
+    final (minSpan, maxSpan) = switch (mode) {
+      DifficultyMode.easy => (6, 8),
+      DifficultyMode.medium => (6, 9),
+      DifficultyMode.hard => (6, 8),
+    };
+    return (w.clamp(minSpan, maxSpan), h.clamp(minSpan, maxSpan));
   }
 
   /// Logarithmic grid growth, capped per mode.
@@ -300,9 +352,9 @@ class LevelConfiguration {
       case DifficultyMode.easy:
         return (4 + logLevel * 0.55).floor().clamp(4, 8);
       case DifficultyMode.medium:
-        return (6 + logLevel * 0.7).floor().clamp(6, 12);
+        return (6 + logLevel * 0.60).floor().clamp(6, 9);
       case DifficultyMode.hard:
-        return (6 + logLevel * 1.15).floor().clamp(6, 18);
+        return (6 + logLevel * 0.75).floor().clamp(6, 8);
     }
   }
 

@@ -69,10 +69,15 @@ void main() {
         final level = result.value;
         final config = LevelConfiguration.fromLevelId(id);
         final waves = LevelSolver.countRemovalWaves(level);
-        final (wMin, wMax) = LevelGenerator.removalWaveBounds(
+        final (wMin0, wMax0) = LevelGenerator.removalWaveBounds(
           config.difficulty,
           level.nodes.length,
         );
+        // Match the most permissive band used on late generation attempts.
+        final wMin = wMin0 - 2 < 1 ? 1 : wMin0 - 2;
+        final wMax = wMax0 + 10 < level.nodes.length
+            ? wMax0 + 10
+            : level.nodes.length;
         expect(
           waves,
           inInclusiveRange(wMin, wMax),

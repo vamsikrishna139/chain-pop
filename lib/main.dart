@@ -7,6 +7,7 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'bootstrap/firebase_bootstrap.dart';
+import 'dev/autoplay_harness.dart';
 import 'screens/main_menu_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/ads/ad_debug_log.dart';
@@ -53,6 +54,11 @@ Future<void> bootstrapChainPop() async {
 
 Future<void> main() async {
   await bootstrapChainPop();
+  // Dev on-device playtest harness (never enabled in shipped builds).
+  if (const bool.fromEnvironment('AUTOPLAY')) {
+    runApp(const AutoplayApp());
+    return;
+  }
   runApp(const ChainPopApp());
 }
 

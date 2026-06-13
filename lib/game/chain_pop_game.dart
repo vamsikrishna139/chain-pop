@@ -10,11 +10,18 @@ import 'levels/level.dart';
 import 'levels/level_manager.dart';
 import 'levels/level_solver.dart';
 import 'levels/generation/difficulty_mode.dart';
+import 'components/ambient_background_component.dart';
 import 'components/arrow_axis_guide_component.dart';
 import 'components/board_mask_component.dart';
+import 'components/combo_text_component.dart';
+import 'components/extraction_burst_component.dart';
 import 'components/node_component.dart';
+import 'components/ray_preview_component.dart';
+import 'components/relay_sweep_component.dart';
+import 'components/restored_network_component.dart';
 import '../services/game_sfx.dart';
 import '../theme/app_colors.dart';
+import '../theme/world_theme.dart';
 
 /// The core Flame game engine for Unbound.
 ///
@@ -31,6 +38,9 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   final VoidCallback onWin;
   final VoidCallback? onJam;
   final void Function(int removed, int total)? onNodeRemoved;
+
+  /// Playfield palette for the current world (or daily/tutorial fallback).
+  final WorldTheme theme;
 
   /// Pre-generated [LevelData] from [GameScreen]. When provided, [onLoad]
   /// skips the generator call — no double-generation.
@@ -51,6 +61,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// Rebuilt after every extraction — O(n) once, then O(1) per NodeComponent lookup.
   final Set<int> _extractableIds = {};
 
+  /// IDs that became extractable in the most recent [_rebuildExtractableIds]
+  /// (set difference vs. the prior state). Consumed by [registerExtraction] to
+  /// telegraph the chain — these nodes pulse so cause→effect is legible.
+  final Set<int> _newlyExtractable = {};
+
   /// Stack of removed nodes for undo. Most recent removal is last.
   final List<NodeData> _undoStack = [];
 
@@ -69,6 +84,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   double _targetZoom = 1.0;
   double _displayZoom = 1.0;
+  final Vector2 _occupiedOffset = Vector2.zero();
   final Vector2 _pan = Vector2.zero();
   final Vector2 _gridPixels = Vector2.zero();
   final Vector2 _usableSize = Vector2.zero();
@@ -98,18 +114,83 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// Row/column guide lines ([ArrowAxisGuideComponent]); toggled from HUD only.
   bool _axisGuidesVisible = false;
 
+  RayPreviewComponent? _rayPreview;
+
+  /// Whether the long-press ray preview is showing (ambient layers freeze
+  /// their motion while the player is aiming).
+  bool get rayPreviewActive => _rayPreview != null;
+
   /// Whether alignment guides are shown (driven by HUD; cleared after a valid extraction).
   bool get axisGuidesVisible => _axisGuidesVisible;
+
+  // ── Ambient / restoration presentation layers ──────────────────────────────
+
+  AmbientBackgroundComponent? _ambient;
+  RestoredNetworkComponent? _restoredLayer;
+
+  /// Cells vacated by extracted nodes — source of truth for the restoration
+  /// trail, survives board relayout (the component is reseeded from this).
+  final Set<(int, int)> _restoredCells = {};
+
+  @visibleForTesting
+  Set<(int, int)> get restoredCellsForTest => Set.unmodifiable(_restoredCells);
+
+  // ── Cascade finale (core win) ──────────────────────────────────────────────
+
+  /// When the last core is restored with nodes still on the board, the rest
+  /// auto-pop in a ripple radiating from the final core before [onWin] fires —
+  /// "the network cascades back online", literally.
+  bool _finaleActive = false;
+  double _finaleClock = 0;
+  int _finaleIndex = 0;
+  final List<(double, int)> _finaleSchedule = [];
+  double _finaleWinAt = 0;
+  int _lastExtractedX = 0;
+  int _lastExtractedY = 0;
+
+  bool get cascadeFinaleActive => _finaleActive;
 
   /// Mirrors persisted accessibility/audio flags — updated from [GameScreen] when preferences change.
   bool soundEnabled = true;
   bool hapticsEnabled = true;
   bool colorblindPalette = false;
 
+  /// When true, a faint exit ray appears on touch-down (before release). Long
+  /// press always shows the full-intensity ray regardless of this flag.
+  bool showAimRay = true;
+
+  /// When true, background particles drift and animate.
+  bool ambientMotion = true;
+
   /// Plays short SFX via the Flutter layer ([GameAudioController]).
   void Function(GameSfx sfx, {double playbackRate})? onSfx;
 
   int _extractionStreak = 0;
+
+  /// Per-node jam tally for the current attempt. After the second jam on the
+  /// same node we flash its blocker — turning a dead-end into a hint. Cleared
+  /// on any successful extraction or restart (the board state has changed).
+  final Map<int, int> _jamCounts = {};
+  static const int _jamGuidanceThreshold = 2;
+
+  /// Consecutive valid extractions since the last jam (visible to HUD/visuals).
+  int get extractionStreak => _extractionStreak;
+
+  /// Network integrity — starts at 100%; jams reduce it.
+  int networkIntegrity = 100;
+
+  /// Total core nodes on this level (0 when classic clear-all win).
+  int get totalCores =>
+      levelData.nodes.where((n) => n.isCore).length;
+
+  /// Cores already extracted.
+  int get coresRestored => levelData.nodes
+      .where((n) => n.isCore)
+      .where((n) => !activeNodes.any((a) => a.id == n.id))
+      .length;
+
+  /// Whether this level uses core-restore win condition.
+  bool get usesCoreWin => totalCores > 0;
 
   /// Playback rate for [GameSfx.pop] — rises with consecutive good extractions.
   double get popPlaybackRate =>
@@ -158,12 +239,19 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     this.onJam,
     this.onNodeRemoved,
     this.preloadedLevel,
+    WorldTheme? theme,
     this.topReserved = 140.0,
     this.bottomReserved = 92.0,
-  });
+  }) : theme = theme ?? WorldTheme.forLevel(levelId) {
+    // HUD getters ([usesCoreWin], [totalCores]) are read by the first Flutter
+    // build, which happens before [onLoad] — seed [levelData] eagerly when the
+    // level is already generated.
+    final preloaded = preloadedLevel;
+    if (preloaded != null) levelData = preloaded;
+  }
 
   @override
-  Color backgroundColor() => AppColors.background;
+  Color backgroundColor() => theme.backgroundTint;
 
   @override
   Future<void> onLoad() async {
@@ -173,6 +261,10 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     for (final node in levelData.nodes) {
       activeNodes.add(node.clone());
     }
+
+    final ambient = AmbientBackgroundComponent(theme: theme)..priority = -200;
+    _ambient = ambient;
+    add(ambient);
 
     _rebuildExtractableIds();
     _setupBoard();
@@ -197,6 +289,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _tickZoomAndPan(dt);
     _applyBoardTransform();
     super.update(dt);
+    _tickCascadeFinale(dt);
   }
 
   void _tickZoomAndPan(double dt) {
@@ -213,7 +306,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   void _applyBoardTransform() {
     if (!_boardLaidOut) return;
-    board.position.setFrom(_boardCenter + _pan);
+    board.position.setFrom(_boardCenter - _occupiedOffset * _displayZoom + _pan);
     board.scale.setAll(_displayZoom);
   }
 
@@ -247,11 +340,19 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       screenH - topReserved - bottomReserved - margin,
     );
 
-    var cellSize = BoardLayoutMetrics.fitCellSize(
+    final bounds = OccupiedBounds.fromLevel(levelData, pad: 1);
+
+    // Capped so the full grid always fits the usable band at base zoom — the
+    // raw bounds fit zooms into the occupied bbox and would otherwise spill
+    // sparse boards (e.g. the tutorial's single node in a 4×4) off-screen.
+    var cellSize = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
       bandW: usableW,
       bandH: usableH,
+      bboxWidth: bounds.bboxWidth,
+      bboxHeight: bounds.bboxHeight,
       gridWidth: levelData.gridWidth,
       gridHeight: levelData.gridHeight,
+      targetFill: 0.80,
     );
     if (cellSize <= 0 &&
         levelData.gridWidth > 0 &&
@@ -260,36 +361,53 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     }
     _cellSize = cellSize;
 
-    assert(() {
-      const eps = 1e-6;
-      if (cellSize <= 0) return true;
-      return cellSize * levelData.gridWidth <= usableW + eps &&
-          cellSize * levelData.gridHeight <= usableH + eps;
-    }());
-
     final gridPixelW = cellSize * levelData.gridWidth;
     final gridPixelH = cellSize * levelData.gridHeight;
 
-    // Centre horizontally; offset vertically into the safe zone.
-    final offsetX = (screenW - gridPixelW) / 2;
-    final offsetY = topReserved + (usableH - gridPixelH) / 2;
+    final occupiedCenterX = (bounds.minX + bounds.maxX + 1) / 2.0 * cellSize;
+    final occupiedCenterY = (bounds.minY + bounds.maxY + 1) / 2.0 * cellSize;
+
+    // Bias the view toward the occupied region, but never far enough to push the
+    // full grid past the band edges. cellSize is capped so the whole grid fits
+    // the band at base zoom, so the slack `(band − grid) / 2` is ≥ 0; clamping
+    // the offset to it keeps every grid edge on-screen (and centres the grid
+    // exactly when it fills the band — fixes the tutorial board clipping off one
+    // side). Pinch-zoom past base still pans freely via [_clampPan].
+    final slackX = math.max(0.0, (usableW - gridPixelW) / 2);
+    final slackY = math.max(0.0, (usableH - gridPixelH) / 2);
+    _occupiedOffset.setValues(
+      (occupiedCenterX - gridPixelW / 2).clamp(-slackX, slackX).toDouble(),
+      (occupiedCenterY - gridPixelH / 2).clamp(-slackY, slackY).toDouble(),
+    );
 
     _gridPixels.setValues(gridPixelW, gridPixelH);
     _usableSize.setValues(usableW, usableH);
-    _boardCenter.setValues(
-      offsetX + gridPixelW / 2,
-      offsetY + gridPixelH / 2,
-    );
+    _boardCenter.setValues(screenW / 2, topReserved + usableH / 2);
 
     board = PositionComponent(
-      position: _boardCenter + _pan,
+      position: _boardCenter - _occupiedOffset * _displayZoom + _pan,
       size: Vector2(gridPixelW, gridPixelH),
       anchor: Anchor.center,
     );
 
-    final mask = BoardMaskComponent(levelData: levelData, cellSize: cellSize);
+    final mask = BoardMaskComponent(
+      levelData: levelData,
+      cellSize: cellSize,
+      theme: theme,
+    );
     mask.priority = -100;
     board.add(mask);
+
+    final restoredLayer = RestoredNetworkComponent(
+      cellSize: cellSize,
+      theme: theme,
+      gridWidth: levelData.gridWidth,
+      gridHeight: levelData.gridHeight,
+    );
+    restoredLayer.priority = -75;
+    restoredLayer.seedAll(_restoredCells);
+    _restoredLayer = restoredLayer;
+    board.add(restoredLayer);
 
     final axisGuides = ArrowAxisGuideComponent(
       cellSize: cellSize,
@@ -405,16 +523,138 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// O(1) — checked per frame by every [NodeComponent].
   bool isExtractable(int nodeId) => _extractableIds.contains(nodeId);
 
+  @visibleForTesting
+  void refreshExtractableIdsForTest() => _rebuildExtractableIds();
+
+  /// IDs that became extractable in the most recent rebuild (the chain delta).
+  @visibleForTesting
+  Set<int> get newlyExtractableForTest => Set.unmodifiable(_newlyExtractable);
+
+  /// Shows a dotted ray from [node] to the grid edge or first blocker.
+  /// [intensity] dims the ray for the touch-down aim guide (vs. a long press).
+  void showRayPreview(NodeData node, {double intensity = 1.0}) {
+    if (hasWon || isGameOver || !_boardLaidOut) return;
+    hideRayPreview();
+    final trace = LevelSolver.traceRay(node, activeNodes, levelData);
+    final preview = RayPreviewComponent(
+      source: node,
+      trace: trace,
+      cellSize: _cellSize,
+      gridWidth: levelData.gridWidth,
+      gridHeight: levelData.gridHeight,
+      intensity: intensity,
+    );
+    preview.priority = 50;
+    _rayPreview = preview;
+    board.add(preview);
+  }
+
+  /// Clears any active long-press ray preview.
+  void hideRayPreview() {
+    _rayPreview?.removeFromParent();
+    _rayPreview = null;
+  }
+
   void registerExtraction(NodeData data) {
+    hideRayPreview();
     _axisGuidesVisible = false;
+    _jamCounts.clear();
     _extractionStreak++;
+    _lastExtractedX = data.x;
+    _lastExtractedY = data.y;
+    if (data.isCore) {
+      networkIntegrity = (networkIntegrity + 5).clamp(0, 100);
+    }
+    if (data.kind == NodeKind.relay) {
+      _applyRelayRowRotation(data.y);
+    }
     _undoStack.add(data.clone());
     activeNodes.removeWhere((n) => n.id == data.id);
     _rebuildExtractableIds();
 
+    _spawnExtractionVisuals(data);
+    _ambient?.setStreak(_extractionStreak);
+    if (_boardLaidOut) {
+      for (final comp in board.children.whereType<NodeComponent>()) {
+        if (comp.isPopping || comp.isJamming) continue;
+        final dist =
+            (comp.data.x - data.x).abs() + (comp.data.y - data.y).abs();
+        if (dist == 1) comp.nudge();
+        // Telegraph the chain: nodes unblocked by this extraction pulse so the
+        // player sees cause→effect.
+        if (_newlyExtractable.contains(comp.data.id)) comp.telegraphFreed();
+      }
+      if (_extractionStreak >= 3 && _cellSize > 0) {
+        final combo = ComboTextComponent(
+          cellCenter: Vector2(
+            (data.x + 0.5) * _cellSize,
+            (data.y + 0.5) * _cellSize,
+          ),
+          streak: _extractionStreak,
+          color: theme.accent,
+          cellSize: _cellSize,
+        )..priority = 60;
+        board.add(combo);
+      }
+    }
+
     final total = levelData.nodes.length;
     final removed = total - activeNodes.length;
     onNodeRemoved?.call(removed, total);
+    checkWinCondition();
+  }
+
+  /// Restoration-trail marker + ring burst + ambient ripple at the vacated
+  /// cell. Shared by player extractions and the cascade finale.
+  void _spawnExtractionVisuals(NodeData data) {
+    _restoredCells.add((data.x, data.y));
+    if (!_boardLaidOut || _cellSize <= 0) return;
+    _restoredLayer?.addCell(data.x, data.y);
+    final center = Vector2(
+      (data.x + 0.5) * _cellSize,
+      (data.y + 0.5) * _cellSize,
+    );
+    final burst = ExtractionBurstComponent(
+      cellCenter: center,
+      color: effectiveNodeColor(data),
+      maxRadius: _cellSize * 0.8,
+    )..priority = 5;
+    board.add(burst);
+    _ambient?.pulseAt(
+      board.absolutePositionOf(center),
+      radius: _cellSize * 2.2,
+    );
+  }
+
+  void _applyRelayRowRotation(
+    int rowY, {
+    bool clockwise = true,
+    bool present = true,
+  }) {
+    for (var i = 0; i < activeNodes.length; i++) {
+      final n = activeNodes[i];
+      if (n.y != rowY) continue;
+      activeNodes[i] =
+          n.copyWith(dir: clockwise ? n.dir.rotatedCw : n.dir.rotatedCcw);
+    }
+    if (!_boardLaidOut) return;
+    for (final comp in board.children.whereType<NodeComponent>()) {
+      if (comp.data.y == rowY && activeNodes.any((n) => n.id == comp.data.id)) {
+        final updated = activeNodes.firstWhere((n) => n.id == comp.data.id);
+        comp.animateRotationTo(updated, clockwise: clockwise);
+      }
+    }
+    if (present && _cellSize > 0) {
+      board.add(
+        RelaySweepComponent(
+          rowY: rowY,
+          gridWidth: levelData.gridWidth,
+          cellSize: _cellSize,
+          color: const Color(0xFF00FF87),
+        )..priority = 4,
+      );
+      playSfx(GameSfx.hint, playbackRate: 1.25);
+    }
   }
 
   /// Restores the last removed node back onto the board.
@@ -423,8 +663,17 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     if (_undoStack.isEmpty || hasWon || isGameOver) return false;
     final restored = _undoStack.removeLast();
     if (_extractionStreak > 0) _extractionStreak--;
+    _ambient?.setStreak(_extractionStreak);
+    if (restored.kind == NodeKind.relay) {
+      // Undo is LIFO, so the row holds exactly the nodes present when the
+      // relay popped — rotating back restores their pre-pop directions.
+      _applyRelayRowRotation(restored.y, clockwise: false, present: false);
+    }
     activeNodes.add(restored);
     _rebuildExtractableIds();
+
+    _restoredCells.remove((restored.x, restored.y));
+    _restoredLayer?.removeCell(restored.x, restored.y);
 
     if (_boardLaidOut && _cellSize > 0) {
       board.add(NodeComponent(data: restored, cellSize: _cellSize));
@@ -436,16 +685,121 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     return true;
   }
 
-  void reportJam() {
+  void reportJam([NodeData? source]) {
     _extractionStreak = 0;
+    _ambient?.setStreak(0);
+    networkIntegrity = (networkIntegrity - 8).clamp(0, 100);
+    if (source != null) {
+      final count = (_jamCounts[source.id] ?? 0) + 1;
+      _jamCounts[source.id] = count;
+      if (count >= _jamGuidanceThreshold) _flashBlockerFor(source);
+    }
     onJam?.call();
   }
 
+  /// Pulses the first node blocking [source]'s exit ray (if any), shown after
+  /// repeated jams on the same node.
+  void _flashBlockerFor(NodeData source) {
+    if (!_boardLaidOut) return;
+    final blockerId =
+        LevelSolver.traceRay(source, activeNodes, levelData).blockerNodeId;
+    if (blockerId == null) return;
+    for (final comp in board.children.whereType<NodeComponent>()) {
+      if (comp.data.id == blockerId) {
+        comp.flashAsBlocker();
+        break;
+      }
+    }
+  }
+
+  /// Whether [nodeId] has reached the jam-guidance threshold this attempt.
+  @visibleForTesting
+  int jamCountForTest(int nodeId) => _jamCounts[nodeId] ?? 0;
+
   void checkWinCondition() {
+    if (hasWon) return;
+    if (usesCoreWin) {
+      if (coresRestored >= totalCores) {
+        hasWon = true;
+        networkIntegrity = 100;
+        if (_boardLaidOut && activeNodes.isNotEmpty) {
+          _startCascadeFinale();
+        } else {
+          onWin();
+        }
+      }
+      return;
+    }
     if (activeNodes.isEmpty && !hasWon) {
       hasWon = true;
       onWin();
     }
+  }
+
+  /// Queues the remaining (non-core) nodes to auto-pop in a ripple ordered by
+  /// Manhattan distance from the last restored core. [onWin] fires after the
+  /// last pop settles. Input is already blocked because [hasWon] is set.
+  void _startCascadeFinale() {
+    final remaining = List<NodeData>.of(activeNodes)
+      ..sort((a, b) {
+        final da = (a.x - _lastExtractedX).abs() + (a.y - _lastExtractedY).abs();
+        final db = (b.x - _lastExtractedX).abs() + (b.y - _lastExtractedY).abs();
+        return da.compareTo(db);
+      });
+    final step = (1.2 / remaining.length).clamp(0.05, 0.09);
+    _finaleSchedule.clear();
+    for (var i = 0; i < remaining.length; i++) {
+      _finaleSchedule.add((0.15 + i * step, remaining[i].id));
+    }
+    _finaleWinAt = 0.15 + (remaining.length - 1) * step + 0.5;
+    _finaleClock = 0;
+    _finaleIndex = 0;
+    _finaleActive = true;
+  }
+
+  void _tickCascadeFinale(double dt) {
+    if (!_finaleActive) return;
+    _finaleClock += dt;
+    while (_finaleIndex < _finaleSchedule.length &&
+        _finaleClock >= _finaleSchedule[_finaleIndex].$1) {
+      final id = _finaleSchedule[_finaleIndex].$2;
+      _finaleIndex++;
+      final idx = activeNodes.indexWhere((n) => n.id == id);
+      if (idx < 0) continue;
+      final node = activeNodes.removeAt(idx);
+      _spawnExtractionVisuals(node);
+      playSfx(
+        GameSfx.pop,
+        playbackRate: (1.0 + _finaleIndex * 0.05).clamp(1.0, 1.6),
+      );
+      for (final comp in board.children.whereType<NodeComponent>()) {
+        if (comp.data.id == id) {
+          comp.triggerCascadePop();
+          break;
+        }
+      }
+      final total = levelData.nodes.length;
+      onNodeRemoved?.call(total - activeNodes.length, total);
+    }
+    if (_finaleClock >= _finaleWinAt) {
+      _finaleActive = false;
+      onWin();
+    }
+  }
+
+  /// Dev autoplay: extract one solver-recommended node. Returns false when the
+  /// level is won/stuck (no hint). Drives the on-device playtest harness only.
+  bool autoSolveStep() {
+    if (!isLoaded || hasWon || isGameOver || !_boardLaidOut) return false;
+    final hint = LevelSolver.getHint(activeNodes, levelData);
+    if (hint == null) return false;
+    for (final c in board.children.whereType<NodeComponent>()) {
+      if (c.data.id == hint.id && !c.isPopping && !c.isJamming) {
+        c.debugAutoExtract();
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Whether [showHint] would currently highlight a removable node.
@@ -467,9 +821,16 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   }
 
   void restart() {
+    hideRayPreview();
     _extractionStreak = 0;
+    _ambient?.setStreak(0);
+    _finaleActive = false;
+    _finaleSchedule.clear();
+    _restoredCells.clear();
     hasWon = false;
     isGameOver = false;
+    networkIntegrity = 100;
+    _jamCounts.clear();
     activeNodes.clear();
     _undoStack.clear();
     for (final node in levelData.nodes) {
@@ -491,6 +852,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// Refreshes which nodes can exit the board. O(n × grid span): one position
   /// set for all [activeNodes], then each node is checked via a ray walk only.
   void _rebuildExtractableIds() {
+    final previous = Set<int>.of(_extractableIds);
     _extractableIds.clear();
     final positions = <int>{
       for (final n in activeNodes) gridCellKey(n.x, n.y),
@@ -503,5 +865,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       }
       positions.add(key);
     }
+    _newlyExtractable
+      ..clear()
+      ..addAll(_extractableIds.difference(previous));
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:chain_pop/game/levels/generation/candidate_scorer.dart';
+import 'package:chain_pop/game/levels/generation/metrics.dart';
 import 'package:chain_pop/game/levels/generation/motifs.dart';
 import 'package:chain_pop/game/levels/generation/retrograde_constructor.dart';
 import 'package:chain_pop/game/levels/generation/sightline_table.dart';
@@ -52,6 +53,36 @@ bool _validatesByIdOrder(LevelData level) {
   return remaining.isEmpty;
 }
 
+/// First node id hit along [nodeId]'s assigned direction, or null if ray exits.
+int? _firstRayTarget(LevelData level, int nodeId) {
+  final node = level.nodes.firstWhere((n) => n.id == nodeId);
+  var x = node.x;
+  var y = node.y;
+  while (true) {
+    switch (node.dir) {
+      case Direction.up:
+        y--;
+        break;
+      case Direction.down:
+        y++;
+        break;
+      case Direction.left:
+        x--;
+        break;
+      case Direction.right:
+        x++;
+        break;
+    }
+    if (x < 0 || x >= level.gridWidth || y < 0 || y >= level.gridHeight) {
+      return null;
+    }
+    for (final other in level.nodes) {
+      if (other.id == nodeId) continue;
+      if (other.x == x && other.y == y) return other.id;
+    }
+  }
+}
+
 void main() {
   group('RetrogradeConstructor', () {
     test('zero target returns an empty placement list', () {
@@ -60,7 +91,7 @@ void main() {
         gridHeight: 4,
         silhouette: _fullRect(4, 4),
         targetNodeCount: 0,
-        scorer: const CandidateScorer(),
+        scorer: CandidateScorer(),
         sightlines: SightlineTable.forGrid(4, 4),
         random: Random(0),
       );
@@ -75,7 +106,7 @@ void main() {
         gridHeight: 3,
         silhouette: _fullRect(3, 3),
         targetNodeCount: 10,
-        scorer: const CandidateScorer(),
+        scorer: CandidateScorer(),
         sightlines: SightlineTable.forGrid(3, 3),
         random: Random(0),
       );
@@ -88,7 +119,7 @@ void main() {
         gridHeight: 5,
         silhouette: _fullRect(5, 5),
         targetNodeCount: 12,
-        scorer: const CandidateScorer(),
+        scorer: CandidateScorer(),
         sightlines: SightlineTable.forGrid(5, 5),
         random: Random(123),
       );
@@ -108,7 +139,7 @@ void main() {
           gridHeight: 6,
           silhouette: _fullRect(6, 6),
           targetNodeCount: 18,
-          scorer: const CandidateScorer(),
+          scorer: CandidateScorer(),
           sightlines: SightlineTable.forGrid(6, 6),
           random: Random(seed),
         );
@@ -133,7 +164,7 @@ void main() {
           gridHeight: 6,
           silhouette: _fullRect(6, 6),
           targetNodeCount: 18,
-          scorer: const CandidateScorer(),
+          scorer: CandidateScorer(),
           sightlines: SightlineTable.forGrid(6, 6),
           random: Random(seed),
         );
@@ -172,7 +203,7 @@ void main() {
           gridHeight: 4,
           silhouette: _fullRect(4, 4),
           targetNodeCount: 14,
-          scorer: const CandidateScorer(),
+          scorer: CandidateScorer(),
           sightlines: SightlineTable.forGrid(4, 4),
           random: Random(s),
         );
@@ -209,7 +240,7 @@ void main() {
         gridHeight: 4,
         silhouette: _fullRect(4, 4),
         targetNodeCount: 4,
-        scorer: const CandidateScorer(),
+        scorer: CandidateScorer(),
         sightlines: SightlineTable.forGrid(4, 4),
         random: Random(7),
         reservations: reservations,
@@ -257,7 +288,7 @@ void main() {
         gridHeight: 6,
         silhouette: _fullRect(6, 6),
         targetNodeCount: 16,
-        scorer: const CandidateScorer(),
+        scorer: CandidateScorer(),
         sightlines: SightlineTable.forGrid(6, 6),
         random: Random(12345),
         reservations: reservations,
@@ -282,7 +313,7 @@ void main() {
         gridHeight: 4,
         silhouette: _fullRect(4, 4),
         targetNodeCount: 8,
-        scorer: const CandidateScorer(),
+        scorer: CandidateScorer(),
         sightlines: SightlineTable.forGrid(4, 4),
         random: Random(0),
         reservations: reservations,
@@ -301,12 +332,186 @@ void main() {
         gridHeight: 5,
         silhouette: _fullRect(5, 5),
         targetNodeCount: 3, // less than reservations.length
-        scorer: const CandidateScorer(),
+        scorer: CandidateScorer(),
         sightlines: SightlineTable.forGrid(5, 5),
         random: Random(0),
         reservations: reservations,
       );
       expect(ctor.construct(), isNull);
+    });
+
+    test('post-placement reassignment applies crunch blocking toward lower IDs',
+        () {
+      var crunchFlips = 0;
+      var solvable = 0;
+      for (var s = 0; s < 32; s++) {
+        final ctor = RetrogradeConstructor(
+          gridWidth: 7,
+          gridHeight: 7,
+          silhouette: _fullRect(7, 7),
+          targetNodeCount: 28,
+          scorer: CandidateScorer(
+            crunchBlockingProbability: 0.72,
+            weights: const ScorerWeights(temperature: 0.01),
+          ),
+          sightlines: SightlineTable.forGrid(7, 7),
+          random: Random(s + 900),
+        );
+        final placements = ctor.construct();
+        if (placements == null) continue;
+        solvable++;
+        crunchFlips += ctor.reassignmentCrunchFlips;
+        final level = _levelFromPlacements(7, 7, placements);
+        expect(_validatesByIdOrder(level), isTrue);
+      }
+      expect(solvable, greaterThan(10));
+      expect(crunchFlips, greaterThan(0),
+          reason: 'reassignment should flip crunch-window directions');
+    });
+
+    test('reassignment only points at lower-ID nodes on the ray', () {
+      for (var s = 0; s < 16; s++) {
+        final ctor = RetrogradeConstructor(
+          gridWidth: 6,
+          gridHeight: 6,
+          silhouette: _fullRect(6, 6),
+          targetNodeCount: 24,
+          scorer: CandidateScorer(crunchBlockingProbability: 1.0),
+          sightlines: SightlineTable.forGrid(6, 6),
+          random: Random(s + 1500),
+        );
+        final placements = ctor.construct();
+        if (placements == null) continue;
+        final level = _levelFromPlacements(6, 6, placements);
+        expect(_validatesByIdOrder(level), isTrue);
+
+        final n = placements.length;
+        final crunchStart = (n * 0.35).floor().clamp(1, n - 1);
+        final crunchEnd = (n * 0.65).ceil().clamp(crunchStart, n - 1);
+        for (var i = crunchStart; i <= crunchEnd; i++) {
+          final node = placements[i];
+          final target = _firstRayTarget(level, i);
+          if (target != null) {
+            expect(
+              target,
+              lessThan(i),
+              reason: 'node $i must not point at higher-ID node $target',
+            );
+          }
+        }
+      }
+    });
+
+    test('solvability retry preserves ID-order extraction', () {
+      var solvable = 0;
+      for (var s = 0; s < 20; s++) {
+        final scorer = CandidateScorer(
+          crunchBlockingProbability: 0.72,
+        );
+        final ctor = RetrogradeConstructor(
+          gridWidth: 7,
+          gridHeight: 7,
+          silhouette: _fullRect(7, 7),
+          targetNodeCount: 28,
+          scorer: scorer,
+          sightlines: SightlineTable.forGrid(7, 7),
+          random: Random(s + 1200),
+        );
+        final placements = ctor.construct();
+        if (placements == null) continue;
+        solvable++;
+        final level = _levelFromPlacements(7, 7, placements);
+        expect(_validatesByIdOrder(level), isTrue);
+      }
+      expect(solvable, greaterThan(8));
+    });
+
+    test('canonical removal order preserves ID-order solvability', () {
+      var solvable = 0;
+      for (var s = 0; s < 24; s++) {
+        final ctor = RetrogradeConstructor(
+          gridWidth: 6,
+          gridHeight: 6,
+          silhouette: _fullRect(6, 6),
+          targetNodeCount: 22,
+          scorer: CandidateScorer(),
+          sightlines: SightlineTable.forGrid(6, 6),
+          random: Random(s + 500),
+        );
+        final placements = ctor.construct();
+        if (placements == null) continue;
+        expect(placements.length, equals(22));
+        final level = _levelFromPlacements(6, 6, placements);
+        expect(_validatesByIdOrder(level), isTrue);
+        solvable++;
+      }
+      expect(solvable, greaterThan(12));
+    });
+
+    test('scored reassignment prefers blocked targets when available', () {
+      var blockedTargetCount = 0;
+      var blockingFlipCount = 0;
+      for (var s = 0; s < 32; s++) {
+        final ctor = RetrogradeConstructor(
+          gridWidth: 7,
+          gridHeight: 7,
+          silhouette: _fullRect(7, 7),
+          targetNodeCount: 28,
+          scorer: CandidateScorer(crunchBlockingProbability: 1.0),
+          sightlines: SightlineTable.forGrid(7, 7),
+          random: Random(s + 4100),
+        );
+        final placements = ctor.construct();
+        if (placements == null) continue;
+        final level = _levelFromPlacements(7, 7, placements);
+        expect(_validatesByIdOrder(level), isTrue);
+
+        final n = placements.length;
+        final crunchStart = (n * 0.35).floor().clamp(1, n - 1);
+        final crunchEnd = (n * 0.65).ceil().clamp(crunchStart, n - 1);
+        for (var i = crunchStart; i <= crunchEnd; i++) {
+          final target = _firstRayTarget(level, i);
+          if (target == null) continue;
+          blockingFlipCount++;
+          if (_firstRayTarget(level, target) != null) blockedTargetCount++;
+        }
+      }
+      expect(blockingFlipCount, greaterThan(0));
+      expect(
+        blockedTargetCount / blockingFlipCount,
+        greaterThan(0.35),
+        reason: 'scored picks should favor already-blocked chain nodes',
+      );
+    });
+
+    test('seeded dense configs produce chainDepthMax >= 2 where possible', () {
+      var maxDepth = 0;
+      var deepLevels = 0;
+      var solvable = 0;
+      for (var s = 0; s < 48; s++) {
+        final ctor = RetrogradeConstructor(
+          gridWidth: 7,
+          gridHeight: 7,
+          silhouette: _fullRect(7, 7),
+          targetNodeCount: 28,
+          scorer: CandidateScorer(crunchBlockingProbability: 0.85),
+          sightlines: SightlineTable.forGrid(7, 7),
+          random: Random(s + 3000),
+        );
+        final placements = ctor.construct();
+        if (placements == null) continue;
+        solvable++;
+        final level = _levelFromPlacements(7, 7, placements);
+        expect(_validatesByIdOrder(level), isTrue);
+        final depth = level.nodes.isEmpty
+            ? 0
+            : LevelTopologyMetrics.compute(level).chainDepthMax;
+        if (depth > maxDepth) maxDepth = depth;
+        if (depth >= 2) deepLevels++;
+      }
+      expect(solvable, greaterThan(10));
+      expect(maxDepth, greaterThanOrEqualTo(2));
+      expect(deepLevels, greaterThan(0));
     });
   });
 }

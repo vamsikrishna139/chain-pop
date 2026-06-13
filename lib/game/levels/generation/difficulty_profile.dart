@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'difficulty_mode.dart';
 import 'metrics.dart';
 
@@ -35,6 +37,19 @@ class MetricRange<T extends num> {
   bool contains(num value) => value >= min && value <= max;
 }
 
+/// Target shape for a level's temporal arc (opening → crunch → release).
+class TemporalArcSpec {
+  final MetricRange<int> openingMoves;
+  final MetricRange<int> crunchMoves;
+  final MetricRange<int> releasePeak;
+
+  const TemporalArcSpec({
+    required this.openingMoves,
+    required this.crunchMoves,
+    required this.releasePeak,
+  });
+}
+
 /// §6 band specification for a single difficulty tier.
 ///
 /// The plan's bands intentionally do not lock down everything in Phase 2 —
@@ -53,6 +68,9 @@ class DifficultyProfile {
   final MetricRange<double> forcedSequenceRatio;
   final TempoProfileShape tempoShape;
 
+  /// Optional temporal-arc targets; populated on Hard (Tier 2+ validation).
+  final TemporalArcSpec? arcSpec;
+
   const DifficultyProfile({
     required this.tier,
     required this.nodeCount,
@@ -62,6 +80,7 @@ class DifficultyProfile {
     required this.criticalUnlockDepth,
     required this.forcedSequenceRatio,
     required this.tempoShape,
+    this.arcSpec,
   });
 
   /// Hard cap on [LevelMetrics.forcedSequenceRatio] when [nodeCount] exceeds
@@ -76,11 +95,11 @@ class DifficultyProfile {
   static const DifficultyProfile easy = DifficultyProfile(
     tier: DifficultyTier.easy,
     nodeCount: MetricRange(8, 14),
-    waveDepth: MetricRange(2, 3),
+    waveDepth: MetricRange(2, 4),
     averageBranchingFactor: MetricRange(5.0, 8.0),
-    firstLegalMoveCount: MetricRange(5, 10),
-    criticalUnlockDepth: MetricRange(1, 2),
-    forcedSequenceRatio: MetricRange(0.0, 0.15),
+    firstLegalMoveCount: MetricRange(7, 11),
+    criticalUnlockDepth: MetricRange(2, 5),
+    forcedSequenceRatio: MetricRange(0.25, 0.65),
     tempoShape: TempoProfileShape.relaxed,
   );
 
@@ -89,35 +108,40 @@ class DifficultyProfile {
     tier: DifficultyTier.medium,
     nodeCount: MetricRange(14, 22),
     waveDepth: MetricRange(3, 5),
-    averageBranchingFactor: MetricRange(3.0, 5.0),
-    firstLegalMoveCount: MetricRange(3, 5),
-    criticalUnlockDepth: MetricRange(2, 4),
-    forcedSequenceRatio: MetricRange(0.15, 0.35),
+    averageBranchingFactor: MetricRange(3.0, 8.0),
+    firstLegalMoveCount: MetricRange(4, 11),
+    criticalUnlockDepth: MetricRange(3, 8),
+    forcedSequenceRatio: MetricRange(0.35, 0.65),
     tempoShape: TempoProfileShape.mildRise,
   );
 
-  /// §6 Hard band — softened per reviewer feedback (BF 2–4 not 1.5–3;
-  /// FSR 20–40% not 35–60%). Dramatic tempo.
+  /// §6 Hard band — organic crunch sweet spot.
   static const DifficultyProfile hard = DifficultyProfile(
     tier: DifficultyTier.hard,
-    nodeCount: MetricRange(20, 30),
+    nodeCount: MetricRange(25, 50),
     waveDepth: MetricRange(5, 8),
-    averageBranchingFactor: MetricRange(2.0, 4.0),
-    firstLegalMoveCount: MetricRange(1, 3),
-    criticalUnlockDepth: MetricRange(4, 8),
-    forcedSequenceRatio: MetricRange(0.20, 0.40),
+    averageBranchingFactor: MetricRange(3.0, 8.0),
+    firstLegalMoveCount: MetricRange(3, 5),
+    criticalUnlockDepth: MetricRange(5, 12),
+    forcedSequenceRatio: MetricRange(0.45, 0.90),
     tempoShape: TempoProfileShape.dramatic,
+    arcSpec: TemporalArcSpec(
+      openingMoves: MetricRange(4, 10),
+      crunchMoves: MetricRange(2, 5),
+      releasePeak: MetricRange(5, 12),
+    ),
   );
 
   /// §6 Expert / Daily band. Compression tempo.
   static const DifficultyProfile expert = DifficultyProfile(
     tier: DifficultyTier.expert,
-    nodeCount: MetricRange(22, 32),
+    // Widened for 70–80% silhouette fill on Daily / Expert boards.
+    nodeCount: MetricRange(28, 55),
     waveDepth: MetricRange(6, 10),
-    averageBranchingFactor: MetricRange(2.0, 4.0),
-    firstLegalMoveCount: MetricRange(2, 4),
-    criticalUnlockDepth: MetricRange(5, 10),
-    forcedSequenceRatio: MetricRange(0.25, 0.40),
+    averageBranchingFactor: MetricRange(3.0, 9.0),
+    firstLegalMoveCount: MetricRange(3, 5),
+    criticalUnlockDepth: MetricRange(6, 14),
+    forcedSequenceRatio: MetricRange(0.50, 0.85),
     tempoShape: TempoProfileShape.compression,
   );
 
@@ -170,7 +194,131 @@ class DifficultyProfile {
         metrics.forcedSequenceRatio > fsrCapValue) {
       return false;
     }
+    if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
+      final w0 = metrics.waveZeroWidth;
+      if (w0 < 3 || w0 > 5) return false;
+    }
+
+    // Temporary: Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
+    // if ((tier == DifficultyTier.hard || tier == DifficultyTier.expert) &&
+    //     metrics.tempoProfile.isNotEmpty &&
+    //     !passesTemporalArc(metrics.tempoProfile)) {
+    //   return false;
+    // }
     return true;
+  }
+
+  /// Validates flow → crunch → release segments on [tempoProfile].
+  bool passesTemporalArc(List<int> tempoProfile) {
+    final spec = arcSpec;
+    if (spec == null || tempoProfile.isEmpty) return true;
+    if (tempoProfile.length < 10) return false;
+
+    final n = tempoProfile.length;
+    final openEnd = max(1, (n * 0.20).ceil());
+    final openAvg = _avg(tempoProfile.sublist(0, openEnd));
+    if (openAvg < spec.openingMoves.min || openAvg > 12) return false;
+
+    final crunchStart = (n * 0.35).floor();
+    final crunchEnd = min(n, max(crunchStart + 1, (n * 0.65).ceil()));
+    final crunchSegment = tempoProfile.sublist(crunchStart, crunchEnd);
+    if (crunchSegment.isEmpty) return false;
+    final crunchMin = crunchSegment.reduce((a, b) => a < b ? a : b);
+    if (crunchMin > spec.crunchMoves.max) return false;
+
+    if (crunchEnd < n) {
+      final releaseSegment = tempoProfile.sublist(crunchEnd);
+      final releaseMax =
+          releaseSegment.reduce((a, b) => a > b ? a : b);
+      if (releaseMax < spec.releasePeak.min) return false;
+    }
+    return true;
+  }
+
+  /// Score for in-band ranking — higher is a better temporal arc fit.
+  double temporalArcScore(List<int> tempoProfile) {
+    final spec = arcSpec;
+    if (spec == null || tempoProfile.isEmpty) return 0;
+    if (!passesTemporalArc(tempoProfile)) return 0;
+
+    final n = tempoProfile.length;
+    final openEnd = max(1, (n * 0.20).ceil());
+    final openAvg = _avg(tempoProfile.sublist(0, openEnd));
+    final openTarget = (spec.openingMoves.min + spec.openingMoves.max) / 2;
+    final openScore = 1.0 - (openAvg - openTarget).abs() / 8.0;
+
+    final crunchStart = (n * 0.35).floor();
+    final crunchEnd = min(n, max(crunchStart + 1, (n * 0.65).ceil()));
+    final crunchSegment = tempoProfile.sublist(crunchStart, crunchEnd);
+    final crunchFsr = crunchSegment.where((m) => m == 1).length /
+        crunchSegment.length;
+
+    var releaseScore = 0.0;
+    if (crunchEnd < n) {
+      final releaseMax = tempoProfile
+          .sublist(crunchEnd)
+          .reduce((a, b) => a > b ? a : b);
+      releaseScore = releaseMax / spec.releasePeak.max;
+    }
+
+    return openScore.clamp(0.0, 1.0) +
+        crunchFsr +
+        releaseScore.clamp(0.0, 1.0);
+  }
+
+  /// Midgame forced-sequence share (35–65% window) for in-band ranking.
+  static double midgameFsr(List<int> tempoProfile) {
+    if (tempoProfile.length < 4) return 0;
+    final n = tempoProfile.length;
+    final start = (n * 0.35).floor();
+    final end = min(n, max(start + 1, (n * 0.65).ceil()));
+    final segment = tempoProfile.sublist(start, end);
+    if (segment.isEmpty) return 0;
+    return segment.where((m) => m == 1).length / segment.length;
+  }
+
+  static bool _matchesTempoShape(
+    List<int> tempo,
+    TempoProfileShape shape,
+  ) {
+    if (tempo.length < 4) return true;
+    switch (shape) {
+      case TempoProfileShape.relaxed:
+      case TempoProfileShape.mildRise:
+        return true;
+      case TempoProfileShape.dramatic:
+        final n = tempo.length;
+        final midStart = max(1, n ~/ 4);
+        final midEnd = max(midStart + 1, (3 * n) ~/ 4);
+        final lastStart = max(midEnd, (4 * n) ~/ 5);
+        final openAvg = _avg(tempo.sublist(0, midStart));
+        final midPeak =
+            tempo.sublist(midStart, midEnd).reduce((a, b) => a > b ? a : b);
+        final lastAvg = _avg(tempo.sublist(lastStart));
+        return midPeak > openAvg &&
+            midPeak > lastAvg &&
+            lastAvg <= openAvg + 0.5;
+      case TempoProfileShape.compression:
+        final n = tempo.length;
+        final half = max(1, n ~/ 2);
+        final firstHalf = _avg(tempo.sublist(0, half));
+        final secondHalf = _avg(tempo.sublist(half));
+        if (secondHalf >= firstHalf - 0.25) return false;
+        final openEnd = max(1, n ~/ 5);
+        final openSlice = tempo.sublist(0, openEnd);
+        if (openSlice.length > 1) {
+          final spread =
+              openSlice.reduce((a, b) => a > b ? a : b) -
+                  openSlice.reduce((a, b) => a < b ? a : b);
+          if (spread <= 0 && firstHalf - secondHalf < 1.0) return false;
+        }
+        return true;
+    }
+  }
+
+  static double _avg(List<int> values) {
+    if (values.isEmpty) return 0;
+    return values.fold<int>(0, (a, b) => a + b) / values.length;
   }
 
   /// True iff [metrics] satisfies the FSR cap rule. Useful as a standalone

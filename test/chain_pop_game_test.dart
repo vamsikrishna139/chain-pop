@@ -101,15 +101,44 @@ void main() {
       );
       game.activeNodes.addAll(nodes);
 
-      expect(game.canExtract(nodes[0]), isFalse, reason: 'Node 1 is blocked by Node 2');
-      expect(game.canExtract(nodes[1]), isTrue, reason: 'Node 2 is free');
-      expect(game.canExtract(nodes[2]), isTrue, reason: 'Node 3 is free');
+      game.refreshExtractableIdsForTest();
+      expect(game.isExtractable(1), isFalse, reason: 'Node 1 is blocked by Node 2');
+      expect(game.isExtractable(2), isTrue, reason: 'Node 2 is free');
+      expect(game.isExtractable(3), isTrue, reason: 'Node 3 is free');
       
       // Simulate popping Node 2
       game.registerExtraction(nodes[1]);
       
       // Node 1 should now be free
-      expect(game.canExtract(nodes[0]), isTrue, reason: 'Node 1 should be freed after Node 2 pops');
+      expect(game.isExtractable(1), isTrue, reason: 'Node 1 should be freed after Node 2 pops');
+
+      // Chain telegraph: the newly-freed delta holds exactly the node that
+      // became extractable because of this extraction (node 1), not node 3
+      // which was already free.
+      expect(game.newlyExtractableForTest, equals({1}),
+          reason: 'Only node 1 is newly freed by popping node 2');
+    });
+
+    test('newlyExtractable delta is empty when nothing new is unblocked', () {
+      final game =
+          ChainPopGame(levelId: 2, difficulty: DifficultyMode.easy, onWin: () {});
+      // Two independent free nodes far apart — popping one frees nothing new.
+      final nodes = [
+        NodeData(id: 1, x: 0, y: 0, dir: Direction.up),
+        NodeData(id: 2, x: 5, y: 5, dir: Direction.down),
+      ];
+      game.levelData = LevelData(
+        levelId: 2,
+        gridWidth: 6,
+        gridHeight: 6,
+        nodes: nodes.map((n) => n.clone()).toList(),
+      );
+      game.activeNodes.addAll(nodes.map((n) => n.clone()));
+
+      game.refreshExtractableIdsForTest();
+      game.registerExtraction(nodes[0]);
+      expect(game.newlyExtractableForTest, isEmpty,
+          reason: 'Node 2 was already free; nothing becomes newly extractable');
     });
 
     test('undo restores last removal and updates onNodeRemoved', () {
@@ -281,6 +310,204 @@ void main() {
       // Pop Node 5 Sequence
       game.registerExtraction(nodes[4]);
       expect(game.canExtract(nodes[0]), isTrue, reason: 'Node 1 is completely free');
+    });
+  });
+
+  group('Restoration trail lifecycle', () {
+    ChainPopGame buildGame() {
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.easy,
+        onWin: () {},
+      );
+      final n0 = NodeData(id: 0, x: 0, y: 0, dir: Direction.up);
+      final n1 = NodeData(id: 1, x: 4, y: 4, dir: Direction.down);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: [n0.clone(), n1.clone()],
+      );
+      game.activeNodes.addAll([n0.clone(), n1.clone()]);
+      return game;
+    }
+
+    test('extraction marks the vacated cell as restored', () {
+      final game = buildGame();
+      game.registerExtraction(game.levelData.nodes[0]);
+      expect(game.restoredCellsForTest, {(0, 0)});
+    });
+
+    test('undo removes the restored marker', () {
+      final game = buildGame();
+      game.registerExtraction(game.levelData.nodes[0]);
+      expect(game.undo(), isTrue);
+      expect(game.restoredCellsForTest, isEmpty);
+    });
+
+    test('extraction streak is exposed and reset by jam', () {
+      final game = buildGame();
+      expect(game.extractionStreak, 0);
+      game.registerExtraction(game.levelData.nodes[0]);
+      expect(game.extractionStreak, 1);
+      game.reportJam();
+      expect(game.extractionStreak, 0);
+    });
+  });
+
+  group('Core win cascade finale', () {
+    test('core win with unmounted board calls onWin immediately', () {
+      var wins = 0;
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.hard,
+        onWin: () => wins++,
+      );
+      final core = NodeData(id: 0, x: 0, y: 0, dir: Direction.up, isCore: true);
+      final extra = NodeData(id: 1, x: 4, y: 4, dir: Direction.down);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: [core.clone(), extra.clone()],
+      );
+      game.activeNodes.addAll([core.clone(), extra.clone()]);
+
+      game.registerExtraction(core);
+      // Board never laid out → no cascade possible, win must not be lost.
+      expect(game.hasWon, isTrue);
+      expect(game.cascadeFinaleActive, isFalse);
+      expect(wins, 1);
+      expect(game.networkIntegrity, 100);
+
+      // Re-entry stays idempotent.
+      game.checkWinCondition();
+      expect(wins, 1);
+    });
+
+    test('core extraction restores integrity to 100 on win', () {
+      var wins = 0;
+      final game = ChainPopGame(
+        levelId: 1,
+        difficulty: DifficultyMode.hard,
+        onWin: () => wins++,
+      );
+      final core = NodeData(id: 0, x: 0, y: 0, dir: Direction.up, isCore: true);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 3,
+        gridHeight: 3,
+        nodes: [core.clone()],
+      );
+      game.activeNodes.add(core.clone());
+      game.reportJam();
+      expect(game.networkIntegrity, 92);
+
+      game.registerExtraction(core);
+      expect(game.hasWon, isTrue);
+      expect(game.networkIntegrity, 100);
+      expect(game.restoredCellsForTest, isNotEmpty);
+      expect(wins, 1);
+    });
+  });
+
+  group('relay rotation', () {
+    test('extracting a relay rotates its row clockwise', () {
+      final game = ChainPopGame(
+        levelId: 58,
+        difficulty: DifficultyMode.hard,
+        onWin: () {},
+      );
+      final relay =
+          NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay);
+      final other = NodeData(id: 1, x: 2, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 58,
+        gridWidth: 4,
+        gridHeight: 4,
+        nodes: [relay.clone(), other.clone()],
+      );
+      game.activeNodes.addAll([relay.clone(), other.clone()]);
+
+      game.registerExtraction(relay);
+
+      expect(game.activeNodes.single.dir, Direction.right);
+    });
+
+    test('undo reverses the relay row rotation', () {
+      final game = ChainPopGame(
+        levelId: 58,
+        difficulty: DifficultyMode.hard,
+        onWin: () {},
+      );
+      final relay =
+          NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay);
+      final other = NodeData(id: 1, x: 2, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 58,
+        gridWidth: 4,
+        gridHeight: 4,
+        nodes: [relay.clone(), other.clone()],
+      );
+      game.activeNodes.addAll([relay.clone(), other.clone()]);
+
+      game.registerExtraction(relay);
+      expect(game.undo(), isTrue);
+
+      final restoredOther = game.activeNodes.firstWhere((n) => n.id == 1);
+      expect(restoredOther.dir, Direction.up);
+      final restoredRelay = game.activeNodes.firstWhere((n) => n.id == 0);
+      expect(restoredRelay.dir, Direction.left);
+      expect(restoredRelay.kind, NodeKind.relay);
+    });
+  });
+
+  group('jam guidance', () {
+    ChainPopGame buildBlockedBoard() {
+      final game =
+          ChainPopGame(levelId: 1, difficulty: DifficultyMode.easy, onWin: () {});
+      // Node 1 faces left into node 2 (a blocker); node 3 is free elsewhere.
+      final blocked = NodeData(id: 1, x: 2, y: 2, dir: Direction.left);
+      final blocker = NodeData(id: 2, x: 1, y: 2, dir: Direction.up);
+      final free = NodeData(id: 3, x: 0, y: 0, dir: Direction.up);
+      game.levelData = LevelData(
+        levelId: 1,
+        gridWidth: 5,
+        gridHeight: 5,
+        nodes: [blocked, blocker, free].map((n) => n.clone()).toList(),
+      );
+      game.activeNodes.addAll([blocked, blocker, free].map((n) => n.clone()));
+      game.refreshExtractableIdsForTest();
+      return game;
+    }
+
+    test('repeated jams on the same node accumulate', () {
+      final game = buildBlockedBoard();
+      final blocked = game.activeNodes.firstWhere((n) => n.id == 1);
+
+      game.reportJam(blocked);
+      expect(game.jamCountForTest(1), 1);
+      game.reportJam(blocked);
+      expect(game.jamCountForTest(1), 2);
+    });
+
+    test('a successful extraction clears jam tallies', () {
+      final game = buildBlockedBoard();
+      final blocked = game.activeNodes.firstWhere((n) => n.id == 1);
+      final free = game.activeNodes.firstWhere((n) => n.id == 3);
+
+      game.reportJam(blocked);
+      game.reportJam(blocked);
+      expect(game.jamCountForTest(1), 2);
+
+      game.registerExtraction(free);
+      expect(game.jamCountForTest(1), 0);
+    });
+
+    test('reportJam with no source is still a valid (legacy) call', () {
+      final game = buildBlockedBoard();
+      game.reportJam();
+      expect(game.extractionStreak, 0);
     });
   });
 }

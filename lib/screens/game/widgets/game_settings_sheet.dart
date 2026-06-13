@@ -106,6 +106,42 @@ Future<void> showGameSettingsSheet({
                       setModalState(() {});
                     },
                   ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Aim Guide',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    subtitle: const Text(
+                      'Show a node’s exit path while you press',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                    value: current.showAimRay,
+                    activeThumbColor: accent,
+                    onChanged: (v) {
+                      current = current.copyWith(showAimRay: v);
+                      onSettingsChanged(current);
+                      setModalState(() {});
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      'Ambient Motion',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    subtitle: const Text(
+                      'Enable slow background drift animations',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                    value: current.ambientMotion,
+                    activeThumbColor: accent,
+                    onChanged: (v) {
+                      current = current.copyWith(ambientMotion: v);
+                      onSettingsChanged(current);
+                      setModalState(() {});
+                    },
+                  ),
                   const Divider(color: Colors.white10, height: 32),
                   PrivacyAdsSettingsSection(accent: accent),
                 ],

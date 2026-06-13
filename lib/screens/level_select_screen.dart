@@ -8,6 +8,7 @@ import '../models/difficulty.dart';
 import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
 import '../services/storage_service.dart';
+import '../game/world_registry.dart';
 import '../theme/app_colors.dart';
 import '../utils/progress_format.dart';
 import 'game_screen.dart';
@@ -721,6 +722,10 @@ class _ChapterGrid extends StatelessWidget {
           isUnlocked: isUnlocked,
           isNext: isNext,
           isFrontier: isFrontier,
+          isBoss: mode == DifficultyMode.hard && isBossLevel(levelId),
+          worldAccent: mode == DifficultyMode.hard
+              ? worldForLevel(levelId).accent
+              : null,
           onTap: isUnlocked ? () => onTap(levelId) : null,
         );
 
@@ -805,6 +810,8 @@ class _LevelCard extends StatelessWidget {
   final bool isUnlocked;
   final bool isNext;
   final bool isFrontier;
+  final bool isBoss;
+  final Color? worldAccent;
   final VoidCallback? onTap;
 
   const _LevelCard({
@@ -814,21 +821,26 @@ class _LevelCard extends StatelessWidget {
     required this.isUnlocked,
     required this.isNext,
     this.isFrontier = false,
+    this.isBoss = false,
+    this.worldAccent,
     this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final accent = mode.color;
+    final accent = worldAccent ?? mode.color;
     final locked = !isUnlocked;
     final completed = isUnlocked && stars > 0;
+    final showcaseName = mode == DifficultyMode.hard
+        ? showcaseNameForLevel(levelId)
+        : null;
 
     final fillColor = locked
         ? cs.surfaceContainerLow
         : completed
             ? Color.lerp(cs.surfaceContainer, accent, 0.12)!
-            : cs.surfaceContainer;
+            : Color.lerp(cs.surfaceContainer, accent, worldAccent != null ? 0.06 : 0)!;
 
     final borderColor = isNext
         ? cs.primary
@@ -869,11 +881,36 @@ class _LevelCard extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                if (isBoss && !locked)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: Icon(
+                      Icons.shield_moon_outlined,
+                      color: accent.withValues(alpha: 0.85),
+                      size: 14,
+                    ),
+                  ),
                 if (locked)
                   Icon(
                     Icons.lock_rounded,
                     color: cs.onSurfaceVariant.withValues(alpha: 0.45),
                     size: 20,
+                  )
+                else if (showcaseName != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      showcaseName,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: isNext ? cs.primary : cs.onSurface,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            height: 1.1,
+                          ),
+                    ),
                   )
                 else
                   Text(

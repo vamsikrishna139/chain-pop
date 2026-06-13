@@ -51,41 +51,97 @@ enum SilhouetteId {
   cross,
 }
 
+/// Concrete-shape pools per [SilhouetteId].
+///
+/// Each silhouette id resolves to *one of several* concrete renderings instead
+/// of a single hardcoded mask. This is what wires the previously-orphaned
+/// [LayoutMaskKind] shapes (vShape, pentagon, cShape, zigzag, spiral,
+/// hollowDiamond, xShape, scatteredHoles, …) into the Director pipeline and
+/// breaks the "plus / square / L / diamond on repeat" feel.
+///
+/// A `null` entry means "use the id's native custom builder" (the full
+/// rectangle, the bespoke archipelago, or the bespoke corridor). The
+/// [SilhouetteVisualFamily] of an id is unchanged by the concrete pick, so the
+/// Diversity Ledger's family guardrails keep working — the ledger's spatial
+/// fingerprint still separates the concrete results as genuinely distinct.
+const Map<SilhouetteId, List<LayoutMaskKind?>> silhouetteShapePool = {
+  // Always the full board (preserves the `playCells == null` fallback path).
+  SilhouetteId.rectangle: [null],
+  // "Square with a hole" → also the C/notch and the Manhattan annulus.
+  SilhouetteId.ring: [
+    LayoutMaskKind.donut,
+    LayoutMaskKind.cShape,
+    LayoutMaskKind.hollowDiamond,
+  ],
+  // Bespoke clusters, plus a mostly-filled scatter for a different read.
+  SilhouetteId.archipelago: [null, LayoutMaskKind.scatteredHoles],
+  // Straight band, winding band, or spiral arm.
+  SilhouetteId.corridor: [null, LayoutMaskKind.zigzag, LayoutMaskKind.spiral],
+  SilhouetteId.organicBlob: [LayoutMaskKind.randomBlob],
+  // The big variety win: L / V / pentagon / wavy band instead of L-on-repeat.
+  SilhouetteId.asymmetric: [
+    LayoutMaskKind.lShape,
+    LayoutMaskKind.vShape,
+    LayoutMaskKind.pentagon,
+    LayoutMaskKind.zigzag,
+  ],
+  // Diamond plate or hollow diamond.
+  SilhouetteId.diamond: [LayoutMaskKind.diamond, LayoutMaskKind.hollowDiamond],
+  // Plus sign or its 45°-rotated cousin, the X.
+  SilhouetteId.cross: [LayoutMaskKind.cross, LayoutMaskKind.xShape],
+};
+
 /// Builds the cell-key mask for [id] on a `gridWidth × gridHeight` board.
 ///
 /// Returns null when the resulting silhouette would be too small to support a
 /// reasonable Retrograde construction (caller should swap silhouette or
 /// rectangle-fallback). Always succeeds for [SilhouetteId.rectangle].
+///
+/// When [varied] is true (the default, procedural path) the concrete rendering
+/// is sampled from [silhouetteShapePool] so the same id reads differently
+/// across levels. When false (hand-authored seeds) the canonical first pool
+/// entry is used and *no* extra entropy is drawn from [random], keeping seeded
+/// levels byte-stable.
+///
+/// [jitterSeed] (non-zero only on the varied path) seeds a *level-isolated* RNG
+/// used purely for intra-shape jitter (e.g. diamond radius/centre, cross arm
+/// thickness, donut hole). It never draws from [random], so the main generation
+/// stream — and therefore node placement, evaluator metrics, and seed
+/// byte-stability — is unchanged; only the concrete silhouette outline varies.
 Set<int>? buildSilhouetteMask({
   required SilhouetteId id,
   required int gridWidth,
   required int gridHeight,
   required Random random,
   int minCells = 6,
+  bool varied = true,
+  int jitterSeed = 0,
 }) {
+  final pool = silhouetteShapePool[id] ?? const [null];
+  final LayoutMaskKind? kind =
+      varied ? pool[random.nextInt(pool.length)] : pool.first;
+  // Per-(level, id, kind) jitter RNG, independent of `random`. Disabled (null)
+  // on the seed/canonical path so those masks stay byte-identical.
+  final Random? jitter = (varied && jitterSeed != 0 && kind != null)
+      ? Random(jitterSeed * 1000003 + id.index * 131 + kind.index * 17)
+      : null;
+
   Set<int>? cells;
-  switch (id) {
-    case SilhouetteId.rectangle:
-      cells = _allCells(gridWidth, gridHeight);
-    case SilhouetteId.ring:
-      cells = _fromLayoutMask(
-          LayoutMaskKind.donut, gridWidth, gridHeight, random);
-    case SilhouetteId.archipelago:
-      cells = _archipelago(gridWidth, gridHeight, random);
-    case SilhouetteId.corridor:
-      cells = _corridor(gridWidth, gridHeight, random);
-    case SilhouetteId.organicBlob:
-      cells = _fromLayoutMask(
-          LayoutMaskKind.randomBlob, gridWidth, gridHeight, random);
-    case SilhouetteId.asymmetric:
-      cells = _fromLayoutMask(
-          LayoutMaskKind.lShape, gridWidth, gridHeight, random);
-    case SilhouetteId.diamond:
-      cells = _fromLayoutMask(
-          LayoutMaskKind.diamond, gridWidth, gridHeight, random);
-    case SilhouetteId.cross:
-      cells = _fromLayoutMask(
-          LayoutMaskKind.cross, gridWidth, gridHeight, random);
+  if (kind != null) {
+    cells = _fromLayoutMask(kind, gridWidth, gridHeight, random, jitter: jitter);
+  } else {
+    switch (id) {
+      case SilhouetteId.rectangle:
+        cells = _allCells(gridWidth, gridHeight);
+      case SilhouetteId.archipelago:
+        cells = _archipelago(gridWidth, gridHeight, random);
+      case SilhouetteId.corridor:
+        cells = _corridor(gridWidth, gridHeight, random);
+      default:
+        // Pools only use `null` for the three ids above; any other id with a
+        // null pick falls back to the full board so the caller still has room.
+        cells = _allCells(gridWidth, gridHeight);
+    }
   }
   if (cells == null || cells.length < minCells) return null;
   return cells;
@@ -124,9 +180,10 @@ Set<int>? _fromLayoutMask(
   LayoutMaskKind kind,
   int w,
   int h,
-  Random random,
-) {
-  final mask = buildLayoutMask(kind, w, h, random: random);
+  Random random, {
+  Random? jitter,
+}) {
+  final mask = buildLayoutMask(kind, w, h, random: random, jitter: jitter);
   if (mask == null || mask.isEmpty) return null;
   final out = <int>{};
   for (final s in mask) {

@@ -29,7 +29,9 @@ void main() {
     });
 
     test('N=500 + histogram invariants', () {
-      _runSequentialCorpusHard(levels: 500, expectArchipelago: true);
+      // Dense Strategy Phase 1C: Hard silhouette bias demotes Archipelago and
+      // Organic Blob, so we no longer expect non-zero counts for all families.
+      _runSequentialCorpusHard(levels: 500, expectArchipelago: false);
     });
   });
 
@@ -171,14 +173,20 @@ void _runSequentialCorpusHard({
       'p90=${hamm.p90.toStringAsFixed(2)} '
       '(samples=${hamm.minDistances.length}; '
       'ledger reference thresholds: base=5 tightened=8)');
+  // Dense Strategy Phase 1C: geometric lattice silhouette dominance lowers
+  // fingerprint diversity (silhouette bits are homogeneous). Median ≥ 1 still
+  // guarantees non-identical fingerprints; the p90 check below catches real
+  // diversity regressions.
   expect(
     hamm.median,
-    greaterThanOrEqualTo(2),
+    greaterThanOrEqualTo(1),
     reason: 'keep a nonzero XOR spread versus the deque (empirical smoke)',
   );
+  // Dense Strategy Phase 1C: p90 lowered from 5 → 3 since silhouette bits are
+  // now dominated by geometric lattice (intentional density bias).
   expect(
     hamm.p90,
-    greaterThanOrEqualTo(5),
+    greaterThanOrEqualTo(3),
     reason:
         'bulk of tail should brush the XOR distance implied by silhouette bits alone',
   );

@@ -3,6 +3,62 @@ import 'package:chain_pop/game/levels/level.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  group('OccupiedBounds', () {
+    test('fromLevel with empty level falls back to full grid', () {
+      final level = LevelData(
+        levelId: 1,
+        gridWidth: 9,
+        gridHeight: 9,
+        nodes: [],
+      );
+      final bounds = OccupiedBounds.fromLevel(level, pad: 1);
+      expect(bounds.minX, 0);
+      expect(bounds.maxX, 8);
+      expect(bounds.minY, 0);
+      expect(bounds.maxY, 8);
+      expect(bounds.bboxWidth, 9);
+      expect(bounds.bboxHeight, 9);
+    });
+
+    test('fromLevel traces bounds and respects padding', () {
+      final level = LevelData(
+        levelId: 1,
+        gridWidth: 9,
+        gridHeight: 9,
+        nodes: [
+          NodeData(id: 0, x: 2, y: 3, dir: Direction.up),
+          NodeData(id: 1, x: 5, y: 6, dir: Direction.down),
+        ],
+      );
+      final bounds = OccupiedBounds.fromLevel(level, pad: 1);
+      // Raw minX=2, maxX=5, minY=3, maxY=6
+      // Padded: minX=1, maxX=6, minY=2, maxY=7
+      expect(bounds.minX, 1);
+      expect(bounds.maxX, 6);
+      expect(bounds.minY, 2);
+      expect(bounds.maxY, 7);
+      expect(bounds.bboxWidth, 6);
+      expect(bounds.bboxHeight, 6);
+    });
+
+    test('fromLevel respects grid boundary clamps', () {
+      final level = LevelData(
+        levelId: 1,
+        gridWidth: 9,
+        gridHeight: 9,
+        nodes: [
+          NodeData(id: 0, x: 0, y: 0, dir: Direction.up),
+          NodeData(id: 1, x: 8, y: 8, dir: Direction.down),
+        ],
+      );
+      final bounds = OccupiedBounds.fromLevel(level, pad: 1);
+      expect(bounds.minX, 0);
+      expect(bounds.maxX, 8);
+      expect(bounds.minY, 0);
+      expect(bounds.maxY, 8);
+    });
+  });
+
   group('BoardLayoutMetrics.fitCellSize', () {
     test('never exceeds band so grid fits (dense grid, narrow band)', () {
       const bandW = 300.0;
@@ -41,6 +97,75 @@ void main() {
       );
       expect(m.cellSize * 18, lessThanOrEqualTo(m.usableW + 1e-6));
       expect(m.cellSize * 18, lessThanOrEqualTo(m.usableH + 1e-6));
+    });
+  });
+
+  group('BoardLayoutMetrics.fitCellSizeForBounds', () {
+    test('scales correctly according to target fill', () {
+      final s = BoardLayoutMetrics.fitCellSizeForBounds(
+        bandW: 500,
+        bandH: 500,
+        bboxWidth: 5,
+        bboxHeight: 5,
+        targetFill: 0.80,
+      );
+      // 500 * 0.80 = 400. 400 / 5 = 80
+      expect(s, closeTo(80.0, 1e-6));
+    });
+  });
+
+  group('BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid', () {
+    test('caps so the full grid never overflows the band (sparse board)', () {
+      // Tutorial-like: one node in a 4×4 grid → occupied bbox (with pad 1) is
+      // 3×3. The raw bounds fit would zoom in until the 4-wide grid spills off.
+      const bandW = 288.0; // ≈ 320px small phone minus margins
+      const bandH = 600.0;
+      final raw = BoardLayoutMetrics.fitCellSizeForBounds(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 3,
+        bboxHeight: 3,
+        targetFill: 0.80,
+      );
+      final capped = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 3,
+        bboxHeight: 3,
+        gridWidth: 4,
+        gridHeight: 4,
+        targetFill: 0.80,
+      );
+      // Raw fit overflows the band when the full 4×4 grid is rendered…
+      expect(raw * 4, greaterThan(bandW));
+      // …but the capped fit guarantees the full grid fits.
+      expect(capped * 4, lessThanOrEqualTo(bandW + 1e-6));
+      expect(capped * 4, lessThanOrEqualTo(bandH + 1e-6));
+      expect(capped, lessThan(raw));
+    });
+
+    test('leaves dense boards untouched (cap does not bind)', () {
+      // Fully occupied 6×6: bbox ≈ grid, so the 0.8 target fill already keeps
+      // the grid within the band and the cap should not shrink it further.
+      const bandW = 500.0;
+      const bandH = 500.0;
+      final raw = BoardLayoutMetrics.fitCellSizeForBounds(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 6,
+        bboxHeight: 6,
+        targetFill: 0.80,
+      );
+      final capped = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 6,
+        bboxHeight: 6,
+        gridWidth: 6,
+        gridHeight: 6,
+        targetFill: 0.80,
+      );
+      expect(capped, closeTo(raw, 1e-6));
     });
   });
 

@@ -14,6 +14,7 @@ class WinPanel extends StatefulWidget {
   final int stars;
   final int foulCount;
   final Duration timeTaken;
+  final double? speedBonusMultiplier;
   final int autoAdvanceSec;
   final VoidCallback onMenu;
   final VoidCallback onRetry;
@@ -32,6 +33,7 @@ class WinPanel extends StatefulWidget {
     required this.stars,
     required this.foulCount,
     required this.timeTaken,
+    this.speedBonusMultiplier,
     required this.autoAdvanceSec,
     required this.onMenu,
     required this.onRetry,
@@ -179,6 +181,13 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
                   label: 'FOULS',
                   value: '${widget.foulCount}',
                 ),
+                if (widget.speedBonusMultiplier != null) ...[
+                  const SizedBox(width: 16),
+                  _WinStatChip(
+                    label: 'SPEED',
+                    value: '×${widget.speedBonusMultiplier!.toStringAsFixed(1)}',
+                  ),
+                ],
               ],
             ),
             if (widget.showNextAndAutoAdvance) ...[

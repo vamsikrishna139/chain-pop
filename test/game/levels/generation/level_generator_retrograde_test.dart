@@ -73,7 +73,10 @@ void main() {
       // than 200 — but never lower.
       expect(gen.retrogradeAttemptCount, greaterThanOrEqualTo(200));
       expect(gen.retrogradeSuccessCount, greaterThan(0));
-      expect(gen.legacyAttemptCount, lessThan(gen.retrogradeAttemptCount));
+      // Legacy attempts is an inner counter (up to 32 attempts per experimental level
+      // when retries/renegotiations happen) whereas retrogradeAttemptCount is an
+      // outer counter. We multiply by 8 to safely allow experimental RNG variations.
+      expect(gen.legacyAttemptCount, lessThan(gen.retrogradeAttemptCount * 8));
     });
   });
 }

@@ -11,13 +11,24 @@ import 'generation/generation.dart';
 class LevelManager {
   static final LevelGenerator _generator = LevelGenerator();
 
+  /// Latency budget for on-load campaign generation. A small tail of seeds
+  /// otherwise burn the full attempt budget (~1s) chasing the ideal
+  /// removal-wave band; past this the generator ships the best valid level it
+  /// already found. Bounds the "Building level…" wait without affecting the
+  /// common path or the (budget-free) generation test suites.
+  static const Duration generationBudget = Duration(milliseconds: 200);
+
   /// Returns a valid, solvable [LevelData] for [levelId].
   ///
   /// Uses the full generation pipeline from [LevelGenerator]. If generation
   /// fails for any reason (e.g. invalid configuration), a guaranteed-solvable
   /// fallback is returned rather than throwing.
   static LevelData getLevel(int levelId, {DifficultyMode? mode}) {
-    final result = _generator.generate(levelId, mode: mode);
+    final result = _generator.generate(
+      levelId,
+      mode: mode,
+      timeBudget: generationBudget,
+    );
 
     if (result.isSuccess) {
       final level = result.value;

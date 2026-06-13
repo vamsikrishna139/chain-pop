@@ -119,9 +119,14 @@ class GamePauseOverlay extends StatelessWidget {
                     ),
                     const SizedBox(height: 28),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      // Wrap (not Row): RESTART + MENU exceed narrow screens,
+                      // so let the second button reflow below instead of
+                      // overflowing the right edge.
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 20,
+                        runSpacing: 4,
                         children: [
                           Semantics(
                             button: true,
@@ -143,7 +148,6 @@ class GamePauseOverlay extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 20),
                           Semantics(
                             button: true,
                             label: 'Leave to main menu from pause',

@@ -4,6 +4,7 @@
 /// register themselves through [seedRegistry] / [milestoneSeedFor].
 library seeds;
 
+export 'showcase_levels.dart';
 export 'milestone_seeds.dart';
 export 'opening_seeds.dart';
 export 'seed_registry.dart';

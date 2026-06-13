@@ -22,6 +22,7 @@ LevelMetrics _metrics({
     tempoProfile: const [],
     viablePathCount: -1,
     viablePathCountCapped: false,
+    wavePeelingProfile: const [],
   );
 }
 

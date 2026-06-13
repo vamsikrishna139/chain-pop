@@ -4,10 +4,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('computeTutorialCountdownSec', () {
-    test('first four steps get 60s, final step 45s', () {
+    test('movement steps get 60s, recap 45s, mechanic intros 60s', () {
       expect(computeTutorialCountdownSec(0), 60);
       expect(computeTutorialCountdownSec(3), 60);
       expect(computeTutorialCountdownSec(4), 45);
+      expect(computeTutorialCountdownSec(5), 60);
+      expect(computeTutorialCountdownSec(7), 60);
     });
   });
 
@@ -31,6 +33,22 @@ void main() {
       final high = computeGameTimeLimit(DifficultyMode.easy, 8, 120)!;
       expect(high, lessThanOrEqualTo(low));
       expect(high, greaterThanOrEqualTo(120));
+    });
+  });
+
+  group('computeGameTimeLimit — hard', () {
+    test('returns countdown scaled by node count and level', () {
+      final small = computeGameTimeLimit(DifficultyMode.hard, 20, 30)!;
+      final large = computeGameTimeLimit(DifficultyMode.hard, 45, 30)!;
+      expect(small, greaterThanOrEqualTo(25));
+      expect(small, lessThanOrEqualTo(150));
+      expect(large, greaterThan(small));
+    });
+
+    test('higher level ids get slightly less time', () {
+      final early = computeGameTimeLimit(DifficultyMode.hard, 30, 10)!;
+      final late = computeGameTimeLimit(DifficultyMode.hard, 30, 200)!;
+      expect(late, lessThanOrEqualTo(early));
     });
   });
 }

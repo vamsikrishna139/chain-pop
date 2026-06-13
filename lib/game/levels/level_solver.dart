@@ -1,6 +1,24 @@
 import 'grid_cell_key.dart';
 import 'level.dart';
 
+/// Result of tracing a node's facing ray across the board.
+class RayTraceResult {
+  /// Grid cell where the ray stops (blocker cell or last in-bounds cell).
+  final int endX;
+  final int endY;
+
+  /// When the ray hits another node before exiting the grid.
+  final int? blockerNodeId;
+
+  const RayTraceResult({
+    required this.endX,
+    required this.endY,
+    this.blockerNodeId,
+  });
+
+  bool get hitsBlocker => blockerNodeId != null;
+}
+
 /// Stateless solver utilities for Chain Pop.
 ///
 /// Performance notes:
@@ -38,6 +56,35 @@ class LevelSolver {
         positions.remove(gridCellKey(n.x, n.y));
       }
     }
+  }
+
+  /// Returns a map of node ID to its parallel-removal wave index.
+  ///
+  /// Solves the level in waves (similar to [countRemovalWaves]) and records the
+  /// wave index at which each node is extracted. If a node cannot be cleared,
+  /// its ID will not be in the map.
+  static Map<int, int> nodeWaveIndices(LevelData level) {
+    final nodes = level.nodes.map((n) => n.clone()).toList();
+    final positions = <int>{for (final n in nodes) gridCellKey(n.x, n.y)};
+    final waveIndices = <int, int>{};
+    var waves = 0;
+
+    while (true) {
+      final wave = [
+        for (final n in nodes)
+          if (_canRemoveWithSet(n, positions, level)) n,
+      ];
+      if (wave.isEmpty) {
+        break;
+      }
+      for (final n in wave) {
+        waveIndices[n.id] = waves;
+        nodes.remove(n);
+        positions.remove(gridCellKey(n.x, n.y));
+      }
+      waves++;
+    }
+    return waveIndices;
   }
 
   /// Finds the first currently-removable node for the hint system.
@@ -83,6 +130,49 @@ class LevelSolver {
     return _canRemoveWithSet(node, otherPositions, level);
   }
 
+  /// Traces [node]'s facing ray to the grid edge or the first blocking node.
+  static RayTraceResult traceRay(
+    NodeData node,
+    List<NodeData> activeNodes,
+    LevelData level,
+  ) {
+    final idByCell = <int, int>{};
+    for (final n in activeNodes) {
+      if (n.id != node.id) {
+        idByCell[gridCellKey(n.x, n.y)] = n.id;
+      }
+    }
+
+    var x = node.x;
+    var y = node.y;
+    final gw = level.gridWidth;
+    final gh = level.gridHeight;
+
+    while (true) {
+      switch (node.dir) {
+        case Direction.up:
+          y--;
+        case Direction.down:
+          y++;
+        case Direction.left:
+          x--;
+        case Direction.right:
+          x++;
+      }
+      if (x < 0 || x >= gw || y < 0 || y >= gh) {
+        return RayTraceResult(endX: x, endY: y, blockerNodeId: null);
+      }
+      final blockerId = idByCell[gridCellKey(x, y)];
+      if (blockerId != null) {
+        return RayTraceResult(
+          endX: x,
+          endY: y,
+          blockerNodeId: blockerId,
+        );
+      }
+    }
+  }
+
   // ── Internal helper ──────────────────────────────────────────────────────
 
   /// Walks the ray cell-by-cell across the full grid: blocked by another node;
@@ -92,6 +182,9 @@ class LevelSolver {
     Set<int> otherPositions,
     LevelData level,
   ) {
+    if (node.kind == NodeKind.locked && _lockedNeighborsRemain(node, otherPositions, level)) {
+      return false;
+    }
     var x = node.x;
     var y = node.y;
     final gw = level.gridWidth;
@@ -111,5 +204,21 @@ class LevelSolver {
       if (x < 0 || x >= gw || y < 0 || y >= gh) return true;
       if (otherPositions.contains(gridCellKey(x, y))) return false;
     }
+  }
+
+  static bool _lockedNeighborsRemain(
+    NodeData node,
+    Set<int> otherPositions,
+    LevelData level,
+  ) {
+    for (final (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)]) {
+      final nx = node.x + dx;
+      final ny = node.y + dy;
+      if (nx < 0 || nx >= level.gridWidth || ny < 0 || ny >= level.gridHeight) {
+        continue;
+      }
+      if (otherPositions.contains(gridCellKey(nx, ny))) return true;
+    }
+    return false;
   }
 }

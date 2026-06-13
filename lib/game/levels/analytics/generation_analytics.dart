@@ -2,6 +2,7 @@ import '../generation/archetype.dart';
 import '../generation/diversity_ledger.dart';
 import '../generation/level_seed.dart';
 import '../generation/metrics.dart';
+import '../generation/motifs.dart';
 import '../generation/silhouettes.dart';
 import '../level.dart';
 
@@ -47,6 +48,28 @@ class GenerationEmissionEvent {
   /// Number of Director Renegotiations consumed before this emission.
   final int renegotiations;
 
+  /// Primary visible motif on the shipped level, if any.
+  final MotifId? dominantMotifId;
+
+  /// True when a [MotifId.lockCluster] block survived construction.
+  final bool lockClusterPlaced;
+
+  /// [LevelMetrics.criticalUnlockDepth] when [lockClusterPlaced] is true.
+  final int clusterCud;
+
+  /// Per-shipped-level construction telemetry (not K-loop cumulative).
+  final int crunchPick;
+  final int blkOffered;
+  final int blkPicked;
+  final int solvabilityRetries;
+  final int? winRetry;
+
+  /// Ray-dependency topology on the shipped board.
+  final int chainDepthMax;
+  final int maxHubInDegree;
+  final double avgUnlockFanout;
+  final bool pathsCapped;
+
   const GenerationEmissionEvent({
     required this.levelId,
     required this.archetype,
@@ -57,6 +80,18 @@ class GenerationEmissionEvent {
     required this.metrics,
     required this.fingerprint,
     required this.renegotiations,
+    this.dominantMotifId,
+    this.lockClusterPlaced = false,
+    this.clusterCud = 0,
+    this.crunchPick = 0,
+    this.blkOffered = 0,
+    this.blkPicked = 0,
+    this.solvabilityRetries = 0,
+    this.winRetry,
+    this.chainDepthMax = 0,
+    this.maxHubInDegree = 0,
+    this.avgUnlockFanout = 0,
+    this.pathsCapped = false,
   });
 
   /// Plain-old map suitable for sending to any flat-payload sink (Firebase
@@ -81,7 +116,41 @@ class GenerationEmissionEvent {
             metrics.frontierVariance.toStringAsFixed(3),
         'metrics.viablePathCount': metrics.viablePathCount,
         'fingerprint.bits': fingerprint.bits,
+        'dominantMotifId': dominantMotifId?.name,
+        'lockClusterPlaced': lockClusterPlaced,
+        'clusterCud': clusterCud,
+        'crunchPick': crunchPick,
+        'blkOffered': blkOffered,
+        'blkPicked': blkPicked,
+        'solvabilityRetries': solvabilityRetries,
+        'winRetry': winRetry,
+        'topology.chainDepthMax': chainDepthMax,
+        'topology.maxHubInDegree': maxHubInDegree,
+        'topology.avgUnlockFanout':
+            avgUnlockFanout.toStringAsFixed(2),
+        'topology.pathsCapped': pathsCapped,
       };
+}
+
+/// Construction telemetry from a single retrograde build (one K-loop winner).
+class ConstructionTelemetry {
+  final int blockingDirCandidatesOffered;
+  final int blockingDirCandidatesPicked;
+  final int crunchZoneBlockingPicked;
+  final int releaseZoneFallbackPicked;
+  final int constructionSolvabilityRetries;
+  final int? winningBlockingRetryIndex;
+
+  const ConstructionTelemetry({
+    this.blockingDirCandidatesOffered = 0,
+    this.blockingDirCandidatesPicked = 0,
+    this.crunchZoneBlockingPicked = 0,
+    this.releaseZoneFallbackPicked = 0,
+    this.constructionSolvabilityRetries = 0,
+    this.winningBlockingRetryIndex,
+  });
+
+  static const ConstructionTelemetry zero = ConstructionTelemetry();
 }
 
 /// Cumulative session snapshot. The host app can poll this every N levels
@@ -99,6 +168,20 @@ class GenerationSessionSnapshot {
   final Map<String, int> seedEmissions;
   final int strongMotifEmissions;
   final int strongMotifEmissionsWithMotif;
+  final int blockingDirCandidatesOffered;
+  final int blockingDirCandidatesPicked;
+  final int crunchZoneBlockingPicked;
+  final int releaseZoneFallbackPicked;
+  final int constructionSolvabilityRetries;
+  final int winningBlockingRetryIndex0;
+  final int winningBlockingRetryIndex1;
+  final int winningBlockingRetryIndex2;
+  final int maxAttemptsExhaustedCount;
+  final int rejectAspectCount;
+  final int rejectOccupancyCount;
+  final int rejectComponentsCount;
+  final int rejectSingletonCount;
+  final int rejectBlobVsGridCount;
 
   const GenerationSessionSnapshot({
     required this.retrogradeAttempts,
@@ -113,6 +196,20 @@ class GenerationSessionSnapshot {
     required this.seedEmissions,
     required this.strongMotifEmissions,
     required this.strongMotifEmissionsWithMotif,
+    this.blockingDirCandidatesOffered = 0,
+    this.blockingDirCandidatesPicked = 0,
+    this.crunchZoneBlockingPicked = 0,
+    this.releaseZoneFallbackPicked = 0,
+    this.constructionSolvabilityRetries = 0,
+    this.winningBlockingRetryIndex0 = 0,
+    this.winningBlockingRetryIndex1 = 0,
+    this.winningBlockingRetryIndex2 = 0,
+    this.maxAttemptsExhaustedCount = 0,
+    this.rejectAspectCount = 0,
+    this.rejectOccupancyCount = 0,
+    this.rejectComponentsCount = 0,
+    this.rejectSingletonCount = 0,
+    this.rejectBlobVsGridCount = 0,
   });
 
   /// Convenience: motif visibility rate for the Strong-Motif archetype.
@@ -143,6 +240,20 @@ class GenerationSessionSnapshot {
         'strongMotifEmissions': strongMotifEmissions,
         'strongMotifEmissionsWithMotif': strongMotifEmissionsWithMotif,
         'strongMotifVisibilityRate': strongMotifVisibilityRate,
+        'blockingDirCandidatesOffered': blockingDirCandidatesOffered,
+        'blockingDirCandidatesPicked': blockingDirCandidatesPicked,
+        'crunchZoneBlockingPicked': crunchZoneBlockingPicked,
+        'releaseZoneFallbackPicked': releaseZoneFallbackPicked,
+        'constructionSolvabilityRetries': constructionSolvabilityRetries,
+        'winningBlockingRetryIndex0': winningBlockingRetryIndex0,
+        'winningBlockingRetryIndex1': winningBlockingRetryIndex1,
+        'winningBlockingRetryIndex2': winningBlockingRetryIndex2,
+        'maxAttemptsExhaustedCount': maxAttemptsExhaustedCount,
+        'rejectAspectCount': rejectAspectCount,
+        'rejectOccupancyCount': rejectOccupancyCount,
+        'rejectComponentsCount': rejectComponentsCount,
+        'rejectSingletonCount': rejectSingletonCount,
+        'rejectBlobVsGridCount': rejectBlobVsGridCount,
       };
 }
 
@@ -207,7 +318,16 @@ GenerationEmissionEvent buildEmissionEvent({
   required LevelMetrics metrics,
   required LevelFingerprint fingerprint,
   required int renegotiations,
+  List<MotifId> visibleMotifs = const [],
+  ConstructionTelemetry construction = ConstructionTelemetry.zero,
+  int chainDepthMax = 0,
+  int maxHubInDegree = 0,
+  double avgUnlockFanout = 0,
+  bool pathsCapped = false,
 }) {
+  final dominant =
+      visibleMotifs.isEmpty ? null : visibleMotifs.first;
+  final lockCluster = visibleMotifs.contains(MotifId.lockCluster);
   return GenerationEmissionEvent(
     levelId: level.levelId,
     archetype: archetype,
@@ -218,5 +338,17 @@ GenerationEmissionEvent buildEmissionEvent({
     metrics: metrics,
     fingerprint: fingerprint,
     renegotiations: renegotiations,
+    dominantMotifId: dominant,
+    lockClusterPlaced: lockCluster,
+    clusterCud: lockCluster ? metrics.criticalUnlockDepth : 0,
+    crunchPick: construction.crunchZoneBlockingPicked,
+    blkOffered: construction.blockingDirCandidatesOffered,
+    blkPicked: construction.blockingDirCandidatesPicked,
+    solvabilityRetries: construction.constructionSolvabilityRetries,
+    winRetry: construction.winningBlockingRetryIndex,
+    chainDepthMax: chainDepthMax,
+    maxHubInDegree: maxHubInDegree,
+    avgUnlockFanout: avgUnlockFanout,
+    pathsCapped: pathsCapped,
   );
 }

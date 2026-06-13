@@ -10,6 +10,8 @@ LevelMetrics _metrics({
   required int firstLegal,
   required int cud,
   required double fsr,
+  List<int> tempoProfile = const [],
+  List<int> wavePeelingProfile = const [4],
 }) {
   return LevelMetrics(
     nodeCount: nodeCount,
@@ -19,9 +21,10 @@ LevelMetrics _metrics({
     criticalUnlockDepth: cud,
     forcedSequenceRatio: fsr,
     frontierVariance: 0.0,
-    tempoProfile: const [],
+    tempoProfile: tempoProfile,
     viablePathCount: -1,
     viablePathCountCapped: false,
+    wavePeelingProfile: wavePeelingProfile,
   );
 }
 
@@ -42,24 +45,73 @@ void main() {
       final m = _metrics(
         nodeCount: 24,
         waveDepth: 6,
-        avgBF: 3.0,
-        firstLegal: 2,
+        avgBF: 4.0,
+        firstLegal: 5,
         cud: 5,
-        fsr: 0.30,
+        fsr: 0.55,
       );
       expect(DifficultyProfile.hard.passes(m), isTrue);
     });
 
-    test('Hard rejects BF below 2 (softened-band reviewer rule)', () {
+    test('Hard rejects BF below 3 (immersive opening band)', () {
       final m = _metrics(
         nodeCount: 24,
         waveDepth: 6,
-        avgBF: 1.7,
+        avgBF: 2.5,
+        firstLegal: 5,
+        cud: 5,
+        fsr: 0.55,
+      );
+      expect(DifficultyProfile.hard.passes(m), isFalse);
+    });
+
+    test('Hard rejects waveZeroWidth above 5', () {
+      final m = _metrics(
+        nodeCount: 24,
+        waveDepth: 6,
+        avgBF: 4.0,
+        firstLegal: 5,
+        cud: 5,
+        fsr: 0.55,
+        wavePeelingProfile: const [9, 3, 2],
+      );
+      expect(DifficultyProfile.hard.passes(m), isFalse);
+    });
+
+    test('Hard rejects opening below 3 first-legals', () {
+      final m = _metrics(
+        nodeCount: 24,
+        waveDepth: 6,
+        avgBF: 4.0,
         firstLegal: 2,
+        cud: 5,
+        fsr: 0.55,
+      );
+      expect(DifficultyProfile.hard.passes(m), isFalse);
+    });
+
+    test('Hard rejects FSR below tier minimum', () {
+      final m = _metrics(
+        nodeCount: 24,
+        waveDepth: 6,
+        avgBF: 4.0,
+        firstLegal: 5,
         cud: 5,
         fsr: 0.30,
       );
       expect(DifficultyProfile.hard.passes(m), isFalse);
+    });
+
+    test('Hard accepts FSR within tier band and below universal cap', () {
+      final m = _metrics(
+        nodeCount: 24,
+        waveDepth: 6,
+        avgBF: 4.0,
+        firstLegal: 5,
+        cud: 5,
+        fsr: 0.50,
+      );
+      expect(DifficultyProfile.hard.passes(m), isTrue);
     });
 
     test('Easy rejects an Expert-like FSR', () {
@@ -72,6 +124,58 @@ void main() {
         fsr: 0.5,
       );
       expect(DifficultyProfile.easy.passes(m), isFalse);
+    });
+
+    test('Hard dramatic tempo accepts rise-then-release profile with arc', () {
+      final m = _metrics(
+        nodeCount: 24,
+        waveDepth: 6,
+        avgBF: 4.0,
+        firstLegal: 4,
+        cud: 5,
+        fsr: 0.55,
+        tempoProfile: const [8, 7, 6, 4, 2, 1, 1, 2, 1, 6, 8, 10],
+        wavePeelingProfile: const [4],
+      );
+      expect(DifficultyProfile.hard.passes(m), isTrue);
+    });
+
+    test('passesTemporalArc rejects flat tempo without crunch', () {
+      expect(
+        DifficultyProfile.hard.passesTemporalArc(
+          const [6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+        ),
+        isFalse,
+      );
+    });
+
+    test('passesTemporalArc accepts flow-crunch-release arc', () {
+      expect(
+        DifficultyProfile.hard.passesTemporalArc(
+          const [8, 7, 6, 4, 2, 1, 1, 2, 1, 6, 8, 10],
+        ),
+        isTrue,
+      );
+    });
+
+    test('passesTemporalArc rejects short sequences', () {
+      expect(
+        DifficultyProfile.hard.passesTemporalArc(const [5, 4, 3, 2, 1]),
+        isFalse,
+      );
+    });
+
+    test('Expert passes flat tempo when other bands match', () {
+      final m = _metrics(
+        nodeCount: 26,
+        waveDepth: 7,
+        avgBF: 3.0,
+        firstLegal: 4,
+        cud: 6,
+        fsr: 0.60,
+        tempoProfile: const [2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+      );
+      expect(DifficultyProfile.expert.passes(m), isTrue);
     });
   });
 
@@ -87,7 +191,7 @@ void main() {
       );
       expect(DifficultyProfile.passesFsrCap(m), isFalse);
       expect(DifficultyProfile.hard.passes(m), isFalse,
-          reason: 'tier band also fails because the universal cap fires');
+          reason: 'universal FSR cap fires for large boards');
     });
 
     test('small boards are unaffected by the cap', () {

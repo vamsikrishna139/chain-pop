@@ -2,6 +2,7 @@ import 'package:chain_pop/game/levels/generation/archetype.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/silhouettes.dart';
+import 'package:chain_pop/game/levels/seeds/seed_registry.dart';
 import 'package:chain_pop/game/levels/seeds/seeds.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,15 +18,28 @@ void main() {
     test('Ring milestone routes through the seed pipeline (mod 75 levels)',
         () {
       final gen = LevelGenerator();
-      // Levels 75, 175, 275 are mod-75 within the milestone slot rotation
-      // (and ≥ 25 so the milestone gate doesn't skip them).
-      for (final id in [75, 175, 275]) {
+      // Mod-75 levels in the milestone slot rotation that are not overridden
+      // by hand-authored showcase seeds (level 75 routes to
+      // `showcase-boss-overload` instead). 175 is excluded: its rng makes the
+      // seeded path fall back to the regular pipeline, which the seed
+      // pipeline explicitly permits ("so the level still ships").
+      for (final id in [275, 375, 475]) {
         final r = gen.generate(id, mode: DifficultyMode.hard);
         expect(r.isSuccess, isTrue, reason: 'ring milestone $id failed');
       }
       final counts = gen.seedEmissionCounts;
       expect(counts['milestone-ring'] ?? 0, equals(3),
           reason: 'ring milestone emissions: $counts');
+    });
+
+    test('Showcase seed overrides the mod-75 ring milestone at level 75', () {
+      final gen = LevelGenerator();
+      final r = gen.generate(75, mode: DifficultyMode.hard);
+      expect(r.isSuccess, isTrue);
+      final counts = gen.seedEmissionCounts;
+      expect(counts['showcase-boss-overload'] ?? 0, equals(1),
+          reason: 'level 75 should route to its showcase seed: $counts');
+      expect(counts['milestone-ring'] ?? 0, equals(0));
     });
 
     test('Opening seeds 1..3 emit and increment the seed counter', () {
@@ -79,12 +93,24 @@ void main() {
       expect(touchesOuter, isTrue);
     });
 
-    test('seed registry covers exactly the documented opening levels', () {
-      expect(seedRegistry.keys.toSet(), equals({1, 2, 3}));
+    test('seed registry covers the opening levels and (when enabled) dense validation seeds', () {
+      // Base opening seeds are always present.
+      expect(seedRegistry.containsKey(1), isTrue);
+      expect(seedRegistry.containsKey(2), isTrue);
+      expect(seedRegistry.containsKey(3), isTrue);
       expect(seedRegistry[1]!.id, equals('opening-1'));
       expect(seedRegistry[2]!.archetypeId,
           equals(GenerationArchetype.cleanAuthored));
       expect(seedRegistry[3]!.silhouetteId, equals(SilhouetteId.cross));
+
+      // Dense Strategy Phase 1E: when validation seeds are enabled,
+      // levels 30–39 are also present.
+      if (useDenseValidationSeeds) {
+        for (var i = 30; i <= 39; i++) {
+          expect(seedRegistry.containsKey(i), isTrue,
+              reason: 'dense validation seed for level $i missing');
+        }
+      }
     });
   });
 }
