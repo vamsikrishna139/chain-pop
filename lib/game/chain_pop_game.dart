@@ -19,6 +19,7 @@ import 'components/node_component.dart';
 import 'components/ray_preview_component.dart';
 import 'components/relay_sweep_component.dart';
 import 'components/restored_network_component.dart';
+import 'components/tutorial_coach_mark.dart';
 import '../services/game_sfx.dart';
 import '../theme/app_colors.dart';
 import '../theme/world_theme.dart';
@@ -75,6 +76,12 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   bool isGameOver = false;
   late PositionComponent board;
   double _cellSize = 0;
+
+  /// When true (set by [GameScreen] for tutorials), a [TutorialCoachMark] points
+  /// at the next valid move after every pop, walking the player through the
+  /// board. No effect on normal play.
+  bool tutorialCoaching = false;
+  TutorialCoachMark? _coachMark;
 
   // ── Board zoom / pan (scale is around board centre; pan in screen space) ──
   static const double _minZoom = 1.0;
@@ -422,9 +429,15 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       board.add(NodeComponent(data: nodeData, cellSize: cellSize));
     }
 
+    if (tutorialCoaching) {
+      _coachMark = TutorialCoachMark(cellSize: cellSize);
+      board.add(_coachMark!);
+    }
+
     add(board);
     _boardLaidOut = true;
     _applyBoardTransform();
+    _refreshCoachMark();
 
     for (final o in orphans) {
       final node = o.$1;
@@ -571,6 +584,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _undoStack.add(data.clone());
     activeNodes.removeWhere((n) => n.id == data.id);
     _rebuildExtractableIds();
+    _refreshCoachMark();
 
     _spawnExtractionVisuals(data);
     _ambient?.setStreak(_extractionStreak);
@@ -868,5 +882,25 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _newlyExtractable
       ..clear()
       ..addAll(_extractableIds.difference(previous));
+  }
+
+  /// Tutorial only: point the coach mark at the next valid move (the solver's
+  /// hint), or hide it when the board is solved/won. Cheap — one [getHint] walk.
+  void _refreshCoachMark() {
+    final mark = _coachMark;
+    if (!tutorialCoaching || mark == null || !_boardLaidOut) return;
+    if (hasWon || isGameOver) {
+      mark.hide();
+      return;
+    }
+    final hint = LevelSolver.getHint(activeNodes, levelData);
+    if (hint == null) {
+      mark.hide();
+      return;
+    }
+    mark.showAt(Vector2(
+      (hint.x + 0.5) * _cellSize,
+      (hint.y + 0.5) * _cellSize,
+    ));
   }
 }

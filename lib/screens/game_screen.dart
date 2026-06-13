@@ -407,6 +407,7 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     g.colorblindPalette = _settings.colorblindFriendly;
     g.showAimRay = _settings.showAimRay;
     g.ambientMotion = _settings.ambientMotion;
+    g.tutorialCoaching = widget.isTutorial;
     g.onSfx = (sfx, {double playbackRate = 1.0}) =>
         unawaited(_audio.play(sfx, playbackRate: playbackRate));
   }
@@ -568,31 +569,24 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   String _tutorialHintText() {
     switch (widget.tutorialIndex) {
       case 0:
-        return 'Tap an arrow whose path is clear to the edge and clear the board before the countdown reaches zero. '
-            'Pinch or tap Zoom in for a closer look; Reset zoom snaps back to the full board.';
+        return 'Tap an arrow that has a clear path off the board. Follow the pointer.';
       case 1:
-        return 'Arrows block each other—clear a free exit first and watch the countdown. '
-            'Tap the grid button for alignment lines along shared rows and columns.';
+        return 'Some arrows block each other. Clear a free one first — follow the pointer.';
       case 2:
-        return 'Chain good pops in a safe order—the timer only counts down, pops never add time. '
-            'Unsure what is safe? Tap the lightbulb hint and a removable arrow PULSES to show a move.';
+        return 'Clear arrows in a safe order. The pointer always shows a safe move.';
       case 3:
-        return 'Bigger board: plan clears and watch the countdown—zoom or alignment lines help scan paths.';
+        return 'Bigger board — keep following the pointer to clear it.';
       case 4:
-        return 'Recap: 8 arrows—clear everything before the 45s countdown hits zero. '
-            'Pinch out or Reset zoom if you need the full board again.';
+        return 'Clear the whole board. The pointer shows a safe move each time.';
       case 5:
-        return 'Gold-ringed arrows are CORES—extract all three to win. The other two point at '
-            'each other and can never move; popping the last core auto-clears them. '
-            'Watch INTEGRITY (top-left): your network health drops if you misfire a blocked '
-            'arrow and rises as you restore cores.';
+        return 'Gold-ringed arrows are CORES — clear all 3 to win. '
+            'The two stuck arrows clear themselves once the cores are gone.';
       case 6:
-        return 'The arrow with the green ring is a RELAY. Popping it spins every arrow in its '
-            'row a quarter turn clockwise—fire it to free the pair stuck face-to-face, '
-            'then clear what remains.';
+        return 'The green-ringed arrow is a SPINNER. Tap it to turn its whole row '
+            'and free the arrows stuck facing each other.';
       default:
-        return 'The padlocked arrow is LOCKED until the tiles around it are empty. '
-            'Clear its two neighbors first, then send it on its way.';
+        return 'The padlocked arrow is LOCKED. Clear the tiles right next to it '
+            'first, then tap it.';
     }
   }
 
