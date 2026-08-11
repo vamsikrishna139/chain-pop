@@ -353,5 +353,37 @@ void main() {
         expect(result.isValid, isTrue);
       });
     });
+
+    group('node-count clamp safety (A2 guard)', () {
+      test('fromLevelId never crashes across all modes and 500 level IDs', () {
+        // This exercises _calculateNodeCount for every mode/level combo.
+        // Before the A2 fix, sparse archetypes on small grids could make
+        // maxPossible < minNodes, causing baseCount.clamp(lo, hi) to throw
+        // when hi < lo.
+        for (final mode in DifficultyMode.values) {
+          for (var id = 0; id < 500; id++) {
+            final config = LevelConfiguration.fromLevelId(id, mode: mode);
+            expect(config.targetNodeCount,
+                greaterThanOrEqualTo(config.difficulty.minNodes),
+                reason: 'level $id mode=$mode should have '
+                    'targetNodeCount >= minNodes');
+            expect(config.targetNodeCount,
+                lessThanOrEqualTo(config.gridWidth * config.gridHeight),
+                reason: 'level $id mode=$mode should have '
+                    'targetNodeCount <= grid area');
+          }
+        }
+      });
+
+      test('forDailyChallenge never crashes across 365 day keys', () {
+        for (var day = 0; day < 365; day++) {
+          final config = LevelConfiguration.forDailyChallenge(day);
+          expect(config.targetNodeCount,
+              greaterThanOrEqualTo(config.difficulty.minNodes),
+              reason: 'daily day=$day should have '
+                  'targetNodeCount >= minNodes');
+        }
+      });
+    });
   });
 }

@@ -2,8 +2,9 @@ import 'dart:math';
 
 import '../grid_cell_key.dart';
 import '../level.dart';
+import 'dependency_graph.dart';
+import 'difficulty_profile.dart';
 import 'frontier_set.dart';
-import 'removal_order.dart';
 import 'sightline_table.dart';
 
 /// Weights for the [CandidateScorer]'s linear combination of feature scores.
@@ -418,5 +419,13 @@ class CandidateScorer {
       if (r <= 0) return candidates[i];
     }
     return candidates.last;
+  }
+
+  /// Soft topology preference for Hard/Expert in-band candidate ranking (B3).
+  static double topologyPreferenceScore(
+    DependencyGraph graph,
+    DifficultyTier tier,
+  ) {
+    return DifficultyProfile.forTier(tier).topologySoftScoreFromGraph(graph);
   }
 }

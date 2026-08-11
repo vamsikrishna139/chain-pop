@@ -4,30 +4,15 @@ import '../grid_cell_key.dart';
 import '../level.dart';
 import '../level_solver.dart';
 import 'candidate_scorer.dart';
+import 'dependency_graph.dart';
 import 'frontier_set.dart';
 import 'motifs.dart';
 import 'removal_order.dart';
+export 'retrograde_placement.dart';
+import 'retrograde_placement.dart';
 import 'sightline_table.dart';
 import 'difficulty_profile.dart';
 import 'metrics.dart';
-
-/// A single committed placement in the retrograde sequence — a board cell
-/// paired with the direction whose ray was clear at the moment of placement.
-class RetrogradePlacement {
-  /// `(x, y)` on the bounding grid.
-  final Point<int> position;
-
-  /// The direction the node will fire when extracted.
-  final Direction direction;
-
-  const RetrogradePlacement({
-    required this.position,
-    required this.direction,
-  });
-
-  @override
-  String toString() => 'RetrogradePlacement($position, $direction)';
-}
 
 /// Constructs a fully solvable level from the **empty** board outward, in
 /// reverse extraction order (last-removed first).
@@ -106,8 +91,9 @@ class RetrogradeConstructor {
   static const Map<DifficultyTier, int> _maxOpeningByTier = {
     DifficultyTier.easy: 10,
     DifficultyTier.medium: 8,
-    DifficultyTier.hard: 5,
-    DifficultyTier.expert: 5,
+    // Matches [DifficultyProfile.hardExpertOpeningBand] — see OPENING_BAND_DECISION.md.
+    DifficultyTier.hard: 11,
+    DifficultyTier.expert: 11,
   };
 
   static const Map<DifficultyTier, int> _minOpeningByTier = {
@@ -692,40 +678,11 @@ class RetrogradeConstructor {
     return result;
   }
 
-  _DependencyIndex _buildDependencyIndex(List<RetrogradePlacement> order) {
-    final chainDepth = <int, int>{};
-    final blockerFanIn = <int, int>{};
-    final blockedIds = <int>{};
-    final rayTarget = <int, int?>{};
-
-    for (var i = 0; i < order.length; i++) {
-      final target = _firstNodeIdOnRay(
-        order[i].position,
-        order[i].direction,
-        order,
-        selfId: i,
-      );
-      rayTarget[i] = target;
-      if (target != null && target < i) {
-        blockerFanIn[target] = (blockerFanIn[target] ?? 0) + 1;
-        blockedIds.add(i);
-      }
-    }
-
-    for (var i = 0; i < order.length; i++) {
-      final target = rayTarget[i];
-      var depth = 1;
-      if (target != null && target < i) {
-        final parentDepth = chainDepth[target] ?? 1;
-        if (parentDepth + 1 > depth) depth = parentDepth + 1;
-      }
-      chainDepth[i] = depth;
-    }
-
-    return _DependencyIndex(
-      chainDepth: chainDepth,
-      blockerFanIn: blockerFanIn,
-      blockedIds: blockedIds,
+  DependencyGraph _buildDependencyIndex(List<RetrogradePlacement> order) {
+    return DependencyGraph.fromRetrogradeOrder(
+      order,
+      gridWidth: gridWidth,
+      gridHeight: gridHeight,
     );
   }
 
@@ -757,7 +714,7 @@ class RetrogradeConstructor {
   double _scoreReassignmentTarget({
     required int i,
     required int j,
-    required _DependencyIndex dep,
+    required DependencyGraph dep,
     required List<RetrogradePlacement> order,
     int? liberationNodeId,
   }) {
@@ -778,7 +735,7 @@ class RetrogradeConstructor {
     int i,
     List<Direction> blockingDirs,
     List<RetrogradePlacement> order,
-    _DependencyIndex dep, {
+    DependencyGraph dep, {
     int? liberationNodeId,
   }) {
     var bestScore = double.negativeInfinity;
@@ -900,8 +857,8 @@ class RetrogradeConstructor {
     var current = placements.toList();
     for (var attempt = 0; attempt < 20; attempt++) {
       final opening = _waveZeroWidth(current);
-      if (opening <= maxOpening) break;
-      if (opening <= minOpening) break;
+      if (opening <= maxOpening && opening >= minOpening) break;
+
 
       final freeIndices = _rayFreeIndices(current);
       freeIndices.sort((a, b) => b.compareTo(a));
@@ -1055,22 +1012,4 @@ class RetrogradeConstructor {
     if (clearDirs.isNotEmpty) return clearDirs;
     return blockingDirs;
   }
-}
-
-class _DependencyIndex {
-  final Map<int, int> chainDepth;
-  final Map<int, int> blockerFanIn;
-  final Set<int> blockedIds;
-
-  const _DependencyIndex({
-    required this.chainDepth,
-    required this.blockerFanIn,
-    required this.blockedIds,
-  });
-
-  int chainDepthOf(int id) => chainDepth[id] ?? 1;
-
-  int blockerFanInOf(int id) => blockerFanIn[id] ?? 0;
-
-  bool isBlocked(int id) => blockedIds.contains(id);
 }

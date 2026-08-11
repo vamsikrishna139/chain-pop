@@ -65,7 +65,7 @@ Future<void> showPrivacyRightsSheet({
                           ),
                         ),
                         const SizedBox(height: 24),
-                        _Section(
+                        const _Section(
                           title: 'Ad Choices',
                           content:
                               'Change consent for personalized ads and ad measurement where available.',
@@ -93,13 +93,13 @@ Future<void> showPrivacyRightsSheet({
                             ),
                           ),
                         const SizedBox(height: 24),
-                        _Section(
+                        const _Section(
                           title: 'Your Data',
                           content:
                               'Game progress is stored strictly on your device. Analytical and ad-related data may be transmitted to Google and partners to ensure game health and serve relevant content.',
                         ),
                         const SizedBox(height: 24),
-                        _Section(
+                        const _Section(
                           title: 'Your Rights',
                           content:
                               'Depending on where you live, you have the right to access, correct, or delete your data, and opt-out of targeted advertising. Please view our full privacy policy for detailed instructions.',
@@ -116,7 +116,7 @@ Future<void> showPrivacyRightsSheet({
                                     mode: LaunchMode.externalApplication);
                               }
                             },
-                            icon: Icon(Icons.article_outlined,
+                            icon: const Icon(Icons.article_outlined,
                                 color: Colors.white70, size: 18),
                             label: const Text(
                               'Read full privacy policy',
@@ -125,7 +125,7 @@ Future<void> showPrivacyRightsSheet({
                           ),
                         ),
                         const SizedBox(height: 24),
-                        _Section(
+                        const _Section(
                           title: 'Contact',
                           content:
                               'Have questions about your data or wish to exercise your rights?',
@@ -145,7 +145,7 @@ Future<void> showPrivacyRightsSheet({
                                 await launchUrl(uri);
                               }
                             },
-                            icon: Icon(Icons.email_outlined,
+                            icon: const Icon(Icons.email_outlined,
                                 color: Colors.white70, size: 18),
                             label: const Text(
                               'Request privacy help',

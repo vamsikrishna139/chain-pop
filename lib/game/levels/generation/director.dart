@@ -2,8 +2,8 @@ import 'dart:math';
 
 import '../grid_cell_key.dart';
 import 'archetype.dart';
-import 'candidate_scorer.dart';
 import 'difficulty_mode.dart';
+
 import 'difficulty_profile.dart';
 import 'level_configuration.dart';
 import 'level_seed.dart';
@@ -20,11 +20,6 @@ const List<SilhouetteId> _denseSilhouettes = [
   SilhouetteId.rectangle,
 ];
 
-/// Silhouettes demoted under Phase 1C bias — they tend toward sparse layouts.
-const List<SilhouetteId> _sparseSilhouettes = [
-  SilhouetteId.archipelago,
-  SilhouetteId.organicBlob,
-];
 
 /// Concrete generation plan the Director hands to one Retrograde (or legacy)
 /// attempt. Immutable; the Director produces a fresh [GenerationPlan] on

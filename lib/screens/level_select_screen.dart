@@ -7,7 +7,7 @@ import '../game/levels/level_grid_config.dart';
 import '../models/difficulty.dart';
 import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
-import '../services/storage_service.dart';
+import '../services/storage/storage_locator.dart';
 import '../game/world_registry.dart';
 import '../theme/app_colors.dart';
 import '../utils/progress_format.dart';
@@ -131,10 +131,10 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
   }
 
   void _openLevel(int levelId, DifficultyMode mode) async {
-    if (StorageService.gameSettings.soundEnabled) {
+    if (StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
-    await StorageService.setSelectedDifficulty(mode);
+    await StorageLocator.instance.setSelectedDifficulty(mode);
     if (!mounted) return;
     Navigator.of(context)
         .push(
@@ -227,7 +227,7 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
             tooltip: 'Back',
             icon: Icon(Icons.arrow_back_rounded, color: cs.onSurface),
             onPressed: () {
-              if (StorageService.gameSettings.soundEnabled) {
+              if (StorageLocator.instance.gameSettings.soundEnabled) {
                 unawaited(
                   ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.9),
                 );
@@ -318,7 +318,7 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
                 )
                 .toList(),
             onTap: (_) {
-              if (StorageService.gameSettings.soundEnabled) {
+              if (StorageLocator.instance.gameSettings.soundEnabled) {
                 unawaited(
                   ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.1),
                 );
@@ -357,7 +357,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   @override
   void initState() {
     super.initState();
-    final highest = StorageService.highestUnlocked(widget.mode);
+    final highest = StorageLocator.instance.highestUnlocked(widget.mode);
     _currentPage = ((highest - 1) / _pageSize).floor();
     _pageCtrl = PageController(initialPage: _currentPage);
     _pillScrollCtrl = ScrollController();
@@ -372,7 +372,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   }
 
   void _goToPage(int page) {
-    if (page != _currentPage && StorageService.gameSettings.soundEnabled) {
+    if (page != _currentPage && StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(
         ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.2),
       );
@@ -385,7 +385,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   }
 
   void _onPillTap(NavGroup group) {
-    if (StorageService.gameSettings.soundEnabled) {
+    if (StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(
         ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.05),
       );
@@ -405,7 +405,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   }
 
   void _closeDrill() {
-    if (StorageService.gameSettings.soundEnabled) {
+    if (StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(
         ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.95),
       );
@@ -438,7 +438,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _scrollPillIntoView() {
     if (!_pillScrollCtrl.hasClients) return;
-    final highest = StorageService.highestUnlocked(widget.mode);
+    final highest = StorageLocator.instance.highestUnlocked(widget.mode);
     final pills = _activePills(highest);
     final activeIdx = pills.indexWhere((g) => g.containsPage(_currentPage));
     if (activeIdx < 0) return;
@@ -475,7 +475,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final highest = StorageService.highestUnlocked(widget.mode);
+    final highest = StorageLocator.instance.highestUnlocked(widget.mode);
     final visible = visibleLevelCardCount(highest);
     final totalPages = (visible / _pageSize).ceil().clamp(1, 99999);
     final nextLevelPage =
@@ -713,7 +713,7 @@ class _ChapterGrid extends StatelessWidget {
         final isUnlocked = levelId <= highestUnlocked;
         final isNext = levelId == highestUnlocked + 1;
         final isFrontier = isUnlocked && levelId == highestUnlocked;
-        final starCount = StorageService.stars(mode, levelId);
+        final starCount = StorageLocator.instance.stars(mode, levelId);
 
         final card = _LevelCard(
           levelId: levelId,
@@ -739,7 +739,7 @@ class _ChapterGrid extends StatelessWidget {
 }
 
 /// Soft repeating glow around the **per-mode** frontier: the level index equal
-/// to [StorageService.highestUnlocked] for this grid's [DifficultyMode] (each
+/// to [StorageLocator.instance.highestUnlocked] for this grid's [DifficultyMode] (each
 /// difficulty tab has its own unlock track).
 class _FrontierLevelPulse extends StatefulWidget {
   final Color accent;

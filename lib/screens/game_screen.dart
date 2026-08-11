@@ -13,12 +13,9 @@ import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
 import '../game/levels/tutorial_levels.dart';
 import '../models/game_settings.dart';
-import '../services/ads/ad_placements.dart';
 import '../services/ads/ad_service.dart';
 import '../services/ads/ads_locator.dart';
 import '../services/crash_reporting.dart';
-import '../services/ads/campaign_between_levels_ads.dart';
-import '../services/ads/campaign_interstitial_frustration_gate.dart';
 import '../services/ads/hint_ad_policy.dart';
 import '../services/ads/undo_ad_policy.dart';
 import '../services/game_audio.dart';
@@ -31,11 +28,15 @@ import '../services/storage/chain_pop_storage.dart';
 import '../services/storage/storage_locator.dart';
 import '../theme/app_colors.dart';
 import '../theme/world_theme.dart';
+import 'game/game_ad_coordination.dart';
+import 'game/game_flow_controller.dart';
+import 'game/game_playfield_sync.dart';
 import 'game/game_screen_constants.dart';
+import 'game/game_screen_controller_host.dart';
 import 'game/game_screen_timer_coordinator.dart';
+import 'game/game_timer_controller.dart';
 import 'game/game_time_limit.dart';
 import 'game/widgets/game_bottom_toolbar.dart';
-import 'game/widgets/game_dialogs.dart';
 import 'game/widgets/game_header_hud.dart';
 import 'game/widgets/game_pause_overlay.dart';
 import 'game/widgets/game_settings_sheet.dart';
@@ -43,11 +44,6 @@ import 'game/widgets/quick_win_banner.dart';
 import 'game/widgets/session_goal_chip.dart';
 import 'game/widgets/win_celebration_overlay.dart';
 import 'game/widgets/win_panel.dart';
-
-part 'game/game_playfield_sync.dart';
-part 'game/game_timer_controller.dart';
-part 'game/game_ad_coordination.dart';
-part 'game/game_flow_controller.dart';
 
 /// Full-screen game view for a single level.
 ///
@@ -138,7 +134,9 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => GameScreenState();
 }
 
-class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
+class GameScreenState extends State<GameScreen>
+    with WidgetsBindingObserver
+    implements GameScreenControllerHost {
   /// Elapsed gameplay already persisted from this route (prevents duplicate adds).
   Duration _lifetimeGameplaySyncedUpTo = Duration.zero;
 
@@ -187,8 +185,213 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   late final GameAdCoordinator _adCoordinator = GameAdCoordinator(this);
   late final GameTimerController _timerController = GameTimerController(this);
 
-  late final ChainPopProgressStore _progress;
+  // ── GameScreenControllerHost ─────────────────────────────────────────────
 
+  @override
+  int get level => widget.level;
+
+  @override
+  DifficultyMode get difficulty => widget.difficulty;
+
+  @override
+  bool get isDailyChallenge => widget.isDailyChallenge;
+
+  @override
+  int? get dailyDayKey => widget.dailyDayKey;
+
+  @override
+  bool get isTutorial => widget.isTutorial;
+
+  @override
+  int get tutorialIndex => widget.tutorialIndex;
+
+  @override
+  AdService? get adServiceOverride => widget.adService;
+
+  @override
+  GameAudioHandle Function()? get audioHandleFactory =>
+      widget.audioHandleFactory;
+
+  @override
+  ChainPopProgressStore? get progressStoreOverride => widget.progressStore;
+
+  @override
+  CampaignStreakTracker? get campaignStreakOverride => widget.campaignStreak;
+
+  @override
+  SessionPacingController? get sessionPacingOverride => widget.sessionPacing;
+
+  @override
+  SessionGoalsController? get sessionGoalsOverride => widget.sessionGoals;
+
+  @override
+  GameScreenTimerCoordinator get timers => _timers;
+
+  @override
+  ChainPopGame? get game => _game;
+
+  @override
+  ChainPopGame get engine => _engine;
+
+  @override
+  int get livesRemaining => _livesRemaining;
+
+  @override
+  set livesRemaining(int value) => _livesRemaining = value;
+
+  @override
+  bool get hasWon => _hasWon;
+
+  @override
+  set hasWon(bool value) => _hasWon = value;
+
+  @override
+  bool get quickWin => _quickWin;
+
+  @override
+  set quickWin(bool value) => _quickWin = value;
+
+  @override
+  bool get isPaused => _isPaused;
+
+  @override
+  set isPaused(bool value) => _isPaused = value;
+
+  @override
+  bool get isSurge => _isSurge;
+
+  @override
+  bool get goingNext => _goingNext;
+
+  @override
+  set goingNext(bool value) => _goingNext = value;
+
+  @override
+  Stopwatch get stopwatch => _stopwatch;
+
+  @override
+  int get earnedStars => _earnedStars;
+
+  @override
+  set earnedStars(int value) => _earnedStars = value;
+
+  @override
+  int get removedNodes => _removedNodes;
+
+  @override
+  set removedNodes(int value) => _removedNodes = value;
+
+  @override
+  int get totalNodes => _totalNodes;
+
+  @override
+  int get autoAdvanceSec => _autoAdvanceSec;
+
+  @override
+  set autoAdvanceSec(int value) => _autoAdvanceSec = value;
+
+  @override
+  int? get timeLeftSec => _timeLeftSec;
+
+  @override
+  set timeLeftSec(int? value) => _timeLeftSec = value;
+
+  @override
+  int? get timeLimitSec => _timeLimitSec;
+
+  @override
+  Duration get lifetimeGameplaySyncedUpTo => _lifetimeGameplaySyncedUpTo;
+
+  @override
+  set lifetimeGameplaySyncedUpTo(Duration value) =>
+      _lifetimeGameplaySyncedUpTo = value;
+
+  @override
+  GameSettings get settings => _settings;
+
+  @override
+  GameAudioHandle get audio => _audio;
+
+  @override
+  ChainPopStorage get gameStorage => _gameStorage;
+
+  @override
+  ChainPopProgressStore get progress => _progress;
+
+  @override
+  AdService get ads => _ads;
+
+  @override
+  UndoAdPolicy get undoAdPolicy => _undoAdPolicy;
+
+  @override
+  HintAdPolicy get hintAdPolicy => _hintAdPolicy;
+
+  @override
+  bool get gateHintsWithAds => _gateHintsWithAds;
+
+  @override
+  bool get hardOrDailyFeatures => _hardOrDailyFeatures;
+
+  @override
+  bool get offerRewardedContinue => _offerRewardedContinue;
+
+  @override
+  GlobalKey get headerHudKey => _headerHudKey;
+
+  @override
+  GlobalKey get footerHudKey => _footerHudKey;
+
+  @override
+  GlobalKey get bodyStackKey => _bodyStackKey;
+
+  @override
+  bool get playfieldInsetFrameScheduled => _playfieldInsetFrameScheduled;
+
+  @override
+  set playfieldInsetFrameScheduled(bool value) =>
+      _playfieldInsetFrameScheduled = value;
+
+  @override
+  double get tutorialHintTop => _tutorialHintTop;
+
+  @override
+  set tutorialHintTop(double value) => _tutorialHintTop = value;
+
+  @override
+  CampaignStreakTracker get streak => _streak;
+
+  @override
+  SessionPacingController get pacing => _pacing;
+
+  @override
+  SessionGoalsController get goals => _goals;
+
+  @override
+  void markDirty(VoidCallback fn) => setState(fn);
+
+  @override
+  void showGoalCompleteToast() => _showGoalCompleteToast();
+
+  @override
+  void handleTimeUp() => _adCoordinator.handleTimeUp();
+
+  @override
+  void startCountdown() => _timerController.startCountdown();
+
+  @override
+  void startEasyHudTimer() => _timerController.startEasyHudTimer();
+
+  @override
+  void resetGhostHintTimer() => _timerController.resetGhostHintTimer();
+
+  @override
+  void resetForRetry() => _gameFlow.resetForRetry();
+
+  @override
+  void goMenu() => _gameFlow.goMenu();
+
+  late final ChainPopProgressStore _progress;
 
   CampaignStreakTracker get _streak =>
       widget.campaignStreak ?? defaultCampaignStreakTracker;
@@ -259,10 +462,6 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   /// Stack-local Y for tutorial hint banner (below measured [GameHeaderHud]).
   double _tutorialHintTop = 118;
-
-  /// Controllers declared in `part` files rebuild through this helper because
-  /// [setState] is protected outside [State] subclasses.
-  void patchState(VoidCallback fn) => setState(fn);
 
   @override
   void initState() {

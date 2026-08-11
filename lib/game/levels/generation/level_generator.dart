@@ -89,10 +89,6 @@ class LevelGenerator {
   int _diversityRejectionCount = 0;
   int _legacyAttemptCount = 0;
   int _renegotiationCount = 0;
-  // Phase 3 retired the monotone fallback path entirely. The counter remains
-  // wired so any future regression can be detected; it should never go
-  // above 0 in production.
-  int _monotoneFallbackHitCount = 0;
   int _blockingDirCandidatesOffered = 0;
   int _blockingDirCandidatesPicked = 0;
   int _crunchZoneBlockingPicked = 0;
@@ -184,12 +180,7 @@ class LevelGenerator {
   /// renegotiation counts here.
   int get renegotiationCount => _renegotiationCount;
 
-  /// Should be `0` in Phase 3+ (monotone fallback retired). Kept as a
-  /// regression sensor; any non-zero value means we shipped a fallback path
-  /// we forgot to delete.
-  int get monotoneFallbackHitCount => _monotoneFallbackHitCount;
-
-  /// Per-archetype emission counter. Used by Phase 3's distribution test.
+  /// Per-archetype emission counter.
   Map<GenerationArchetype, int> get archetypeEmissionCounts =>
       Map<GenerationArchetype, int>.unmodifiable(_archetypeEmissionCounts);
 
@@ -224,7 +215,6 @@ class LevelGenerator {
       diversityRejections: _diversityRejectionCount,
       legacyAttempts: _legacyAttemptCount,
       renegotiations: _renegotiationCount,
-      monotoneFallbackHits: _monotoneFallbackHitCount,
       archetypeEmissions:
           Map<GenerationArchetype, int>.from(_archetypeEmissionCounts),
       seedEmissions: Map<String, int>.from(_seedEmissionCounts),
@@ -260,7 +250,6 @@ class LevelGenerator {
     _diversityRejectionCount = 0;
     _legacyAttemptCount = 0;
     _renegotiationCount = 0;
-    _monotoneFallbackHitCount = 0;
     _blockingDirCandidatesOffered = 0;
     _blockingDirCandidatesPicked = 0;
     _crunchZoneBlockingPicked = 0;
@@ -786,6 +775,12 @@ class LevelGenerator {
         inBandCandidates,
         evaluatorTier,
       );
+      if (_isHardExpertTier(evaluatorTier)) {
+        _guardHardExpertOpening(
+          best.metrics,
+          context: 'in-band Hard/Expert emission',
+        );
+      }
       _retrogradeInBandSuccessCount++;
       _retrogradeSuccessCount++;
       _diversityLedger.record(best.fingerprint);
@@ -804,32 +799,23 @@ class LevelGenerator {
       return best.result;
     }
 
-    // Hard / Expert: prefer in-band only; ship best novel out-of-band if the
-    // K-loop found no in-band candidate (logged as out-of-band success).
+    // Hard/Expert: discard novel OOB candidates that violate the opening ceiling.
     if (novelOutOfBand != null &&
-        (evaluatorTier == DifficultyTier.hard ||
-            evaluatorTier == DifficultyTier.expert) &&
-        inBandCandidates.isEmpty) {
-      _retrogradeOutOfBandSuccessCount++;
-      _retrogradeSuccessCount++;
-      _diversityLedger.record(novelOutOfBandFp!);
-      _recordEmissionTelemetry(
-        plan: novelOutOfBandPlan!,
-        level: novelOutOfBand.value,
-        metrics: novelOutOfBandMetrics!,
-        fingerprint: novelOutOfBandFp,
-        inBand: false,
-        novel: true,
-        seed: seed,
-        renegotiations: novelOutOfBandRenegotiations,
-        construction: novelOutOfBandTelemetry ?? ConstructionTelemetry.zero,
-      );
-      return novelOutOfBand;
+        _isHardExpertTier(evaluatorTier) &&
+        !_openingWithinHardExpertBand(novelOutOfBandMetrics!)) {
+      novelOutOfBand = null;
     }
 
-    if (evaluatorTier != DifficultyTier.hard &&
-        evaluatorTier != DifficultyTier.expert &&
-        novelOutOfBand != null) {
+    // Ship best novel out-of-band when the K-loop found no in-band candidate.
+    // Hard/Expert may still ship here when opening is within [3,11] but other
+    // metrics missed band — the opening ceiling is the hard guard.
+    if (novelOutOfBand != null) {
+      if (_isHardExpertTier(evaluatorTier)) {
+        _guardHardExpertOpening(
+          novelOutOfBandMetrics!,
+          context: 'metrics-OOB Hard/Expert emission',
+        );
+      }
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
       _diversityLedger.record(novelOutOfBandFp!);
@@ -851,6 +837,18 @@ class LevelGenerator {
     // intact (the cost is that the very next emission can be close to
     // this one, which we accept over crashing the caller).
     if (nonNovelFallback != null) {
+      if (_isHardExpertTier(evaluatorTier) &&
+          !_openingWithinHardExpertBand(nonNovelMetrics!)) {
+        nonNovelFallback = null;
+      }
+    }
+    if (nonNovelFallback != null) {
+      if (_isHardExpertTier(evaluatorTier)) {
+        _guardHardExpertOpening(
+          nonNovelMetrics!,
+          context: 'non-novel Hard/Expert emission',
+        );
+      }
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
       _diversityLedger.record(nonNovelFp!);
@@ -974,6 +972,11 @@ class LevelGenerator {
       final cud = b.metrics.criticalUnlockDepth
           .compareTo(a.metrics.criticalUnlockDepth);
       if (cud != 0) return cud;
+
+      final topoA = profile.topologySoftScoreFromMetrics(a.metrics);
+      final topoB = profile.topologySoftScoreFromMetrics(b.metrics);
+      final topo = topoB.compareTo(topoA);
+      if (topo != 0) return topo;
 
       final fsrA = DifficultyProfile.midgameFsr(a.metrics.tempoProfile);
       final fsrB = DifficultyProfile.midgameFsr(b.metrics.tempoProfile);
@@ -1163,19 +1166,6 @@ class LevelGenerator {
         t == 'greedy_direction_assignment_failed';
   }
 
-  Result<LevelData, GenerationError> _runPlannedOnce(
-    GenerationPlan plan,
-    LevelConfiguration config,
-    Random random, {
-    DifficultyTier? targetTier,
-  }) {
-    return _runPlannedOnceWithTelemetry(
-      plan,
-      config,
-      random,
-      targetTier: targetTier,
-    ).result;
-  }
 
   ({Result<LevelData, GenerationError> result, ConstructionTelemetry telemetry})
       _runPlannedOnceWithTelemetry(
@@ -1772,6 +1762,30 @@ class LevelGenerator {
   // ────────────────────────────────────────────────────────────────────────
   // Helpers
   // ────────────────────────────────────────────────────────────────────────
+
+  static bool _isHardExpertTier(DifficultyTier tier) =>
+      tier == DifficultyTier.hard || tier == DifficultyTier.expert;
+
+  static bool _openingWithinHardExpertBand(LevelMetrics metrics) {
+    const band = DifficultyProfile.hardExpertOpeningBand;
+    return band.contains(metrics.firstLegalMoveCount) &&
+        band.contains(metrics.waveZeroWidth);
+  }
+
+  /// Hard ceiling on opening width for Hard/Expert emissions (Option A band).
+  static void _guardHardExpertOpening(
+    LevelMetrics metrics, {
+    required String context,
+  }) {
+    const band = DifficultyProfile.hardExpertOpeningBand;
+    if (metrics.firstLegalMoveCount > band.max ||
+        metrics.waveZeroWidth > band.max) {
+      throw StateError(
+        '$context: opening=${metrics.firstLegalMoveCount} '
+        'waveZero=${metrics.waveZeroWidth} exceeds band max ${band.max}',
+      );
+    }
+  }
 
   void _assertGeneratedLayout(LevelData level) {
     final msg = LevelData.layoutValidationMessage(level);

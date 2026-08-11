@@ -3,6 +3,8 @@ import 'dart:math';
 import '../grid_cell_key.dart';
 import '../level.dart';
 import '../level_solver.dart';
+import 'dependency_graph.dart';
+import 'search_effort.dart';
 
 /// Logic + tempo + uniqueness metrics computed over a generated [LevelData].
 ///
@@ -50,6 +52,19 @@ class LevelMetrics {
   /// Used for pacing curve analysis.
   final List<int> wavePeelingProfile;
 
+  /// Bounded human-like solver effort (expansions + backtracks). Measured only;
+  /// not yet used for gating.
+  final int searchEffortScore;
+
+  /// Ray-dependency topology: nodes with fan-in ≥ 2.
+  final int chokePointCount;
+
+  /// Ray-dependency topology: widest parallel-removal wave.
+  final int maxAntichainWidth;
+
+  /// Ray-dependency topology: maximum hub fan-in.
+  final int maxHubInDegree;
+
   const LevelMetrics({
     required this.nodeCount,
     required this.waveDepth,
@@ -62,6 +77,10 @@ class LevelMetrics {
     required this.viablePathCount,
     required this.viablePathCountCapped,
     required this.wavePeelingProfile,
+    this.searchEffortScore = 0,
+    this.chokePointCount = 0,
+    this.maxAntichainWidth = 0,
+    this.maxHubInDegree = 0,
   });
 
   /// Width of the opening parallel-removal wave (turn-one choice count).
@@ -82,10 +101,9 @@ class LevelMetrics {
         ? 0.0
         : tempo.fold<int>(0, (a, b) => a + b) / tempo.length;
     final firstLegal = tempo.isEmpty ? 0 : tempo.first;
-    final fsr = tempo.isEmpty
-        ? 0.0
-        : tempo.where((m) => m == 1).length / tempo.length;
     final variance = _stddev(tempo, avgBF);
+
+
     final cud = computeCriticalUnlockDepth(level);
 
     var paths = -1;
@@ -102,6 +120,8 @@ class LevelMetrics {
 
     final wavePeelingProfile = computeWavePeelingProfile(level);
     final forcedSequenceRatio = calculateFSRFromProfile(wavePeelingProfile, level.nodes.length);
+    final graph = DependencyGraph.fromLevel(level);
+    final effort = computeSearchEffort(level);
 
     return LevelMetrics(
       nodeCount: level.nodes.length,
@@ -115,6 +135,10 @@ class LevelMetrics {
       viablePathCount: paths,
       viablePathCountCapped: capped,
       wavePeelingProfile: wavePeelingProfile,
+      searchEffortScore: effort.searchEffortScore,
+      chokePointCount: graph.chokePointCount,
+      maxAntichainWidth: graph.maxAntichainWidth,
+      maxHubInDegree: graph.maxHubInDegree,
     );
   }
 

@@ -1,9 +1,8 @@
 import 'dart:math' as math;
 import '../level.dart';
-import '../level_solver.dart';
 import '../grid_cell_key.dart';
-import 'difficulty_mode.dart';
 import 'difficulty_profile.dart';
+
 
 enum VisualCompositionRejectReason {
   aspect,

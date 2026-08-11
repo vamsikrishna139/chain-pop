@@ -9,7 +9,7 @@ import '../services/ads/ad_service_factory.dart';
 import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
 import '../game/levels/tutorial_levels.dart';
-import '../services/storage_service.dart';
+import '../services/storage/storage_locator.dart';
 import '../theme/app_colors.dart';
 import '../utils/progress_format.dart';
 import 'daily_challenge_calendar_screen.dart';
@@ -19,7 +19,7 @@ import 'widgets/home_settings_sheet.dart';
 
 /// Home hub: Material 3 surfaces, segmented difficulty, clear progression.
 ///
-/// Progress model (unchanged in storage): [StorageService.highestUnlocked] is the
+/// Progress model (unchanged in storage): [StorageLocator.instance.highestUnlocked] is the
 /// highest **level index you may play** on that track; we surface it as the
 /// player's "frontier" and pair it with star mastery for motivation.
 class MainMenuScreen extends StatefulWidget {
@@ -35,22 +35,22 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   @override
   void initState() {
     super.initState();
-    _selected = StorageService.selectedDifficulty;
+    _selected = StorageLocator.instance.selectedDifficulty;
   }
 
   Future<void> _selectDifficulty(DifficultyMode mode) async {
-    if (_selected != mode && StorageService.gameSettings.soundEnabled) {
+    if (_selected != mode && StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(
         ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.1),
       );
     }
-    await StorageService.setSelectedDifficulty(mode);
+    await StorageLocator.instance.setSelectedDifficulty(mode);
     if (!mounted) return;
     setState(() => _selected = mode);
   }
 
   void _play() {
-    if (StorageService.gameSettings.soundEnabled) {
+    if (StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
     Navigator.of(context)
@@ -62,13 +62,13 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         .then((_) {
           if (!mounted) return;
           setState(() {
-            _selected = StorageService.selectedDifficulty;
+            _selected = StorageLocator.instance.selectedDifficulty;
           });
         });
   }
 
   void _openTutorial() {
-    if (StorageService.gameSettings.soundEnabled) {
+    if (StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
     Navigator.of(context)
@@ -90,7 +90,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 
   void _openDailyChallenge() {
-    if (StorageService.gameSettings.soundEnabled) {
+    if (StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
     Navigator.of(context)
@@ -108,10 +108,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 
   int _totalStarsForMode(DifficultyMode mode) {
-    final frontier = StorageService.highestUnlocked(mode);
+    final frontier = StorageLocator.instance.highestUnlocked(mode);
     var sum = 0;
     for (var i = 1; i <= frontier; i++) {
-      sum += StorageService.stars(mode, i);
+      sum += StorageLocator.instance.stars(mode, i);
     }
     return sum;
   }
@@ -143,9 +143,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       ),
     );
     if (confirm == true) {
-      await StorageService.clearProgress();
+      await StorageLocator.instance.clearProgress();
       if (!mounted) return;
-      setState(() => _selected = StorageService.selectedDifficulty);
+      setState(() => _selected = StorageLocator.instance.selectedDifficulty);
     }
   }
 
@@ -227,13 +227,13 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                           const SizedBox(height: 20),
                           _DailyChallengeCard(
                             dayKey: DailyChallenge.dateKeyLocal(DateTime.now()),
-                            starsToday: StorageService.dailyStarsForDayKey(
+                            starsToday: StorageLocator.instance.dailyStarsForDayKey(
                               DailyChallenge.dateKeyLocal(DateTime.now()),
                             ),
                             onTap: _openDailyChallenge,
                           ),
                           const SizedBox(height: 28),
-                          if (!StorageService.tutorialCompleted) ...[
+                          if (!StorageLocator.instance.tutorialCompleted) ...[
                             FilledButton.icon(
                               onPressed: _openTutorial,
                               icon: const Icon(Icons.school_rounded, size: 26),
@@ -603,7 +603,7 @@ class _ProgressionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final frontier = StorageService.highestUnlocked(mode);
+    final frontier = StorageLocator.instance.highestUnlocked(mode);
     final accent = mode.color;
     final window = ProgressFormat.stretchWindow(frontier);
     final stretch = ProgressFormat.stretchStars(mode, frontier);

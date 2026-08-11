@@ -163,7 +163,6 @@ class GenerationSessionSnapshot {
   final int diversityRejections;
   final int legacyAttempts;
   final int renegotiations;
-  final int monotoneFallbackHits;
   final Map<GenerationArchetype, int> archetypeEmissions;
   final Map<String, int> seedEmissions;
   final int strongMotifEmissions;
@@ -191,7 +190,6 @@ class GenerationSessionSnapshot {
     required this.diversityRejections,
     required this.legacyAttempts,
     required this.renegotiations,
-    required this.monotoneFallbackHits,
     required this.archetypeEmissions,
     required this.seedEmissions,
     required this.strongMotifEmissions,
@@ -231,7 +229,6 @@ class GenerationSessionSnapshot {
         'diversityRejections': diversityRejections,
         'legacyAttempts': legacyAttempts,
         'renegotiations': renegotiations,
-        'monotoneFallbackHits': monotoneFallbackHits,
         'totalEmissions': totalEmissions,
         'archetypeEmissions': {
           for (final e in archetypeEmissions.entries) e.key.name: e.value,

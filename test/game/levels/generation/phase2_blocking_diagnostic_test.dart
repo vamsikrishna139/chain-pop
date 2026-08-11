@@ -47,7 +47,7 @@ void main() {
       );
     }
 
-    final n = 10.0;
+    const n = 10.0;
     // ignore: avoid_print
     print('\n=== DIAGNOSIS ===');
     // ignore: avoid_print

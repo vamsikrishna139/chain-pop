@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:chain_pop/game/levels/level.dart';
-import 'board_layout.dart';
+
 
 /// Bounding box representation of occupied cells on a grid.
 class OccupiedBounds {
