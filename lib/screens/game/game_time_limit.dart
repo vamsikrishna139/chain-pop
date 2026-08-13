@@ -9,6 +9,10 @@ const int tutorialCountdownEarlySec = 60;
 /// Movement recap (index 4): short but forgiving (**45s**).
 const int tutorialCountdownFinalSec = 45;
 
+/// Graduation board (index 9): eight arrows spanning all five types across two
+/// phase acts, so it needs more room to read than a single-mechanic intro.
+const int tutorialCountdownGraduationSec = 90;
+
 /// Campaign Easy countdown ceiling (four minutes).
 const int easyCampaignTimerCapSeconds = 240;
 
@@ -45,10 +49,14 @@ const int hardCampaignTimerClampHighSec = 150;
 /// Virtual level index for daily puzzles — stabilizes pacing vs calendar keys.
 const int dailyChallengeVirtualLevelIndex = 40;
 
-/// Onboarding steps use [tutorialCountdownEarlySec] except the movement
-/// recap (index 4), which uses [tutorialCountdownFinalSec].
-int computeTutorialCountdownSec(int tutorialIndex) =>
-    tutorialIndex == 4 ? tutorialCountdownFinalSec : tutorialCountdownEarlySec;
+/// Onboarding steps use [tutorialCountdownEarlySec], except the movement recap
+/// (index 4) on [tutorialCountdownFinalSec] and the all-types graduation board
+/// (index 9) on [tutorialCountdownGraduationSec].
+int computeTutorialCountdownSec(int tutorialIndex) => switch (tutorialIndex) {
+      4 => tutorialCountdownFinalSec,
+      9 => tutorialCountdownGraduationSec,
+      _ => tutorialCountdownEarlySec,
+    };
 
 /// Per-mode **countdown** seconds (time runs **down** to zero in [GameScreen]).
 ///

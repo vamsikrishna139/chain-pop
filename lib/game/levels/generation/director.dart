@@ -542,19 +542,9 @@ class Director {
     final lo = max(profile.nodeCount.min, config.difficulty.minNodes);
     final hi = min(profile.nodeCount.max, mask.length);
 
-      // Dense Strategy: Hard/Expert target 28–40% silhouette fill.
-      // Fixes sparse boards when the mask has many more cells
-      // than the old 20–30 node cap allowed.
-      //
-      // NOTE: the resulting node count clamps up to the band floor (25) on the
-      // 49–64-cell masks Hard uses, so Hard boards ship ~25 nodes. This is
-      // deliberate and load-bearing — raising it trips evaluator rule 3
-      // (nodeCount > 28 ⇒ FSR ≤ 40%), seed byte-stability, and the generation
-      // perf budget. Unpinning node count is a coordinated retune, not a knob.
       if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
-        // Small masks / opening seeds: `lo` (minNodes) can exceed `hi`.
         if (hi <= lo) return hi.clamp(1, mask.length);
-        final fillRatio = 0.28 + random.nextDouble() * 0.12;
+        final fillRatio = 0.32 + random.nextDouble() * 0.12;
         final densityTarget = (mask.length * fillRatio).round();
         return densityTarget.clamp(lo, hi);
       }

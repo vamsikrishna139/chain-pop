@@ -17,8 +17,8 @@ void main() {
       final tints = kWorlds
           .map((w) => WorldTheme.fromAccent(w.accent).backgroundTint)
           .toSet();
-      expect(tints.length, kWorlds.length,
-          reason: 'each world should be visually distinct in-play');
+      expect(tints.length, kSectors.length,
+          reason: 'each sector should be visually distinct in-play');
     });
 
     test('backgroundTint stays close to the base background', () {

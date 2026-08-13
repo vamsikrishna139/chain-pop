@@ -148,7 +148,8 @@ class LevelSolver {
     final gw = level.gridWidth;
     final gh = level.gridHeight;
 
-    while (true) {
+    var hops = 0;
+    while (hops < 50) {
       switch (node.dir) {
         case Direction.up:
           y--;
@@ -170,7 +171,25 @@ class LevelSolver {
           blockerNodeId: blockerId,
         );
       }
+      
+      // Portal check
+      if (level.portalPairs.isNotEmpty) {
+        for (final p in level.portalPairs) {
+          if (p.x1 == x && p.y1 == y) {
+            x = p.x2;
+            y = p.y2;
+            break;
+          } else if (p.x2 == x && p.y2 == y) {
+            x = p.x1;
+            y = p.y1;
+            break;
+          }
+        }
+      }
+      hops++;
     }
+    // If it exceeds hops (infinite loop), treat as blocked (unsolvable)
+    return RayTraceResult(endX: x, endY: y, blockerNodeId: -1);
   }
 
   // ── Internal helper ──────────────────────────────────────────────────────
@@ -185,12 +204,16 @@ class LevelSolver {
     if (node.kind == NodeKind.locked && _lockedNeighborsRemain(node, otherPositions, level)) {
       return false;
     }
+    if (node.phaseGroup > 0 && _earlierPhaseRemains(node, otherPositions, level)) {
+      return false;
+    }
     var x = node.x;
     var y = node.y;
     final gw = level.gridWidth;
     final gh = level.gridHeight;
 
-    while (true) {
+    var hops = 0;
+    while (hops < 50) {
       switch (node.dir) {
         case Direction.up:
           y--;
@@ -203,7 +226,23 @@ class LevelSolver {
       }
       if (x < 0 || x >= gw || y < 0 || y >= gh) return true;
       if (otherPositions.contains(gridCellKey(x, y))) return false;
+      
+      if (level.portalPairs.isNotEmpty) {
+        for (final p in level.portalPairs) {
+          if (p.x1 == x && p.y1 == y) {
+            x = p.x2;
+            y = p.y2;
+            break;
+          } else if (p.x2 == x && p.y2 == y) {
+            x = p.x1;
+            y = p.y1;
+            break;
+          }
+        }
+      }
+      hops++;
     }
+    return false; // Loop detected, considered blocked
   }
 
   static bool _lockedNeighborsRemain(
@@ -218,6 +257,20 @@ class LevelSolver {
         continue;
       }
       if (otherPositions.contains(gridCellKey(nx, ny))) return true;
+    }
+    return false;
+  }
+
+  static bool _earlierPhaseRemains(
+    NodeData node,
+    Set<int> otherPositions,
+    LevelData level,
+  ) {
+    for (final other in level.nodes) {
+      if (other.phaseGroup < node.phaseGroup &&
+          otherPositions.contains(gridCellKey(other.x, other.y))) {
+        return true;
+      }
     }
     return false;
   }

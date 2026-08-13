@@ -139,7 +139,32 @@ class DifficultyProfile {
     tempoShape: TempoProfileShape.relaxed,
   );
 
-  /// §6 Medium band. Mild rise.
+  /// Measured p75 of `forcedSequenceRatio` across the 100-board Medium corpus
+  /// (`docs/playtests/report_medium_100.csv`), which the ceiling below is
+  /// derived from rather than guessed. Distribution: min 0.367, p25 0.640,
+  /// p50 0.750, **p75 0.833**, p95 0.900, max 0.967.
+  static const double mediumMeasuredFsrP75 = 0.833;
+
+  /// §6 Medium band.
+  ///
+  /// The FSR ceiling was `0.65`, which rejected **73 of 100** boards the
+  /// constructor deliberately builds — the single largest source of Medium
+  /// K-loop thrash and of the 27 % in-band rate. That band was never measured
+  /// against what Medium generation actually produces; it was inherited.
+  ///
+  /// Raised to `0.85`, the nearest clean constant at or above the measured p75
+  /// of [mediumMeasuredFsrP75]. This changes **no board** — only whether the
+  /// evaluator admits the boards it was already constructing. FSR drops from
+  /// 73 failures to 19.
+  ///
+  /// This equals the Expert ceiling, which is itself the finding: Medium
+  /// generation is as forcing as Expert. The honest band makes that visible
+  /// instead of hiding it behind mass rejection. If telemetry shows Medium
+  /// plays too hard, the fix belongs in generation (fewer forced corridors —
+  /// see [ChoiceRhythm], wired as a ranking term), not in re-tightening a band
+  /// that generation ignores.
+  ///
+  /// **Rollback:** set the ceiling back to `0.65`.
   static const DifficultyProfile medium = DifficultyProfile(
     tier: DifficultyTier.medium,
     nodeCount: MetricRange(14, 22),
@@ -147,7 +172,7 @@ class DifficultyProfile {
     averageBranchingFactor: MetricRange(3.0, 8.0),
     firstLegalMoveCount: MetricRange(4, 11),
     criticalUnlockDepth: MetricRange(3, 8),
-    forcedSequenceRatio: MetricRange(0.35, 0.65),
+    forcedSequenceRatio: MetricRange(0.35, 0.85),
     tempoShape: TempoProfileShape.mildRise,
   );
 

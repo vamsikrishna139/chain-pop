@@ -8,6 +8,7 @@ final class GameScreenTimerCoordinator {
   Timer? ghostHintTimer;
   Timer? easyHudTimer;
   Timer? tutorialExitTimer;
+  Timer? goalIntroTimer;
 
   void cancelWinAdvanceTimers() {
     autoAdvanceDelayTimer?.cancel();
@@ -25,6 +26,8 @@ final class GameScreenTimerCoordinator {
     easyHudTimer = null;
     tutorialExitTimer?.cancel();
     tutorialExitTimer = null;
+    goalIntroTimer?.cancel();
+    goalIntroTimer = null;
   }
 
   void disposeAll() {

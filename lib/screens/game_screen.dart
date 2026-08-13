@@ -11,7 +11,10 @@ import '../game/world_registry.dart';
 import '../game/difficulty_exports.dart';
 import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
+
+import '../game/levels/level_directive.dart';
 import '../game/levels/tutorial_levels.dart';
+import '../utils/progress_format.dart';
 import '../models/game_settings.dart';
 import '../services/ads/ad_service.dart';
 import '../services/ads/ads_locator.dart';
@@ -279,6 +282,12 @@ class GameScreenState extends State<GameScreen>
   int get removedNodes => _removedNodes;
 
   @override
+  int get movesTaken => engine.movesTaken;
+
+  @override
+  int get undosUsed => engine.undosUsed;
+
+  @override
   set removedNodes(int value) => _removedNodes = value;
 
   @override
@@ -353,10 +362,10 @@ class GameScreenState extends State<GameScreen>
       _playfieldInsetFrameScheduled = value;
 
   @override
-  double get tutorialHintTop => _tutorialHintTop;
+  double get hudBannerTop => _hudBannerTop;
 
   @override
-  set tutorialHintTop(double value) => _tutorialHintTop = value;
+  set hudBannerTop(double value) => _hudBannerTop = value;
 
   @override
   CampaignStreakTracker get streak => _streak;
@@ -461,7 +470,8 @@ class GameScreenState extends State<GameScreen>
   bool _goingNext = false;
 
   /// Stack-local Y for tutorial hint banner (below measured [GameHeaderHud]).
-  double _tutorialHintTop = 118;
+  double _hudBannerTop = 118;
+  bool _goalIntroVisible = false;
 
   @override
   void initState() {
@@ -546,6 +556,17 @@ class GameScreenState extends State<GameScreen>
       _timeLimitSec = (_timeLimitSec! * SessionPacing.timedSurgeFactor)
           .round()
           .clamp(SessionPacing.timedSurgeFloorSec, _timeLimitSec!);
+    }
+
+    if (_isCampaign && !_goals.isComplete && !widget.suppressGameplayTimers) {
+      _goalIntroVisible = true;
+      _timers.goalIntroTimer?.cancel();
+      _timers.goalIntroTimer = Timer(
+        const Duration(milliseconds: GameScreenConstants.sessionGoalIntroMs),
+        () {
+          if (mounted) setState(() => _goalIntroVisible = false);
+        },
+      );
     }
 
     _timeLeftSec = _timeLimitSec;
@@ -674,8 +695,9 @@ class GameScreenState extends State<GameScreen>
     if (widget.isDailyChallenge) {
       return DailyChallenge.incidentObjective(widget.dailyDayKey!);
     }
-    if (!widget.isTutorial && widget.difficulty == DifficultyMode.hard) {
-      return missionForLevel(widget.level);
+    if (!widget.isTutorial) {
+      final directive = directiveFor(levelId: widget.level, mode: widget.difficulty).label;
+      return '$directive · ${missionShortForLevel(widget.level)}';
     }
     return null;
   }
@@ -783,9 +805,20 @@ class GameScreenState extends State<GameScreen>
       case 6:
         return 'The green-ringed arrow is a SPINNER. Tap it to turn its whole row '
             'and free the arrows stuck facing each other.';
-      default:
+      case 7:
         return 'The padlocked arrow is LOCKED. Clear the tiles right next to it '
             'first, then tap it.';
+      case 8:
+        return 'The two dim arrows are PHASE-LOCKED. Their paths are already '
+            'clear — they just wait their turn. Clear both bright arrows and '
+            'watch the dim ones light up.';
+      case 9:
+        return 'FINAL TEST — every arrow type at once. Clear the bright ones '
+            'first: SPINNER turns its row, PADLOCK opens once its neighbour '
+            'goes. That lights up the dim PHASE arrows and the gold CORES — '
+            'take both cores to win.';
+      default:
+        return 'Follow the pointer — it always shows a safe move.';
     }
   }
 
@@ -839,7 +872,10 @@ class GameScreenState extends State<GameScreen>
             Positioned.fill(
               child: QuickWinBanner(
                 stars: _earnedStars,
-                levelLabel: 'LEVEL ${widget.level} CLEAR',
+                levelLabel: 'LEVEL ${ProgressFormat.level(widget.level)} CLEAR',
+                directiveLabel: _isCampaign
+                    ? directiveFor(levelId: widget.level, mode: widget.difficulty).label
+                    : null,
                 sessionWins: _pacing.winsThisSession,
                 accent: accent,
               ),
@@ -872,23 +908,28 @@ class GameScreenState extends State<GameScreen>
           // every later level of the session is just visual clutter.
           if (_isCampaign && !_hasWon && !_goals.isComplete)
             Positioned(
-              top: _tutorialHintTop,
+              top: _hudBannerTop,
               left: 0,
               right: 0,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: SessionGoalChip(
-                  label: _goals.activeGoal.label,
-                  progress: _goals.progress,
-                  target: _goals.target,
-                  complete: _goals.isComplete,
-                  accent: accent,
+              child: AnimatedOpacity(
+                opacity: _goalIntroVisible ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: SessionGoalChip(
+                    label: _goals.activeGoal.label,
+                    progress: _goals.progress,
+                    target: _goals.target,
+                    complete: _goals.isComplete,
+                    accent: accent,
+                  ),
                 ),
               ),
             ),
           if (widget.isTutorial && !_hasWon)
             Positioned(
-              top: _tutorialHintTop,
+              top: _hudBannerTop,
               left: 12,
               right: 12,
               child: IgnorePointer(
@@ -990,13 +1031,18 @@ class GameScreenState extends State<GameScreen>
                       (!widget.isTutorial ||
                           widget.tutorialIndex < tutorialLevels.length - 1),
                   titleLine: widget.isDailyChallenge
-                      ? DailyChallenge.incidentResolvedTitle(
-                          widget.dailyDayKey!,
-                        )
+                      ? DailyChallenge.incidentTitle(widget.dailyDayKey!)
                       : (widget.isTutorial
-                          ? 'TUTORIAL · STEP ${widget.tutorialIndex + 1} '
-                              '/ ${tutorialLevels.length}'
-                          : null),
+                          ? 'TUTORIAL ${widget.tutorialIndex + 1} CLEAR'
+                          : 'LEVEL ${ProgressFormat.level(widget.level)}'),
+                  directiveLabel: _isCampaign
+                      ? directiveFor(levelId: widget.level, mode: widget.difficulty).label
+                      : null,
+                  missionLabel: _isCampaign ? missionShortForLevel(widget.level) : null,
+                  sessionGoalLabel: _isCampaign ? _goals.activeGoal.label : null,
+                  sessionGoalProgress: _isCampaign ? _goals.progress : null,
+                  sessionGoalTarget: _isCampaign ? _goals.target : null,
+                  sessionGoalComplete: _isCampaign ? _goals.isComplete : null,
                 ),
               ),
             ),

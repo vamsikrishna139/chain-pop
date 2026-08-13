@@ -59,8 +59,9 @@ class RetrogradeConstructor {
   /// Selector used to pick among enumerated candidates.
   final CandidateScorer scorer;
 
-  /// Precomputed per-cell ray table for this grid.
-  final SightlineTable sightlines;
+  /// The sightline table, used to quickly evaluate ray clearances.
+  /// Not final, because it may be rebuilt if portals are placed.
+  SightlineTable sightlines;
 
   /// RNG injected for full determinism (per §10 of the plan).
   final Random random;
@@ -87,6 +88,12 @@ class RetrogradeConstructor {
 
   /// The difficulty tier for this generation, used for opening compression.
   final DifficultyTier? tier;
+
+  /// Number of portal pairs to place before node placement.
+  final int portalPairCount;
+
+  /// The portals placed during construction.
+  final List<PortalPair> placedPortals = [];
 
   static const Map<DifficultyTier, int> _maxOpeningByTier = {
     DifficultyTier.easy: 10,
@@ -131,6 +138,7 @@ class RetrogradeConstructor {
     List<MotifPlacement> motifPlacements = const <MotifPlacement>[],
     List<MotifReservation> reservations = const <MotifReservation>[],
     this.tier,
+    this.portalPairCount = 0,
   })  : motifPlacements = motifPlacements.isNotEmpty
             ? motifPlacements
             : _placementsFromReservations(reservations),
@@ -162,6 +170,32 @@ class RetrogradeConstructor {
     if (targetNodeCount <= 0) return <RetrogradePlacement>[];
     if (silhouette.length < targetNodeCount) return null;
     if (reservations.length > targetNodeCount) return null;
+
+    placedPortals.clear();
+    if (portalPairCount > 0) {
+      final availableCells = silhouette.where((c) {
+        for (final m in motifPlacements) {
+          for (final r in m.reservations) {
+            if (gridCellKey(r.position.x, r.position.y) == c) return false;
+          }
+        }
+        return true;
+      }).toList();
+      
+      availableCells.shuffle(random);
+      int portalsCreated = 0;
+      
+      while (portalsCreated < portalPairCount && availableCells.length >= 2) {
+        final c1 = availableCells.removeLast();
+        final c2 = availableCells.removeLast();
+        placedPortals.add(PortalPair(c1 % 1000, c1 ~/ 1000, c2 % 1000, c2 ~/ 1000));
+        portalsCreated++;
+      }
+      
+      if (placedPortals.isNotEmpty) {
+        sightlines = SightlineTable.forGrid(gridWidth, gridHeight, portals: placedPortals);
+      }
+    }
 
     const reassignmentProbs = <double>[
       kCrunchBlockingProbability,

@@ -41,8 +41,10 @@ class NodeData {
   /// Locked until all 4-neighbors are cleared; relay rotates its row on extract.
   final NodeKind kind;
 
-  /// Critical network node — restoring all cores can win the level.
   final bool isCore;
+
+  /// Phase gates block extraction until the preceding phase is fully cleared.
+  final int phaseGroup;
 
   NodeData({
     required this.id,
@@ -53,6 +55,7 @@ class NodeData {
     this.colorSlot = -1,
     this.kind = NodeKind.normal,
     this.isCore = false,
+    this.phaseGroup = 0,
   });
 
   NodeData clone() => NodeData(
@@ -64,6 +67,7 @@ class NodeData {
         colorSlot: colorSlot,
         kind: kind,
         isCore: isCore,
+        phaseGroup: phaseGroup,
       );
 
   NodeData copyWith({
@@ -75,6 +79,7 @@ class NodeData {
     int? colorSlot,
     NodeKind? kind,
     bool? isCore,
+    int? phaseGroup,
   }) =>
       NodeData(
         id: id ?? this.id,
@@ -85,10 +90,23 @@ class NodeData {
         colorSlot: colorSlot ?? this.colorSlot,
         kind: kind ?? this.kind,
         isCore: isCore ?? this.isCore,
+        phaseGroup: phaseGroup ?? this.phaseGroup,
       );
 
   @override
   String toString() => 'Node($id, at: $x,$y, dir: $dir)';
+}
+
+class PortalPair {
+  final int x1;
+  final int y1;
+  final int x2;
+  final int y2;
+
+  const PortalPair(this.x1, this.y1, this.x2, this.y2);
+
+  String get cell1 => '$x1,$y1';
+  String get cell2 => '$x2,$y2';
 }
 
 class LevelData {
@@ -102,6 +120,7 @@ class LevelData {
   final Set<String>? playCells;
 
   final List<NodeData> nodes;
+  final List<PortalPair> portalPairs;
 
   LevelData({
     required this.levelId,
@@ -109,6 +128,7 @@ class LevelData {
     required this.gridHeight,
     required this.nodes,
     this.playCells,
+    this.portalPairs = const [],
   });
 
   /// Layout invariants (not solvability). Returns `null` if valid.

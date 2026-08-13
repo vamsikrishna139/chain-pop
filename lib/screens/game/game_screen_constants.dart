@@ -11,6 +11,7 @@ abstract final class GameScreenConstants {
   /// Fast clears under this elapsed time use the lightweight [QuickWinBanner]
   /// flow-preserving transition instead of the full win panel.
   static const int quickWinMaxClearMs = 20000;
+  static const int sessionGoalIntroMs = 4000;
 
   /// How long the [QuickWinBanner] shows before auto-advancing.
   static const int quickWinBannerMs = 1500;

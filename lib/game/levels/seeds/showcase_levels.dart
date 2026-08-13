@@ -36,32 +36,12 @@ const Map<int, LevelSeed> showcaseLevelSeeds = {
     motifMixId: MotifId.lockCluster,
     seedRng: 4501,
   ),
-  50: LevelSeed(
-    id: 'showcase-boss-gridlock',
-    silhouetteId: SilhouetteId.asymmetric,
-    archetypeId: GenerationArchetype.strongMotif,
-    difficultyTier: DifficultyTier.hard,
-    seedRng: 5001,
-  ),
+
   55: LevelSeed(
     id: 'showcase-phase-shift',
     silhouetteId: SilhouetteId.corridor,
     archetypeId: GenerationArchetype.cleanAuthored,
     difficultyTier: DifficultyTier.hard,
     seedRng: 5501,
-  ),
-  75: LevelSeed(
-    id: 'showcase-boss-overload',
-    silhouetteId: SilhouetteId.archipelago,
-    archetypeId: GenerationArchetype.organicMessy,
-    difficultyTier: DifficultyTier.hard,
-    seedRng: 7501,
-  ),
-  100: LevelSeed(
-    id: 'showcase-boss-blackout',
-    silhouetteId: SilhouetteId.asymmetric,
-    archetypeId: GenerationArchetype.experimental,
-    difficultyTier: DifficultyTier.hard,
-    seedRng: 10001,
   ),
 };

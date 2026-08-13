@@ -320,7 +320,7 @@ void main() {
 
   group('topologySoftScore (B3)', () {
     test('Hard rewards 1–2 choke points and in-band critical path', () {
-      final profile = DifficultyProfile.hard;
+      const profile = DifficultyProfile.hard;
       final ideal = profile.topologySoftScore(
         chokePointCount: 2,
         criticalPathLength: 8,

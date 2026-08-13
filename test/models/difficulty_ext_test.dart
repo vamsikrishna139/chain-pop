@@ -1,4 +1,5 @@
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/game/levels/level_directive.dart';
 import 'package:chain_pop/models/difficulty.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,12 +22,20 @@ void main() {
       expect(DifficultyExt.fromKey(''), DifficultyMode.easy);
     });
 
-    test('starsForJams matches jam thresholds', () {
-      expect(DifficultyMode.easy.starsForJams(0), 3);
-      expect(DifficultyMode.medium.starsForJams(1), 2);
-      expect(DifficultyMode.hard.starsForJams(2), 2);
-      expect(DifficultyMode.easy.starsForJams(3), 1);
-      expect(DifficultyMode.hard.starsForJams(100), 1);
+    test('starsFor checks directives and jams', () {
+      // Level 501 is sector 5 (Integrity: jamCount <= 1)
+      const integrityMet = LevelResult(levelId: 501, jamCount: 1, elapsedSeconds: 10, undosUsed: 0, movesTaken: 5, totalNodes: 10, mode: DifficultyMode.medium);
+      const integrityFailedOneStar = LevelResult(levelId: 501, jamCount: 2, elapsedSeconds: 10, undosUsed: 0, movesTaken: 10, totalNodes: 10, mode: DifficultyMode.medium);
+      
+      expect(integrityMet.earnedStars, 3);
+      expect(integrityFailedOneStar.earnedStars, 1);
+      
+      // Level 500 is sector 4 (Unaided: undosUsed == 0)
+      const unaidedMet = LevelResult(levelId: 500, jamCount: 1, elapsedSeconds: 20, undosUsed: 0, movesTaken: 10, totalNodes: 10, mode: DifficultyMode.medium);
+      const unaidedFailedButTwoStars = LevelResult(levelId: 500, jamCount: 0, elapsedSeconds: 100, undosUsed: 1, movesTaken: 10, totalNodes: 10, mode: DifficultyMode.medium);
+      
+      expect(unaidedMet.earnedStars, 3);
+      expect(unaidedFailedButTwoStars.earnedStars, 2);
     });
 
     test('dimColor and boardTint are derived from color', () {

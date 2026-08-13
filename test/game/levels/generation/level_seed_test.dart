@@ -1,8 +1,8 @@
 import 'package:chain_pop/game/levels/generation/archetype.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
+import 'package:chain_pop/game/levels/generation/progression_profile.dart';
 import 'package:chain_pop/game/levels/generation/silhouettes.dart';
-import 'package:chain_pop/game/levels/seeds/seed_registry.dart';
 import 'package:chain_pop/game/levels/seeds/seeds.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,8 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 ///   3. Seed emissions remain solvable + validated.
 void main() {
   group('Phase 5 — Level Seeds', () {
-    test('Ring milestone routes through the seed pipeline (mod 75 levels)',
-        () {
+    test('Ring milestone routes through the seed pipeline (mod 75 levels)', () {
       final gen = LevelGenerator();
       // Mod-75 levels in the milestone slot rotation that are not overridden
       // by hand-authored showcase seeds (level 75 routes to
@@ -34,14 +33,14 @@ void main() {
           reason: 'ring milestone emissions: $counts');
     });
 
-    test('Showcase seed overrides the mod-75 ring milestone at level 75', () {
+    test('Level 75 emits the mod-75 ring milestone', () {
       final gen = LevelGenerator();
       final r = gen.generate(75, mode: DifficultyMode.hard);
       expect(r.isSuccess, isTrue);
       final counts = gen.seedEmissionCounts;
-      expect(counts['showcase-boss-overload'] ?? 0, equals(1),
-          reason: 'level 75 should route to its showcase seed: $counts');
-      expect(counts['milestone-ring'] ?? 0, equals(0));
+      expect(counts['showcase-boss-overload'] ?? 0, equals(0));
+      expect(counts['milestone-ring'] ?? 0, equals(1),
+          reason: 'level 75 should route to its milestone seed: $counts');
     });
 
     test('Opening seeds 1..3 emit and increment the seed counter', () {
@@ -95,7 +94,9 @@ void main() {
       expect(touchesOuter, isTrue);
     });
 
-    test('seed registry covers the opening levels and (when enabled) dense validation seeds', () {
+    test(
+        'seed registry covers the opening levels and (when enabled) dense validation seeds',
+        () {
       // Base opening seeds are always present.
       expect(seedRegistry.containsKey(1), isTrue);
       expect(seedRegistry.containsKey(2), isTrue);
@@ -113,6 +114,20 @@ void main() {
               reason: 'dense validation seed for level $i missing');
         }
       }
+    });
+
+    test('milestone mechanic overrides merge onto the sector budget', () {
+      final base = budgetFor(levelId: 300, mode: DifficultyMode.hard);
+      final merged = budgetForLevel(
+        levelId: 300,
+        mode: DifficultyMode.hard,
+        mechanicOverride: milestoneSniperSeed.mechanicOverride,
+      );
+
+      expect(merged.coreCount, equals(3));
+      expect(merged.lockCount, equals(base.lockCount));
+      expect(merged.relayCount, equals(base.relayCount));
+      expect(merged.phaseGateCount, equals(base.phaseGateCount));
     });
   });
 }

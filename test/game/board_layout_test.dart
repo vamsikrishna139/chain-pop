@@ -169,6 +169,111 @@ void main() {
     });
   });
 
+  group('per-axis board fill (P1)', () {
+    // Playfield bands the app actually produces, derived from the measured HUD
+    // reserves (see test/screens/playfield_insets_reference_test.dart). Small
+    // phones use the same formula with their own safe areas.
+    const bands = <(String, double, double)>[
+      ('320x568', 272.0, 356.0),
+      ('360x800', 312.0, 540.0),
+      ('390x844', 342.0, 538.0),
+      ('430x932', 382.0, 614.0),
+    ];
+
+    test('the full grid always fits the band at base zoom', () {
+      for (final (label, bandW, bandH) in bands) {
+        for (var gw = 4; gw <= 12; gw++) {
+          for (var gh = 4; gh <= 12; gh++) {
+            // Sweep bboxes from a single-node tutorial board (3×3 after pad)
+            // up to the full grid — the sparse end is where the bbox fit
+            // would otherwise inflate past the band.
+            for (final (bw, bh) in [
+              (3, 3),
+              (gw ~/ 2 + 1, gh ~/ 2 + 1),
+              (gw - 1, gh - 1),
+              (gw, gh),
+            ]) {
+              if (bw <= 0 || bh <= 0) continue;
+              final cell = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+                bandW: bandW,
+                bandH: bandH,
+                bboxWidth: bw,
+                bboxHeight: bh,
+                gridWidth: gw,
+                gridHeight: gh,
+              );
+              final why = '$label grid ${gw}x$gh bbox ${bw}x$bh cell $cell';
+              expect(cell * gw, lessThanOrEqualTo(bandW + 1e-6), reason: why);
+              expect(cell * gh, lessThanOrEqualTo(bandH + 1e-6), reason: why);
+              expect(cell, greaterThan(0), reason: why);
+            }
+          }
+        }
+      }
+    });
+
+    test('never renders smaller than the single-0.80 fill it replaced', () {
+      for (final (label, bandW, bandH) in bands) {
+        for (var g = 6; g <= 9; g++) {
+          final before = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+            bandW: bandW,
+            bandH: bandH,
+            bboxWidth: g,
+            bboxHeight: g,
+            gridWidth: g,
+            gridHeight: g,
+            targetFill: 0.80,
+          );
+          final after = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+            bandW: bandW,
+            bandH: bandH,
+            bboxWidth: g,
+            bboxHeight: g,
+            gridWidth: g,
+            gridHeight: g,
+          );
+          expect(after, greaterThanOrEqualTo(before - 1e-9),
+              reason: '$label ${g}x$g');
+        }
+      }
+    });
+
+    test('reference arithmetic: 8x8 on 390x844 goes 34.2px -> 40.2px', () {
+      const bandW = 342.0;
+      const bandH = 538.0;
+      final before = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 8,
+        bboxHeight: 8,
+        gridWidth: 8,
+        gridHeight: 8,
+        targetFill: 0.80,
+      );
+      final after = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+        bandW: bandW,
+        bandH: bandH,
+        bboxWidth: 8,
+        bboxHeight: 8,
+        gridWidth: 8,
+        gridHeight: 8,
+      );
+      expect(before, closeTo(34.2, 0.1));
+      expect(after, closeTo(40.2, 0.1));
+    });
+
+    test('targetFill still overrides both axes for single-fill callers', () {
+      final both = BoardLayoutMetrics.fitCellSizeForBounds(
+        bandW: 500,
+        bandH: 500,
+        bboxWidth: 5,
+        bboxHeight: 5,
+        targetFill: 0.50,
+      );
+      expect(both, closeTo(50.0, 1e-6));
+    });
+  });
+
   group('LevelData.layoutValidationMessage', () {
     test('null when valid', () {
       final level = LevelData(

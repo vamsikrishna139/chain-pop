@@ -34,16 +34,16 @@ final class GamePlayfieldInsetController {
           headerBox.localToGlobal(Offset(0, headerBox.size.height)).dy;
       topReserved = headerBottom + 20;
 
-      if (_host.isTutorial && stackBox != null && stackBox.hasSize) {
-        final hintTop = stackBox
+      if (stackBox != null && stackBox.hasSize) {
+        final bannerTop = stackBox
             .globalToLocal(
               headerBox.localToGlobal(Offset(0, headerBox.size.height)),
             )
             .dy;
-        final next = (hintTop + 8).clamp(72.0, h * 0.4);
-        if ((_host.tutorialHintTop - next).abs() > 0.5) {
+        final next = (bannerTop + 8).clamp(72.0, h * 0.4);
+        if ((_host.hudBannerTop - next).abs() > 0.5) {
           _host.markDirty(() {
-            _host.tutorialHintTop = next;
+            _host.hudBannerTop = next;
           });
         }
       }

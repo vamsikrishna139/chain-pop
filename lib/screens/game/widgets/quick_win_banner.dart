@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 class QuickWinBanner extends StatefulWidget {
   final int stars;
   final String levelLabel;
+  final String? directiveLabel;
   final int sessionWins;
   final Color accent;
 
@@ -14,6 +15,7 @@ class QuickWinBanner extends StatefulWidget {
     super.key,
     required this.stars,
     required this.levelLabel,
+    this.directiveLabel,
     required this.sessionWins,
     required this.accent,
   });
@@ -101,6 +103,16 @@ class _QuickWinBannerState extends State<QuickWinBanner>
                               letterSpacing: 0.5,
                             ),
                           ),
+                          if (widget.directiveLabel != null)
+                            Text(
+                              widget.directiveLabel!,
+                              style: TextStyle(
+                                color: widget.accent.withValues(alpha: 0.9),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
                           if (widget.sessionWins > 1)
                             Text(
                               '${widget.sessionWins} in a row',

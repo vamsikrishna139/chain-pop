@@ -16,6 +16,7 @@ import 'level_configuration.dart';
 import 'level_validator.dart';
 import 'level_seed.dart';
 import 'metrics.dart';
+import 'progression_profile.dart';
 import 'motifs.dart';
 import 'removal_order.dart';
 import '../analytics/generation_analytics.dart';
@@ -27,16 +28,6 @@ import 'silhouettes.dart';
 import 'level_enrichment.dart';
 import 'silhouette_session_tracker.dart';
 import 'visual_composition.dart';
-
-/// Milestone types triggered at specific level multiples.
-///
-/// Phase 5 retired `ring` — the Ring milestone now flows through the
-/// [LevelSeed] pipeline (`milestoneSeedFor` → `Director.choosePlanFromSeed`)
-/// instead of its bespoke `_generateRing` branch.
-enum _MilestoneType {
-  maxDensity,
-  sparseSniper,
-}
 
 /// Generates deterministic, deadlock-free puzzle levels.
 ///
@@ -356,6 +347,7 @@ class LevelGenerator {
     int maxAttempts = 40,
     DifficultyTier? targetTier,
     Duration? timeBudget,
+    bool allowMechanicShortFallback = false,
   }) {
     final validation = config.validate();
     if (!validation.isValid) {
@@ -374,57 +366,77 @@ class LevelGenerator {
     // the random Director sampling. The constructor, evaluator, and
     // diversity ledger still run; only the *style* knobs are pinned.
     if (applyMilestones) {
-      final opening =
-          useOpeningSeeds ? seedRegistry[config.levelId] : null;
+      final opening = useOpeningSeeds ? seedRegistry[config.levelId] : null;
       final seed = opening ??
           showcaseSeedFor(config.levelId) ??
           milestoneSeedFor(config);
       if (seed != null) {
+        var seedConfig = config;
+        if (seed.gridWidth != null || seed.gridHeight != null) {
+          seedConfig = LevelConfiguration(
+            levelId: config.levelId,
+            gridWidth: seed.gridWidth ?? config.gridWidth,
+            gridHeight: seed.gridHeight ?? config.gridHeight,
+            // Use the seed's pinned count when it has one: the Director reads
+            // `seed.targetNodeCount`, so leaving the base config's count here
+            // leaves the two disagreeing, and the evaluator then rejects every
+            // candidate — burning all maxAttempts on a board it was never
+            // going to accept.
+            targetNodeCount: seed.targetNodeCount ?? config.targetNodeCount,
+            difficulty: config.difficulty,
+            archetype: config.archetype,
+            directionBias: config.directionBias,
+            irregularMaskProbability: config.irregularMaskProbability,
+            irregularLayoutExtraTries: config.irregularLayoutExtraTries,
+            minimumTargetNodeCount: config.minimumTargetNodeCount,
+          );
+          final validation = seedConfig.validate();
+          if (!validation.isValid) {
+            return Result.error(
+                GenerationError.invalidConfiguration(validation.message));
+          }
+        }
         final seedSalt = seed.seedRng ?? 0;
-        final rng = Random(primarySeed * 31337 + seedSalt);
-        final seedResult = _attemptDirectorDrivenGeneration(
-          config,
-          rng,
-          targetTier: targetTier,
-          seed: seed,
-        );
-        if (seedResult.isSuccess) {
-          final enriched = _enrichLevel(seedResult.value, config, targetTier);
-          final validationResult = _validator.validate(enriched);
-          if (validationResult.isValid) {
-            _seedEmissionCounts[seed.id] =
-                (_seedEmissionCounts[seed.id] ?? 0) + 1;
-            _assertGeneratedLayout(enriched);
-            _commitPendingEmission();
-            return Result.success(enriched);
+        for (int i = 0; i < maxAttempts; i++) {
+          final rng = Random(primarySeed * 31337 + seedSalt + i);
+          final seedResult = _attemptDirectorDrivenGeneration(
+            seedConfig,
+            rng,
+            targetTier: targetTier,
+            seed: seed,
+          );
+          if (seedResult.isSuccess) {
+            final enriched = _enrichLevel(
+                seedResult.value, seedConfig, targetTier,
+                mechanicOverride: seed.mechanicOverride);
+            final validationResult = _validator.validate(enriched);
+            if (validationResult.isValid) {
+              final budget = budgetForLevel(
+                levelId: seedConfig.levelId,
+                mode: seedConfig.difficulty.mode,
+                mechanicOverride: seed.mechanicOverride,
+              );
+              final lockCount =
+                  enriched.nodes.where((n) => n.kind == NodeKind.locked).length;
+              final relayCount =
+                  enriched.nodes.where((n) => n.kind == NodeKind.relay).length;
+              if (lockCount < budget.lockCount ||
+                  relayCount < budget.relayCount) {
+                _discardPendingEmission();
+                continue;
+              }
+
+              _seedEmissionCounts[seed.id] =
+                  (_seedEmissionCounts[seed.id] ?? 0) + 1;
+              _assertGeneratedLayout(enriched);
+              _commitPendingEmission();
+              return Result.success(enriched);
+            }
           }
         }
         // Seed path failed (e.g. silhouette starvation on a tiny grid):
         // fall through to the regular pipeline so the level still ships.
         _discardPendingEmission();
-      }
-    }
-
-    // ── Milestone levels (every 25th, Medium/Hard only) ───────────────
-    if (applyMilestones) {
-      final milestone = _getMilestoneType(config);
-      if (milestone != null) {
-        for (int attempt = 0; attempt < maxAttempts; attempt++) {
-          final rng = Random(primarySeed * 31337 + attempt * 999983);
-          final result = _generateMilestone(milestone, config, rng);
-          if (result.isSuccess) {
-            final level = result.value;
-            final validationResult = _validator.validate(level);
-            if (validationResult.isValid) {
-              _assertGeneratedLayout(level);
-              _commitPendingMilestoneEmission(milestone);
-              return result;
-            }
-            _discardPendingEmission();
-          } else {
-            _discardPendingEmission();
-          }
-        }
       }
     }
 
@@ -441,15 +453,28 @@ class LevelGenerator {
     // ship the best fully-validated level found so far, relaxing only the
     // wave-band *preference* — solvability/layout are still enforced. Off by
     // default → behaviour is byte-identical for the generation test suites.
+    //
+    // NOTE: this clock deliberately does NOT cover the seeded path above. That
+    // path is unbounded, and a seed with a high pinned node count can send it
+    // into a multi-minute search (see milestone_seeds.dart). Extending this
+    // watch to cover it was tried and regressed deadlock_test — the regular
+    // pipeline then starts already over budget and exhausts its attempts.
+    // Bounding the seeded path needs a deadline inside the Director, not a
+    // shared stopwatch here.
     final budgetWatch = timeBudget != null ? (Stopwatch()..start()) : null;
+    /// Valid + solvable, but missed the ideal removal-wave band.
     LevelData? budgetFallback;
+    /// Valid + solvable, but short of the level's lock/relay budget. Strictly
+    /// worse than [budgetFallback], so only shipped when nothing else exists.
+    LevelData? mechanicShortFallback;
 
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
       final overBudgetNow =
           budgetWatch != null && budgetWatch.elapsed >= timeBudget!;
-      if (overBudgetNow && budgetFallback != null) {
+      final overBudgetShippable = budgetFallback ?? mechanicShortFallback;
+      if (overBudgetNow && overBudgetShippable != null) {
         _discardPendingEmission();
-        return Result.success(budgetFallback);
+        return Result.success(overBudgetShippable);
       }
       // Once over budget, fast-forward to the most-relaxed regime (low node
       // count, clean archetype) so the attempt *constructs* quickly — the
@@ -508,17 +533,43 @@ class LevelGenerator {
           continue;
         }
 
+        final budget =
+            budgetFor(levelId: config.levelId, mode: config.difficulty.mode);
+        final lockCount =
+            enriched.nodes.where((n) => n.kind == NodeKind.locked).length;
+        final relayCount =
+            enriched.nodes.where((n) => n.kind == NodeKind.relay).length;
+        if (lockCount < budget.lockCount || relayCount < budget.relayCount) {
+          // Mechanic-budget shortfall. Retrying is right when there is time,
+          // but this is also the branch that made [timeBudget] powerless on
+          // the Daily path: once over budget the retry regime scales the node
+          // count *down*, which makes a lock/relay shortfall *more* likely, so
+          // a starved date key kept landing here and burned all
+          // [maxAttempts] no matter how much wall clock had elapsed (measured:
+          // 5.0 s against a 400 ms budget on 2026-08-19). Retain the board as
+          // a last-resort fallback so the escape at the top of the loop has
+          // something valid to ship. Ranked below [budgetFallback]: a
+          // wave-band miss is a better level than a mechanic-short one.
+          //
+          // Opt-in per caller, because it is **not** free. Campaign Hard has a
+          // gen p75 of ~190 ms against a 200 ms budget, so a large share of
+          // levels brush the budget; enabling this there cost 12 of 100 Hard
+          // levels their locked nodes and their silhouette mask, and broke the
+          // L150 milestone emission. Only Daily — where the alternative was a
+          // 40-attempt burn — opts in.
+          if (budgetWatch != null && allowMechanicShortFallback) {
+            mechanicShortFallback ??= enriched;
+          }
+          _discardPendingEmission();
+          continue;
+        }
+
         // Over budget: ship this freshly-staged valid level immediately
         // (commits its telemetry + ledger record), skipping the wave-band
         // preference. Bounds worst-case generation latency.
         if (budgetWatch != null && budgetWatch.elapsed >= timeBudget!) {
           _assertGeneratedLayout(enriched);
-          final milestone = applyMilestones ? _getMilestoneType(config) : null;
-          if (milestone != null) {
-            _commitPendingMilestoneEmission(milestone);
-          } else {
-            _commitPendingEmission();
-          }
+          _commitPendingEmission();
           return Result.success(enriched);
         }
 
@@ -537,12 +588,7 @@ class LevelGenerator {
         }
         if (waves >= wMin && waves <= wMax) {
           _assertGeneratedLayout(enriched);
-          final milestone = applyMilestones ? _getMilestoneType(config) : null;
-          if (milestone != null) {
-            _commitPendingMilestoneEmission(milestone);
-          } else {
-            _commitPendingEmission();
-          }
+          _commitPendingEmission();
           return Result.success(enriched);
         }
         // Out-of-band wave count — retain as a budget fallback (valid +
@@ -572,7 +618,15 @@ class LevelGenerator {
   /// Builds on [LevelConfiguration.forDailyChallenge] (medium grid + baseline
   /// density + irregular-mask bias). Milestones stay off for date keys.
   /// The Phase-2 evaluator targets the Expert band for Daily.
-  Result<LevelData, GenerationError> generateDailyChallenge(int dayKey) {
+  /// [timeBudget] bounds the search the same way the campaign path is bounded;
+  /// `null` leaves it **fully unbounded** (40 attempts × 8 K × 4 renegotiations),
+  /// which is what produced the 5.5 s outlier on 2026-08-19. Production passes
+  /// `LevelManager.dailyGenerationBudget`; the generation test suites leave it
+  /// null so their results stay byte-identical.
+  Result<LevelData, GenerationError> generateDailyChallenge(
+    int dayKey, {
+    Duration? timeBudget,
+  }) {
     final config = LevelConfiguration.forDailyChallenge(dayKey);
     return generateFromConfiguration(
       config,
@@ -580,6 +634,10 @@ class LevelGenerator {
       applyMilestones: false,
       maxAttempts: 40,
       targetTier: DifficultyTier.expert,
+      timeBudget: timeBudget,
+      // Daily is the path where a mechanic-budget shortfall used to burn all 40
+      // attempts regardless of the clock; campaign deliberately keeps retrying.
+      allowMechanicShortFallback: true,
     );
   }
 
@@ -654,7 +712,10 @@ class LevelGenerator {
     final cudFloor = evaluatorProfile.criticalUnlockDepth.min;
 
     // Lock the archetype choice for this outer candidate generation wave to prevent selection bias
-    final lockedArchetype = overrideArchetype ?? (seed == null ? GenerationArchetypeSpec.sampleForTier(random, evaluatorTier) : null);
+    final lockedArchetype = overrideArchetype ??
+        (seed == null
+            ? GenerationArchetypeSpec.sampleForTier(random, evaluatorTier)
+            : null);
 
     for (var k = 0; k < _evaluatorRetryBudget; k++) {
       // Latency budget: once over budget, stop spending evaluator iterations
@@ -737,8 +798,8 @@ class LevelGenerator {
         silhouette: plan.silhouette,
         dominantMotifId: motifIdFingerprintSlot(dominantMotif),
       );
-      final novel = !enableDiversityGating ||
-          _diversityLedger.isNovel(fingerprint);
+      final novel =
+          !enableDiversityGating || _diversityLedger.isNovel(fingerprint);
       if (!novel) {
         _diversityRejectionCount++;
         nonNovelFallback ??= once;
@@ -988,12 +1049,21 @@ class LevelGenerator {
       return densityB.compareTo(densityA);
     }
 
-    final cud = b.metrics.criticalUnlockDepth
-        .compareTo(a.metrics.criticalUnlockDepth);
+    final cud =
+        b.metrics.criticalUnlockDepth.compareTo(a.metrics.criticalUnlockDepth);
     if (cud != 0) return cud;
-    final fsr = b.metrics.forcedSequenceRatio
-        .compareTo(a.metrics.forcedSequenceRatio);
+    final fsr =
+        b.metrics.forcedSequenceRatio.compareTo(a.metrics.forcedSequenceRatio);
     if (fsr != 0) return fsr;
+    // P4: prefer the candidate whose choice *rhythm* reads better — keeps
+    // offering a decision and varies, rather than one long forced corridor.
+    // Ranking term only; it never admits or rejects a board.
+    final rhythmA =
+        ChoiceRhythm.fromTempoProfile(a.metrics.tempoProfile).rankingScore;
+    final rhythmB =
+        ChoiceRhythm.fromTempoProfile(b.metrics.tempoProfile).rankingScore;
+    final rhythm = rhythmB.compareTo(rhythmA);
+    if (rhythm != 0) return rhythm;
     final densityA = _spatialDensity(a.result.value);
     final densityB = _spatialDensity(b.result.value);
     final density = densityB.compareTo(densityA);
@@ -1016,11 +1086,12 @@ class LevelGenerator {
   LevelData _enrichLevel(
     LevelData level,
     LevelConfiguration config,
-    DifficultyTier? targetTier,
-  ) {
+    DifficultyTier? targetTier, {
+    MechanicBudgetOverride? mechanicOverride,
+  }) {
     final tier =
         targetTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
-    return enrichLevel(level, config, tier);
+    return enrichLevel(level, config, tier, mechanicOverride: mechanicOverride);
   }
 
   double _silhouetteRankingScore(_InBandCandidate candidate) {
@@ -1078,49 +1149,6 @@ class LevelGenerator {
     }
   }
 
-  /// Campaign milestones reuse the telemetry staged inside
-  /// [_attemptDirectorDrivenGeneration] but tag synthetic `seedId` values so
-  /// corpus / QA tooling can correlate emissions without implying a pinned
-  /// [LevelSeed] row.
-  void _commitPendingMilestoneEmission(_MilestoneType type) {
-    final pending = _pendingEmission;
-    if (pending == null) return;
-    final seedTag = switch (type) {
-      _MilestoneType.maxDensity => 'milestone:maxDensity',
-      _MilestoneType.sparseSniper => 'milestone:sparseSniper',
-    };
-    final e = pending.event;
-    _pendingEmission = _PendingDirectorEmission(
-      plan: pending.plan,
-      visibleMotifs: pending.visibleMotifs,
-      construction: pending.construction,
-      event: GenerationEmissionEvent(
-        levelId: e.levelId,
-        archetype: e.archetype,
-        silhouette: e.silhouette,
-        seedId: seedTag,
-        inBand: e.inBand,
-        novelFingerprint: e.novelFingerprint,
-        metrics: e.metrics,
-        fingerprint: e.fingerprint,
-        renegotiations: e.renegotiations,
-        dominantMotifId: e.dominantMotifId,
-        lockClusterPlaced: e.lockClusterPlaced,
-        clusterCud: e.clusterCud,
-        crunchPick: e.crunchPick,
-        blkOffered: e.blkOffered,
-        blkPicked: e.blkPicked,
-        solvabilityRetries: e.solvabilityRetries,
-        winRetry: e.winRetry,
-        chainDepthMax: e.chainDepthMax,
-        maxHubInDegree: e.maxHubInDegree,
-        avgUnlockFanout: e.avgUnlockFanout,
-        pathsCapped: e.pathsCapped,
-      ),
-    );
-    _commitPendingEmission();
-  }
-
   /// Drops the staged record without flushing — used when the outer
   /// wave-validation loop rejects the candidate.
   void _discardPendingEmission() {
@@ -1166,7 +1194,6 @@ class LevelGenerator {
         t == 'greedy_direction_assignment_failed';
   }
 
-
   ({Result<LevelData, GenerationError> result, ConstructionTelemetry telemetry})
       _runPlannedOnceWithTelemetry(
     GenerationPlan plan,
@@ -1188,7 +1215,6 @@ class LevelGenerator {
     );
   }
 
-
   ({Result<LevelData, GenerationError> result, ConstructionTelemetry telemetry})
       _runRetrogradeForPlan(
     GenerationPlan plan,
@@ -1200,7 +1226,9 @@ class LevelGenerator {
       final sightlines =
           _sightlineTableFor(config.gridWidth, config.gridHeight);
       final scorer = CandidateScorer(weights: plan.spec.scorerWeights);
-      final tier = targetTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
+      final tier =
+          targetTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
+      final budget = budgetFor(levelId: config.levelId, mode: config.difficulty.mode);
       final constructor = RetrogradeConstructor(
         gridWidth: config.gridWidth,
         gridHeight: config.gridHeight,
@@ -1211,17 +1239,16 @@ class LevelGenerator {
         random: random,
         motifPlacements: plan.motifs,
         tier: tier,
+        portalPairCount: budget.portalPairCount,
       );
       final placements = constructor.construct();
       final telemetry = ConstructionTelemetry(
-        blockingDirCandidatesOffered:
-            constructor.reassignmentFlipsOffered > 0
-                ? constructor.reassignmentFlipsOffered
-                : scorer.blockingDirCandidatesOffered,
-        blockingDirCandidatesPicked:
-            constructor.reassignmentCrunchFlips > 0
-                ? constructor.reassignmentCrunchFlips
-                : scorer.blockingDirCandidatesPicked,
+        blockingDirCandidatesOffered: constructor.reassignmentFlipsOffered > 0
+            ? constructor.reassignmentFlipsOffered
+            : scorer.blockingDirCandidatesOffered,
+        blockingDirCandidatesPicked: constructor.reassignmentCrunchFlips > 0
+            ? constructor.reassignmentCrunchFlips
+            : scorer.blockingDirCandidatesPicked,
         crunchZoneBlockingPicked: scorer.crunchZoneBlockingPicked,
         releaseZoneFallbackPicked: scorer.releaseZoneFallbackPicked,
         constructionSolvabilityRetries:
@@ -1264,6 +1291,7 @@ class LevelGenerator {
           gridHeight: config.gridHeight,
         ),
         nodes: nodes,
+        portalPairs: constructor.placedPortals,
       );
 
       final waveMap = LevelSolver.nodeWaveIndices(tempLevel);
@@ -1301,6 +1329,7 @@ class LevelGenerator {
             gridHeight: config.gridHeight,
           ),
           nodes: finalNodes,
+          portalPairs: constructor.placedPortals,
         )),
         telemetry: telemetry,
       );
@@ -1669,87 +1698,6 @@ class LevelGenerator {
       if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return false;
       if (futureSet.contains(gridCellKey(x, y))) return true;
     }
-  }
-
-  // ────────────────────────────────────────────────────────────────────────
-  // Milestone levels (Item 10)
-  // ────────────────────────────────────────────────────────────────────────
-
-  /// Returns the milestone type for this level, or null for normal levels.
-  /// Milestones fire every 25th level for Medium/Hard only.
-  static _MilestoneType? _getMilestoneType(LevelConfiguration config) {
-    if (config.difficulty.mode == DifficultyMode.easy) return null;
-    final id = config.levelId;
-    if (id < 25) return null;
-
-    final mod = id % 100;
-    if (mod == 0) return _MilestoneType.sparseSniper;
-    if (mod == 50) return _MilestoneType.maxDensity;
-    // mod == 25 and mod == 75 are now handled by the [LevelSeed] pipeline
-    // (diamond / ring respectively); see `milestoneSeedFor`.
-    return null;
-  }
-
-  Result<LevelData, GenerationError> _generateMilestone(
-    _MilestoneType type,
-    LevelConfiguration config,
-    Random random,
-  ) {
-    switch (type) {
-      case _MilestoneType.maxDensity:
-        return _generateMaxDensity(config, random);
-      case _MilestoneType.sparseSniper:
-        return _generateSparseSniper(config, random);
-    }
-  }
-
-  /// Nearly maximum density — fills as many cells as the grid allows.
-  Result<LevelData, GenerationError> _generateMaxDensity(
-    LevelConfiguration config,
-    Random random,
-  ) {
-    final maxCount = min(
-        config.gridWidth * config.gridHeight, max(config.targetNodeCount, 40));
-    final denseConfig = LevelConfiguration(
-      levelId: config.levelId,
-      gridWidth: config.gridWidth,
-      gridHeight: config.gridHeight,
-      targetNodeCount: maxCount,
-      difficulty: config.difficulty,
-      archetype: config.archetype,
-      directionBias: DirectionBiasType.uniform,
-      irregularMaskProbability: config.irregularMaskProbability,
-      irregularLayoutExtraTries: config.irregularLayoutExtraTries,
-      minimumTargetNodeCount: config.minimumTargetNodeCount,
-    );
-    return _attemptGeneration(denseConfig, random);
-  }
-
-  /// Nodes placed only on the border of the grid.
-  /// Very few nodes on a large grid — a "sniper" challenge.
-  Result<LevelData, GenerationError> _generateSparseSniper(
-    LevelConfiguration config,
-    Random random,
-  ) {
-    final sparseCount = max(
-      config.difficulty.minNodes,
-      (config.targetNodeCount * 0.45).round(),
-    );
-    final w = min(20, config.gridWidth + 2);
-    final h = min(20, config.gridHeight + 2);
-    final sparseConfig = LevelConfiguration(
-      levelId: config.levelId,
-      gridWidth: w,
-      gridHeight: h,
-      targetNodeCount: sparseCount,
-      difficulty: config.difficulty,
-      archetype: config.archetype,
-      directionBias: DirectionBiasType.uniform,
-      irregularMaskProbability: config.irregularMaskProbability,
-      irregularLayoutExtraTries: config.irregularLayoutExtraTries,
-      minimumTargetNodeCount: config.minimumTargetNodeCount,
-    );
-    return _attemptGeneration(sparseConfig, random);
   }
 
   // ────────────────────────────────────────────────────────────────────────

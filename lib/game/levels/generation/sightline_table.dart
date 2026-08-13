@@ -26,7 +26,13 @@ class SightlineTable {
   SightlineTable._(this.gridWidth, this.gridHeight, this._rays);
 
   /// Builds the table for a `gridWidth × gridHeight` rectangular grid.
-  factory SightlineTable.forGrid(int gridWidth, int gridHeight) {
+  factory SightlineTable.forGrid(int gridWidth, int gridHeight, {List<PortalPair> portals = const []}) {
+    final portalMap = <int, int>{};
+    for (final p in portals) {
+      portalMap[gridCellKey(p.x1, p.y1)] = gridCellKey(p.x2, p.y2);
+      portalMap[gridCellKey(p.x2, p.y2)] = gridCellKey(p.x1, p.y1);
+    }
+
     final rays = List<List<int>>.filled(
       gridWidth * gridHeight * 4,
       const <int>[],
@@ -36,7 +42,7 @@ class SightlineTable {
       for (var x = 0; x < gridWidth; x++) {
         final base = (y * gridWidth + x) * 4;
         for (final dir in Direction.values) {
-          rays[base + dir.index] = _walkRay(x, y, dir, gridWidth, gridHeight);
+          rays[base + dir.index] = _walkRay(x, y, dir, gridWidth, gridHeight, portalMap);
         }
       }
     }
@@ -49,11 +55,14 @@ class SightlineTable {
     Direction dir,
     int gridWidth,
     int gridHeight,
+    Map<int, int> portalMap,
   ) {
     final cells = <int>[];
     var cx = x;
     var cy = y;
-    while (true) {
+    int hops = 0;
+    
+    while (hops < 50) { // arbitrary hop limit to prevent infinite loops
       switch (dir) {
         case Direction.up:
           cy--;
@@ -65,7 +74,18 @@ class SightlineTable {
           cx++;
       }
       if (cx < 0 || cx >= gridWidth || cy < 0 || cy >= gridHeight) break;
-      cells.add(gridCellKey(cx, cy));
+      
+      final key = gridCellKey(cx, cy);
+      cells.add(key);
+      
+      if (portalMap.containsKey(key)) {
+        final outKey = portalMap[key]!;
+        cx = outKey % 1000;
+        cy = outKey ~/ 1000;
+        // The out portal cell itself is not part of the line of sight again.
+        // It acts as the origin for the next step.
+      }
+      hops++;
     }
     return List<int>.unmodifiable(cells);
   }

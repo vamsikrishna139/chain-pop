@@ -2,6 +2,27 @@ import 'dart:math' as math;
 import 'package:chain_pop/game/levels/level.dart';
 
 
+/// Share of the playfield band width the board is fitted into.
+///
+/// Was a single `targetFill: 0.80` applied to **both** axes and then reduced by
+/// `min()`. On a portrait phone the width term always won, so a square board
+/// rendered at exactly `0.8 × bandWidth` regardless of grid size and the whole
+/// vertical remainder was discarded — coverage collapsed to the closed form
+/// `0.64 × bandW/bandH ≈ 40 %` on every grid from 6×6 to 9×9 alike.
+///
+/// Splitting the fills per axis lets the height term participate. Measured on
+/// the 210-board corpus (`report_*_test.dart`, 390×844): cell 34.2 → 40.2 px at
+/// 8×8, band coverage 40.7 % → 56.2 %.
+///
+/// **Rollback:** set both back to `0.80`.
+const double kBoardWidthFill = 0.94;
+
+/// Share of the playfield band height the board is fitted into. See
+/// [kBoardWidthFill]. Slightly higher than the width fill because the vertical
+/// band is bounded by measured HUD reserves, whereas the horizontal margin is
+/// pure breathing room.
+const double kBoardHeightFill = 0.98;
+
 /// Bounding box representation of occupied cells on a grid.
 class OccupiedBounds {
   final int minX;
@@ -113,21 +134,29 @@ class BoardLayoutMetrics {
     return s;
   }
 
-  /// Calculates the largest cell size that fits a bounding box size in the playfield target fill area.
+  /// Calculates the largest cell size that fits a bounding box size in the
+  /// playfield target fill area.
+  ///
+  /// [widthFill] and [heightFill] are the per-axis shares of the band the board
+  /// is fitted into ([kBoardWidthFill] / [kBoardHeightFill]). [targetFill] is a
+  /// convenience that sets both to the same value; it is what the single-fill
+  /// call sites and tests use.
   static double fitCellSizeForBounds({
     required double bandW,
     required double bandH,
     required int bboxWidth,
     required int bboxHeight,
-    required double targetFill,
+    double? targetFill,
+    double widthFill = kBoardWidthFill,
+    double heightFill = kBoardHeightFill,
     double maxCell = 96.0,
     double minPreferredCell = 26.0,
   }) {
     if (bboxWidth <= 0 || bboxHeight <= 0) return 0;
     if (bandW <= 0 || bandH <= 0) return 0;
 
-    final targetW = bandW * targetFill;
-    final targetH = bandH * targetFill;
+    final targetW = bandW * (targetFill ?? widthFill);
+    final targetH = bandH * (targetFill ?? heightFill);
 
     final cellW = targetW / bboxWidth;
     final cellH = targetH / bboxHeight;
@@ -155,7 +184,9 @@ class BoardLayoutMetrics {
     required int bboxHeight,
     required int gridWidth,
     required int gridHeight,
-    required double targetFill,
+    double? targetFill,
+    double widthFill = kBoardWidthFill,
+    double heightFill = kBoardHeightFill,
     double maxCell = 96.0,
     double minPreferredCell = 26.0,
   }) {
@@ -165,6 +196,8 @@ class BoardLayoutMetrics {
       bboxWidth: bboxWidth,
       bboxHeight: bboxHeight,
       targetFill: targetFill,
+      widthFill: widthFill,
+      heightFill: heightFill,
       maxCell: maxCell,
       minPreferredCell: minPreferredCell,
     );

@@ -63,6 +63,9 @@ abstract class GameScreenControllerHost {
   int get removedNodes;
   set removedNodes(int value);
 
+  int get movesTaken;
+  int get undosUsed;
+
   int get totalNodes;
 
   int get autoAdvanceSec;
@@ -98,8 +101,8 @@ abstract class GameScreenControllerHost {
   bool get playfieldInsetFrameScheduled;
   set playfieldInsetFrameScheduled(bool value);
 
-  double get tutorialHintTop;
-  set tutorialHintTop(double value);
+  double get hudBannerTop;
+  set hudBannerTop(double value);
 
   CampaignStreakTracker get streak;
   SessionPacingController get pacing;

@@ -14,7 +14,11 @@ class WinPanel extends StatefulWidget {
   final int stars;
   final int foulCount;
   final Duration timeTaken;
-  final double? speedBonusMultiplier;
+  final String? missionLabel;
+  final String? sessionGoalLabel;
+  final int? sessionGoalProgress;
+  final int? sessionGoalTarget;
+  final bool? sessionGoalComplete;
   final int autoAdvanceSec;
   final VoidCallback onMenu;
   final VoidCallback onRetry;
@@ -26,6 +30,9 @@ class WinPanel extends StatefulWidget {
   /// Replaces the default `LEVEL … · MODE` caption when non-null.
   final String? titleLine;
 
+  /// When non-null, shown in the WinPanel (e.g. 'DIRECTIVE: FLAWLESS')
+  final String? directiveLabel;
+
   const WinPanel({
     super.key,
     required this.levelId,
@@ -33,13 +40,18 @@ class WinPanel extends StatefulWidget {
     required this.stars,
     required this.foulCount,
     required this.timeTaken,
-    this.speedBonusMultiplier,
+    this.missionLabel,
+    this.sessionGoalLabel,
+    this.sessionGoalProgress,
+    this.sessionGoalTarget,
+    this.sessionGoalComplete,
     required this.autoAdvanceSec,
     required this.onMenu,
     required this.onRetry,
     required this.onNext,
     this.showNextAndAutoAdvance = true,
     this.titleLine,
+    this.directiveLabel,
   });
 
   @override
@@ -124,15 +136,20 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              widget.titleLine ??
-                  'LEVEL ${ProgressFormat.level(widget.levelId)} · ${widget.difficulty.label}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: accent,
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                widget.titleLine ??
+                    'LEVEL ${ProgressFormat.level(widget.levelId)} · ${widget.difficulty.label}',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2,
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -144,6 +161,56 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
                 fontWeight: FontWeight.w900,
               ),
             ),
+            if (widget.directiveLabel != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.directiveLabel!,
+                        maxLines: 1,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      if (widget.missionLabel != null) ...[
+                        const Text(
+                          ' · ',
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: Colors.white24,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        Text(
+                          widget.missionLabel!,
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -181,15 +248,74 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
                   label: 'FOULS',
                   value: '${widget.foulCount}',
                 ),
-                if (widget.speedBonusMultiplier != null) ...[
-                  const SizedBox(width: 16),
-                  _WinStatChip(
-                    label: 'SPEED',
-                    value: '×${widget.speedBonusMultiplier!.toStringAsFixed(1)}',
-                  ),
-                ],
               ],
             ),
+            if (widget.sessionGoalLabel != null) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    widget.sessionGoalComplete == true
+                        ? Icons.check_circle_rounded
+                        : Icons.flag_rounded,
+                    size: 13,
+                    color: widget.sessionGoalComplete == true
+                        ? const Color(0xFF00FF87)
+                        : accent,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      widget.sessionGoalLabel!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (widget.sessionGoalComplete == true)
+                    const Text(
+                      'COMPLETE',
+                      style: TextStyle(
+                        color: Color(0xFF00FF87),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    )
+                  else ...[
+                    SizedBox(
+                      width: 48,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: (widget.sessionGoalTarget ?? 1) == 0
+                              ? 0.0
+                              : (widget.sessionGoalProgress ?? 0) /
+                                  widget.sessionGoalTarget!,
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          color: accent,
+                          minHeight: 4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${widget.sessionGoalProgress}/${widget.sessionGoalTarget}',
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
             if (widget.showNextAndAutoAdvance) ...[
               const SizedBox(height: 20),
               Semantics(

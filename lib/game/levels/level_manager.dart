@@ -18,6 +18,18 @@ class LevelManager {
   /// common path or the (budget-free) generation test suites.
   static const Duration generationBudget = Duration(milliseconds: 200);
 
+  /// Latency budget for the Daily Challenge.
+  ///
+  /// Daily legitimately does more work than a campaign level (sector-8 mechanic
+  /// budget, two relays, Expert-band ranking), so it gets double the campaign
+  /// budget rather than the same one. Before this existed the Daily path passed
+  /// **no** budget at all — and `null` means *fully unbounded* (40 attempts × 8
+  /// K × 4 renegotiations), not "use a default". A 10-day sample measured one
+  /// date key at 5.5 s against a 300 ms median, and because the budget-fallback
+  /// branch is unreachable without a clock, a Daily that exhausted its attempts
+  /// fell all the way through to the one-node emergency board.
+  static const Duration dailyGenerationBudget = Duration(milliseconds: 400);
+
   /// Returns a valid, solvable [LevelData] for [levelId].
   ///
   /// Uses the full generation pipeline from [LevelGenerator]. If generation
@@ -48,7 +60,10 @@ class LevelManager {
   static LevelData getDailyChallenge([DateTime? date]) {
     final when = date ?? DateTime.now();
     final dayKey = DailyChallenge.dateKeyLocal(when);
-    final result = _generator.generateDailyChallenge(dayKey);
+    final result = _generator.generateDailyChallenge(
+      dayKey,
+      timeBudget: dailyGenerationBudget,
+    );
 
     if (result.isSuccess) {
       final level = result.value;

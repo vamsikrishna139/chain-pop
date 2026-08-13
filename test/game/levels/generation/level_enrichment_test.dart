@@ -23,13 +23,28 @@ LevelConfiguration _hardConfig(int levelId) => LevelConfiguration(
       ),
     );
 
+LevelConfiguration _mediumConfig(int levelId) => LevelConfiguration(
+      levelId: levelId,
+      gridWidth: 6,
+      gridHeight: 6,
+      targetNodeCount: 6,
+      difficulty: const DifficultyParameters(
+        mode: DifficultyMode.medium,
+        minChainLength: 2,
+        maxChainLength: 6,
+        densityFactor: 0.25,
+        minNodes: 4,
+        maxNodes: 12,
+      ),
+    );
+
 void main() {
   group('enrichLevel relay placement', () {
     test('relay avoids core rows and enriched level stays solvable', () {
       // Column of left-pointing nodes: every node can always exit, so the
       // base level is ID-order solvable in any state.
       final level = LevelData(
-        levelId: 58,
+        levelId: 260,
         gridWidth: 6,
         gridHeight: 6,
         nodes: [
@@ -38,7 +53,8 @@ void main() {
         ],
       );
 
-      final enriched = enrichLevel(level, _hardConfig(58), DifficultyTier.hard);
+      final enriched =
+          enrichLevel(level, _hardConfig(260), DifficultyTier.hard);
 
       final cores = enriched.nodes.where((n) => n.isCore).toList();
       final relays =
@@ -59,7 +75,7 @@ void main() {
       // All six nodes live in rows 0 and 2, and the three cores land across
       // both rows — leaving no row the relay is allowed to occupy.
       final level = LevelData(
-        levelId: 58,
+        levelId: 261,
         gridWidth: 6,
         gridHeight: 6,
         nodes: [
@@ -72,7 +88,8 @@ void main() {
         ],
       );
 
-      final enriched = enrichLevel(level, _hardConfig(58), DifficultyTier.hard);
+      final enriched =
+          enrichLevel(level, _hardConfig(261), DifficultyTier.hard);
 
       final coreRows =
           enriched.nodes.where((n) => n.isCore).map((n) => n.y).toSet();
@@ -92,7 +109,7 @@ void main() {
       // popping core 4 early, but the canonical solution must work as-is).
       // Nodes 1 and 3 are safe picks (their rotations touch no later node).
       final level = LevelData(
-        levelId: 58,
+        levelId: 262,
         gridWidth: 6,
         gridHeight: 6,
         nodes: [
@@ -106,7 +123,8 @@ void main() {
         ],
       );
 
-      final enriched = enrichLevel(level, _hardConfig(58), DifficultyTier.hard);
+      final enriched =
+          enrichLevel(level, _hardConfig(262), DifficultyTier.hard);
 
       final relays =
           enriched.nodes.where((n) => n.kind == NodeKind.relay).toList();
@@ -124,7 +142,7 @@ void main() {
     // the columns and nodes are spread vertically by 2. Ids are assigned in
     // wave order (id 0 = first popped) to mirror the real generator, so the
     // deepest (last-popped) nodes carry the highest ids.
-    LevelData chainBoard() {
+    LevelData chainBoard({int levelId = 10}) {
       final nodes = <NodeData>[];
       var id = 0;
       // wave w corresponds to column x = 5 - w.
@@ -135,7 +153,7 @@ void main() {
         }
       }
       return LevelData(
-        levelId: 10, // < 26 ⇒ enrichment adds cores only (no locks/relays).
+        levelId: levelId,
         gridWidth: 6,
         gridHeight: 5,
         nodes: nodes,
@@ -190,6 +208,24 @@ void main() {
 
       final enriched = enrichLevel(level, _hardConfig(10), DifficultyTier.hard);
       expect(enriched.nodes.where((n) => n.isCore), hasLength(3));
+      expect(LevelValidator().validate(enriched).isValid, isTrue);
+    });
+
+    test('Medium sector 2 places exactly one core', () {
+      final level = chainBoard(levelId: 126);
+      final enriched =
+          enrichLevel(level, _mediumConfig(126), DifficultyTier.medium);
+
+      expect(enriched.nodes.where((n) => n.isCore), hasLength(1));
+      expect(LevelValidator().validate(enriched).isValid, isTrue);
+    });
+
+    test('Medium sector 3 places exactly two cores', () {
+      final level = chainBoard(levelId: 251);
+      final enriched =
+          enrichLevel(level, _mediumConfig(251), DifficultyTier.medium);
+
+      expect(enriched.nodes.where((n) => n.isCore), hasLength(2));
       expect(LevelValidator().validate(enriched).isValid, isTrue);
     });
   });

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../game/difficulty_exports.dart';
+import '../../game/levels/level_directive.dart';
 import '../../game/levels/tutorial_levels.dart';
 import '../../game/world_registry.dart';
 import '../../services/ads/campaign_interstitial_frustration_gate.dart';
@@ -43,9 +44,17 @@ final class GameFlowController {
 
     var goalCompleted = false;
 
-    final earned = _host.difficulty.starsForJams(
-      GameScreenConstants.maxLives - _host.livesRemaining,
+    final result = LevelResult(
+      levelId: _host.level,
+      jamCount: GameScreenConstants.maxLives - _host.livesRemaining,
+      elapsedSeconds: _host.stopwatch.elapsed.inSeconds,
+      undosUsed: _host.undosUsed,
+      movesTaken: _host.movesTaken,
+      totalNodes: _host.totalNodes,
+      mode: _host.difficulty,
+      isTutorial: _host.isTutorial,
     );
+    final earned = result.earnedStars;
     if (_host.isTutorial) {
       if (_host.tutorialIndex == tutorialLevels.length - 1) {
         await _host.progress.setTutorialCompleted(true);
@@ -220,6 +229,9 @@ final class GameFlowController {
       if (_host.isTutorial) {
         final next = _host.tutorialIndex + 1;
         if (next >= tutorialLevels.length) return;
+        // `_host.mounted` is checked above with no intervening await; the lint
+        // just cannot see through the GameScreenControllerHost interface.
+        // ignore: use_build_context_synchronously
         Navigator.of(_host.context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (_, __, ___) => GameScreen(
@@ -243,6 +255,8 @@ final class GameFlowController {
         );
         return;
       }
+      // Same as above: guarded by the `_host.mounted` check, no await between.
+      // ignore: use_build_context_synchronously
       Navigator.of(_host.context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (_, __, ___) => GameScreen(

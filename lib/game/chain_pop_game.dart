@@ -74,6 +74,10 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   bool hasWon = false;
   bool isGameOver = false;
+  
+  int movesTaken = 0;
+  int undosUsed = 0;
+  
   late PositionComponent board;
   double _cellSize = 0;
 
@@ -359,7 +363,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       bboxHeight: bounds.bboxHeight,
       gridWidth: levelData.gridWidth,
       gridHeight: levelData.gridHeight,
-      targetFill: 0.80,
+      widthFill: kBoardWidthFill,
+      heightFill: kBoardHeightFill,
     );
     if (cellSize <= 0 &&
         levelData.gridWidth > 0 &&
@@ -583,6 +588,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     }
     _undoStack.add(data.clone());
     activeNodes.removeWhere((n) => n.id == data.id);
+    movesTaken++;
     _rebuildExtractableIds();
     _refreshCoachMark();
 
@@ -676,6 +682,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   bool undo() {
     if (_undoStack.isEmpty || hasWon || isGameOver) return false;
     final restored = _undoStack.removeLast();
+    undosUsed++;
     if (_extractionStreak > 0) _extractionStreak--;
     _ambient?.setStreak(_extractionStreak);
     if (restored.kind == NodeKind.relay) {
@@ -847,6 +854,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _jamCounts.clear();
     activeNodes.clear();
     _undoStack.clear();
+    movesTaken = 0;
+    undosUsed = 0;
     for (final node in levelData.nodes) {
       activeNodes.add(node.clone());
     }
