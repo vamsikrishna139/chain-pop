@@ -1330,6 +1330,7 @@ class LevelGenerator {
           ),
           nodes: finalNodes,
           portalPairs: constructor.placedPortals,
+          silhouetteId: plan.silhouette,
         )),
         telemetry: telemetry,
       );

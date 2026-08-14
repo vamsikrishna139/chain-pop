@@ -12,6 +12,7 @@ import '../game/levels/tutorial_levels.dart';
 import '../services/storage/storage_locator.dart';
 import '../theme/app_colors.dart';
 import '../utils/progress_format.dart';
+import 'achievements_screen.dart';
 import 'daily_challenge_calendar_screen.dart';
 import 'game_screen.dart';
 import 'level_select_screen.dart';
@@ -201,6 +202,19 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                                       color: accent,
                                       letterSpacing: 1.2,
                                     ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.emoji_events_outlined),
+                                tooltip: 'Achievements',
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          const AchievementsScreen(),
+                                    ),
+                                  );
+                                },
                               ),
                               IconButton(
                                 icon: const Icon(Icons.settings_outlined),

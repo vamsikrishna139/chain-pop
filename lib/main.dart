@@ -10,6 +10,8 @@ import 'bootstrap/firebase_bootstrap.dart';
 import 'dev/autoplay_harness.dart';
 import 'screens/main_menu_screen.dart';
 import 'screens/splash_screen.dart';
+import 'services/achievements/achievement_tracker.dart';
+import 'services/achievements/achievements_locator.dart';
 import 'services/ads/ad_debug_log.dart';
 import 'services/ads/admob_config.dart';
 import 'services/ads/ad_service_factory.dart';
@@ -48,6 +50,11 @@ Future<void> bootstrapChainPop() async {
 
   await Hive.initFlutter();
   await StorageService.init();
+
+  // After storage: the tracker reads Hive on construction of its first
+  // snapshot. Its default sink is a no-op, so this is inert until Play Games
+  // is wired up — progress still accrues locally from the first level won.
+  AchievementsLocator.install(AchievementTracker());
 
   await _bootstrapThirdPartySdks();
 }

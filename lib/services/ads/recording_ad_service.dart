@@ -56,4 +56,7 @@ final class RecordingAdService implements AdService {
 
   @override
   Widget buildGamePauseBanner(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  Widget buildGameScreenBanner(BuildContext context) => const SizedBox.shrink();
 }

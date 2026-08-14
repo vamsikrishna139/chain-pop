@@ -2,10 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../game/daily_challenge.dart';
 import '../../game/difficulty_exports.dart';
+import '../../game/levels/generation/silhouettes.dart';
 import '../../game/levels/level_directive.dart';
 import '../../game/levels/tutorial_levels.dart';
 import '../../game/world_registry.dart';
+import '../../services/achievements/achievements_locator.dart';
+import '../../services/achievements/game_event.dart';
 import '../../services/ads/campaign_interstitial_frustration_gate.dart';
 import '../../services/ads/campaign_between_levels_ads.dart';
 import '../../services/game_sfx.dart';
@@ -35,6 +39,64 @@ final class GameFlowController {
         clearTrackedAfter ? Duration.zero : elapsed;
   }
 
+  /// Feeds a campaign win to the achievement tracker.
+  ///
+  /// Fire-and-forget and fully swallowed: achievements are additive to
+  /// gameplay, so nothing here may ever surface into the win flow. A tracker
+  /// fault costs a missed unlock, which the next win re-evaluates from the same
+  /// local aggregates anyway.
+  Future<void> _recordCampaignAchievementEvent(
+    LevelResult result,
+    int earned,
+  ) async {
+    try {
+      final data = _host.engine.levelData;
+      final silhouette = data.silhouetteId;
+      await AchievementsLocator.instance.record(
+        CampaignLevelWon(
+          mode: _host.difficulty,
+          levelId: _host.level,
+          starsEarned: earned,
+          directive: directiveFor(
+            levelId: _host.level,
+            mode: _host.difficulty,
+          ),
+          jamCount: result.jamCount,
+          undosUsed: result.undosUsed,
+          hintsUsed: _host.hintAdPolicy.hintsUsedThisAttempt,
+          networkIntegrity: _host.engine.networkIntegrity,
+          nodeCount: data.nodes.length,
+          coreCount: data.coreCount,
+          lockCount: data.lockCount,
+          relayCount: data.relayCount,
+          phaseGateCount: data.phaseGateCount,
+          portalPairCount: data.portalPairs.length,
+          dayKey: DailyChallenge.dateKeyLocal(DateTime.now()),
+          silhouetteFamily:
+              silhouette == null ? null : silhouetteVisualFamily(silhouette),
+        ),
+      );
+    } catch (_) {
+      // Intentionally ignored — see doc comment.
+    }
+  }
+
+  Future<void> _recordDailyAchievementEvent(int earned) async {
+    try {
+      final dayKey = _host.dailyDayKey;
+      if (dayKey == null) return;
+      await AchievementsLocator.instance.record(
+        DailyChallengeCompleted(
+          challengeDayKey: dayKey,
+          todayDayKey: DailyChallenge.dateKeyLocal(DateTime.now()),
+          starsEarned: earned,
+        ),
+      );
+    } catch (_) {
+      // Intentionally ignored — see [_recordCampaignAchievementEvent].
+    }
+  }
+
   Future<void> handleWin() async {
     flushLifetimeGameplayDelta();
     _host.stopwatch.stop();
@@ -61,6 +123,7 @@ final class GameFlowController {
       }
     } else if (_host.isDailyChallenge) {
       await _host.progress.saveDailyStars(_host.dailyDayKey!, earned);
+      unawaited(_recordDailyAchievementEvent(earned));
     } else {
       _host.streak.onCampaignWin();
       _host.pacing.onCampaignWin();
@@ -83,6 +146,9 @@ final class GameFlowController {
       CampaignInterstitialFrustrationGate.noteCampaignWin();
       await _host.progress.saveStars(_host.difficulty, _host.level, earned);
       await _host.progress.unlockLevel(_host.difficulty, _host.level + 1);
+      // After the stars and the unlock land, so the tracker's snapshot of
+      // frontier and star total already includes this win.
+      unawaited(_recordCampaignAchievementEvent(result, earned));
     }
 
     if (!_host.mounted) return;

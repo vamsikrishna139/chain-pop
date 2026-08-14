@@ -13,12 +13,16 @@ final class DailyChallengeBannerSlot extends StatefulWidget {
   const DailyChallengeBannerSlot({
     required this.adUnitId,
     required this.debugPlacementTag,
+    this.useStandardSize = false,
     this.fadeInDuration = Duration.zero,
     super.key,
   });
 
   final String adUnitId;
   final String debugPlacementTag;
+
+  /// If true, uses standard adaptive banner size (e.g. 50px height) instead of large.
+  final bool useStandardSize;
 
   /// When non-zero, the loaded banner fades in (avoids an abrupt pop-in).
   final Duration fadeInDuration;
@@ -45,7 +49,12 @@ class _DailyChallengeBannerSlotState extends State<DailyChallengeBannerSlot>
     AnchoredAdaptiveBannerAdSize? size;
 
     try {
-      size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(bounded);
+      if (widget.useStandardSize) {
+        size = await AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
+            bounded);
+      } else {
+        size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(bounded);
+      }
     } catch (e, st) {
       if (kDebugMode) {
         debugPrint(

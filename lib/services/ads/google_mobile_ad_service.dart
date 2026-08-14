@@ -310,4 +310,12 @@ final class GoogleMobileAdService implements AdService {
         debugPlacementTag: AdPlacements.gamePauseBanner,
         fadeInDuration: const Duration(milliseconds: 320),
       );
+
+  @override
+  Widget buildGameScreenBanner(BuildContext context) => DailyChallengeBannerSlot(
+        adUnitId: _bannerUnitId(),
+        debugPlacementTag: AdPlacements.gameScreenBanner,
+        useStandardSize: true,
+        fadeInDuration: const Duration(milliseconds: 320),
+      );
 }

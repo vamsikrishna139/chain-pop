@@ -97,4 +97,12 @@ class PremiumAdServiceDecorator implements AdService {
     }
     return _inner.buildGamePauseBanner(context);
   }
+
+  @override
+  Widget buildGameScreenBanner(BuildContext context) {
+    if (_isPremium) {
+      return const SizedBox.shrink();
+    }
+    return _inner.buildGameScreenBanner(context);
+  }
 }

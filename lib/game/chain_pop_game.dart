@@ -40,6 +40,12 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   final VoidCallback? onJam;
   final void Function(int removed, int total)? onNodeRemoved;
 
+  /// Fires with the new extraction streak on every successful extraction.
+  ///
+  /// Lets [GameScreen] feed combo milestones to the achievement tracker without
+  /// the engine having to know that tracking exists.
+  final void Function(int streak)? onComboStreak;
+
   /// Playfield palette for the current world (or daily/tutorial fallback).
   final WorldTheme theme;
 
@@ -249,6 +255,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     required this.onWin,
     this.onJam,
     this.onNodeRemoved,
+    this.onComboStreak,
     this.preloadedLevel,
     WorldTheme? theme,
     this.topReserved = 140.0,
@@ -578,6 +585,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _axisGuidesVisible = false;
     _jamCounts.clear();
     _extractionStreak++;
+    onComboStreak?.call(_extractionStreak);
     _lastExtractedX = data.x;
     _lastExtractedY = data.y;
     if (data.isCore) {

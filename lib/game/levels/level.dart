@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+import 'generation/silhouettes.dart';
 
 enum Direction { up, down, left, right }
 
@@ -122,6 +123,14 @@ class LevelData {
   final List<NodeData> nodes;
   final List<PortalPair> portalPairs;
 
+  /// Silhouette the Director picked for this board, when known.
+  ///
+  /// Pure metadata — nothing about generation or gameplay reads it, so it never
+  /// affects level bytes. Null for boards that do not come from the Director
+  /// (tutorial levels, hand-authored seeds), and consumers must treat null as
+  /// "unknown" rather than guessing a family.
+  final SilhouetteId? silhouetteId;
+
   LevelData({
     required this.levelId,
     required this.gridWidth,
@@ -129,7 +138,23 @@ class LevelData {
     required this.nodes,
     this.playCells,
     this.portalPairs = const [],
+    this.silhouetteId,
   });
+
+  /// Cores on the board.
+  int get coreCount => nodes.where((n) => n.isCore).length;
+
+  /// Locked nodes on the board.
+  int get lockCount =>
+      nodes.where((n) => n.kind == NodeKind.locked).length;
+
+  /// Relay nodes on the board.
+  int get relayCount => nodes.where((n) => n.kind == NodeKind.relay).length;
+
+  /// Distinct phase gates — one per non-zero phase group, since a gate is the
+  /// boundary between groups rather than a property of each node.
+  int get phaseGateCount =>
+      nodes.map((n) => n.phaseGroup).where((g) => g > 0).toSet().length;
 
   /// Layout invariants (not solvability). Returns `null` if valid.
   static String? layoutValidationMessage(LevelData data) {

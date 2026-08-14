@@ -22,4 +22,7 @@ abstract final class AdPlacements {
 
   /// Banner: bottom of [GamePauseOverlay] while paused (campaign + daily; not tutorial).
   static const gamePauseBanner = 'game_pause_banner';
+
+  /// Banner: bottom of the game screen below the toolbar.
+  static const gameScreenBanner = 'game_screen_banner';
 }

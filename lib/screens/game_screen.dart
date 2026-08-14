@@ -16,6 +16,8 @@ import '../game/levels/level_directive.dart';
 import '../game/levels/tutorial_levels.dart';
 import '../utils/progress_format.dart';
 import '../models/game_settings.dart';
+import '../services/achievements/achievements_locator.dart';
+import '../services/achievements/game_event.dart';
 import '../services/ads/ad_service.dart';
 import '../services/ads/ads_locator.dart';
 import '../services/crash_reporting.dart';
@@ -47,6 +49,10 @@ import 'game/widgets/quick_win_banner.dart';
 import 'game/widgets/session_goal_chip.dart';
 import 'game/widgets/win_celebration_overlay.dart';
 import 'game/widgets/win_panel.dart';
+
+/// Combo length that earns the Chain Reaction achievement. Mirrors the
+/// tracker's own threshold; kept here so ordinary pops never reach the tracker.
+const int _kComboAchievementStreak = 5;
 
 /// Full-screen game view for a single level.
 ///
@@ -648,10 +654,25 @@ class GameScreenState extends State<GameScreen>
           : () => unawaited(_gameFlow.handleWin()),
       onJam: _handleFoul,
       onNodeRemoved: _handleNodeRemoved,
+      onComboStreak: _handleComboStreak,
       preloadedLevel: _levelData!,
       theme: WorldTheme.fromAccent(accent),
     );
     _pushFeedbackToGame();
+  }
+
+  /// Reports combo milestones to the achievement tracker.
+  ///
+  /// Fires on every extraction, so it filters before touching the tracker —
+  /// this sits on the hot path and must stay near-free for ordinary pops.
+  void _handleComboStreak(int streak) {
+    if (streak < _kComboAchievementStreak) return;
+    if (widget.isTutorial || widget.autoplay) return;
+    unawaited(
+      AchievementsLocator.instance.record(ComboReached(streak)).catchError(
+        (_) {},
+      ),
+    );
   }
 
   void _handleFoul() {
@@ -968,30 +989,41 @@ class GameScreenState extends State<GameScreen>
               ),
             ),
           if (!_hasWon)
-            GameBottomToolbar(
-              measureKey: _footerHudKey,
-              accent: accent,
-              showHintAdBadge: _hardOrDailyFeatures,
-              axisGuidesVisible: _engine.axisGuidesVisible,
-              canUndo: _engine.canUndo,
-              onHint: () => unawaited(_adCoordinator.handleHint()),
-              onToggleGuides: () {
-                if (_isPaused) return;
-                _engine.toggleAxisGuides();
-                setState(() {});
-              },
-              onZoomIn: widget.isTutorial
-                  ? () {
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GameBottomToolbar(
+                    measureKey: _footerHudKey,
+                    accent: accent,
+                    showHintAdBadge: _hardOrDailyFeatures,
+                    axisGuidesVisible: _engine.axisGuidesVisible,
+                    canUndo: _engine.canUndo,
+                    onHint: () => unawaited(_adCoordinator.handleHint()),
+                    onToggleGuides: () {
                       if (_isPaused) return;
-                      _engine.zoomInStep();
-                    }
-                  : null,
-              onResetView: () {
-                if (_isPaused) return;
-                _engine.resetView();
-              },
-              onUndo: () => unawaited(_adCoordinator.handleUndo()),
-              onRestart: _gameFlow.resetForRetry,
+                      _engine.toggleAxisGuides();
+                      setState(() {});
+                    },
+                    onZoomIn: widget.isTutorial
+                        ? () {
+                            if (_isPaused) return;
+                            _engine.zoomInStep();
+                          }
+                        : null,
+                    onResetView: () {
+                      if (_isPaused) return;
+                      _engine.resetView();
+                    },
+                    onUndo: () => unawaited(_adCoordinator.handleUndo()),
+                    onRestart: _gameFlow.resetForRetry,
+                  ),
+                  _ads.buildGameScreenBanner(context),
+                ],
+              ),
             ),
           if (_isPaused && !_hasWon)
             GamePauseOverlay(
