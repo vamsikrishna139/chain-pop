@@ -4,6 +4,7 @@ import '../../game/levels/generation/difficulty_mode.dart';
 import '../../models/difficulty.dart';
 import '../../models/game_settings.dart';
 import '../../utils/safe_hive_values.dart';
+import '../achievements/achievement_counters.dart';
 import 'chain_pop_storage.dart';
 
 /// Hive implementation of [ChainPopStorage] / [ChainPopPersistence].
@@ -20,7 +21,7 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   /// ~10 minutes; pairs with clears gate under OR semantics.
   static const int campaignInterstitialMinGameplaySeconds = 600;
 
-  static const int _schemaVersion = 2;
+  static const int _schemaVersion = 3;
 
   static const String _difficultyKey = 'selected_difficulty';
   static const String _unlockedPrefix = 'unlocked_';
@@ -40,6 +41,13 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   static const String _settingsAmbientMotionKey = 'settings_ambient_motion';
 
   static const String _hintRewardCoachSeenKey = 'hint_reward_coach_seen';
+
+  static const String _achievementUnlockedKey = 'ach_unlocked_ids';
+  static const String _achievementCursorKey = 'ach_sync_cursor';
+
+  /// Ceiling for achievement counters. Generous enough for the 150,000-node
+  /// tier with headroom, small enough that a corrupt value cannot overflow.
+  static const int _achievementCounterMax = 1 << 30;
 
   late Box<dynamic> _box;
 
@@ -69,6 +77,10 @@ final class HiveChainPopPersistence implements ChainPopStorage {
       await _migrateToV2(fromVersion: stored);
     }
 
+    if (stored < 3) {
+      await _migrateToV3();
+    }
+
     await _box.put(_schemaKey, _schemaVersion);
   }
 
@@ -77,6 +89,33 @@ final class HiveChainPopPersistence implements ChainPopStorage {
     if (fromVersion < 1) {
       // Reserved for legacy installs predating explicit schema versioning.
     }
+  }
+
+  /// Seeds the achievement aggregates introduced with the Play Games catalog.
+  ///
+  /// Only counters that can be honestly reconstructed from existing keys are
+  /// seeded. Star totals and Daily completions are both fully recoverable —
+  /// the per-level and per-day records already exist. Everything else
+  /// (nodes cleared, per-mechanic tallies, streak history) has no historical
+  /// record, so it legitimately starts at zero for existing players.
+  ///
+  /// Idempotent: re-running recomputes the same values from the same source
+  /// keys rather than accumulating.
+  Future<void> _migrateToV3() async {
+    var stars = 0;
+    var dailies = 0;
+    for (final key in _box.keys) {
+      final k = key.toString();
+      if (k.startsWith(_starsPrefix)) {
+        stars += coerceHiveInt(_box.get(key), fallback: 0, min: 0, max: 3);
+      } else if (k.startsWith(_dailyStarsPrefix)) {
+        if (coerceHiveInt(_box.get(key), fallback: 0, min: 0, max: 3) > 0) {
+          dailies++;
+        }
+      }
+    }
+    await _box.put(AchievementCounter.totalStars.storageKey, stars);
+    await _box.put(AchievementCounter.dailyCompleted.storageKey, dailies);
   }
 
   @override
@@ -175,6 +214,12 @@ final class HiveChainPopPersistence implements ChainPopStorage {
     final current = stars(mode, levelId);
     if (capped > current) {
       await _box.put('$_starsPrefix${mode.key}_$levelId', capped);
+      // Keep the cross-mode aggregate in step with the per-level records; only
+      // the improvement is added, so re-clearing a level never double-counts.
+      await bumpAchievementCounter(
+        AchievementCounter.totalStars,
+        capped - current,
+      );
     }
   }
 
@@ -208,6 +253,11 @@ final class HiveChainPopPersistence implements ChainPopStorage {
     final current = dailyStarsForDayKey(dayKey);
     if (capped > current) {
       await _box.put('$_dailyStarsPrefix$dayKey', capped);
+      // A day counts once, on the transition from unplayed to played —
+      // improving a day's score later must not inflate the completion tally.
+      if (current == 0) {
+        await bumpAchievementCounter(AchievementCounter.dailyCompleted, 1);
+      }
     }
   }
 
@@ -278,6 +328,101 @@ final class HiveChainPopPersistence implements ChainPopStorage {
       max: 1 << 30,
     );
     await _box.put(_lifetimeGameplaySecondsKey, sum);
+  }
+
+  // ── Achievements ──────────────────────────────────────────────────────────
+
+  @override
+  int achievementCounter(AchievementCounter counter) => coerceHiveInt(
+        _box.get(counter.storageKey),
+        fallback: 0,
+        min: 0,
+        max: _achievementCounterMax,
+      );
+
+  @override
+  Future<void> setAchievementCounter(
+    AchievementCounter counter,
+    int value,
+  ) async {
+    await _box.put(
+      counter.storageKey,
+      coerceHiveInt(value, fallback: 0, min: 0, max: _achievementCounterMax),
+    );
+  }
+
+  @override
+  Future<void> bumpAchievementCounter(
+    AchievementCounter counter,
+    int delta,
+  ) async {
+    if (delta <= 0) return;
+    await setAchievementCounter(counter, achievementCounter(counter) + delta);
+  }
+
+  @override
+  Future<void> raiseAchievementCounter(
+    AchievementCounter counter,
+    int value,
+  ) async {
+    if (value <= achievementCounter(counter)) return;
+    await setAchievementCounter(counter, value);
+  }
+
+  @override
+  Future<void> orAchievementCounter(
+    AchievementCounter counter,
+    int bits,
+  ) async {
+    if (bits == 0) return;
+    final merged = achievementCounter(counter) | bits;
+    await setAchievementCounter(counter, merged);
+  }
+
+  @override
+  Set<String> get unlockedAchievementIds {
+    final raw = _box.get(_achievementUnlockedKey);
+    if (raw is! List) return const <String>{};
+    return raw.whereType<String>().toSet();
+  }
+
+  @override
+  Future<void> markAchievementUnlocked(String id) async {
+    final current = unlockedAchievementIds;
+    if (current.contains(id)) return;
+    await _box.put(_achievementUnlockedKey, <String>[...current, id]);
+  }
+
+  @override
+  Map<String, int> get achievementSyncCursor {
+    final raw = _box.get(_achievementCursorKey);
+    if (raw is! Map) return const <String, int>{};
+    final out = <String, int>{};
+    raw.forEach((k, v) {
+      if (k is String) {
+        out[k] = coerceHiveInt(
+          v,
+          fallback: 0,
+          min: 0,
+          max: _achievementCounterMax,
+        );
+      }
+    });
+    return out;
+  }
+
+  @override
+  Future<void> setAchievementSyncCursor(String id, int steps) async {
+    final next = Map<String, int>.from(achievementSyncCursor);
+    final safe = coerceHiveInt(
+      steps,
+      fallback: 0,
+      min: 0,
+      max: _achievementCounterMax,
+    );
+    if (next[id] == safe) return;
+    next[id] = safe;
+    await _box.put(_achievementCursorKey, next);
   }
 
   /// Re-applies `_ensureSchemaAndMigrate()` (tests that delete `_chain_pop_storage_schema`).

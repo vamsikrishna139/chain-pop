@@ -5,13 +5,20 @@ import 'level.dart';
 
 /// Compile-time mirror of [tutorialLevels.length] for const asserts
 /// (e.g. [GameScreen]'s `tutorialIndex` range check).
-const int tutorialStepCount = 8;
+const int tutorialStepCount = 10;
 
-/// Eight hand-authored onboarding boards (fixed [LevelData], not procedural).
+/// Ten hand-authored onboarding boards (fixed [LevelData], not procedural).
 ///
 /// Progressive focus: single pop → ordered pair → parallel wave + column
 /// follow-up → mixed 5×5 → larger 6×6 recap → cores (gold ring win
-/// condition) → relay (row rotation) → locked node (padlock).
+/// condition) → relay (row rotation) → locked node (padlock) → phase gate
+/// (dimmed until the earlier phase clears) → graduation board carrying every
+/// arrow type at once.
+///
+/// **Indices are load-bearing.** `_tutorialHintText` in `game_screen.dart`
+/// switches on them, `computeTutorialCountdownSec` special-cases 4 and 9, the
+/// Integrity HUD appears from index 5, and `GameTimerController` fast-tracks
+/// the coach hint on 0–1. Append new steps at the end rather than renumbering.
 final List<LevelData> tutorialLevels = [
   _tutorial0,
   _tutorial1,
@@ -21,6 +28,8 @@ final List<LevelData> tutorialLevels = [
   _tutorial5,
   _tutorial6,
   _tutorial7,
+  _tutorial8,
+  _tutorial9,
 ];
 
 Color _c(int slot) => AppColors.nodePalette[slot % AppColors.nodePalette.length];
@@ -338,6 +347,154 @@ final LevelData _tutorial7 = LevelData(
       color: _c(2),
       colorSlot: 2,
       kind: NodeKind.locked,
+    ),
+  ],
+);
+
+/// Phase gate: the two dimmed arrows (`phaseGroup: 1`) both have a completely
+/// clear ray, yet refuse to move while *any* `phaseGroup: 0` arrow is still on
+/// the board — so the lesson is purely "wait for the phase", never "you were
+/// blocked". Mirrors [LevelSolver] `_earlierPhaseRemains` and
+/// `NodeComponent._checkPhaseBlocked`, which share the same predicate.
+///
+/// Opening wave is the two bright arrows; ID order 0→3 clears it.
+final LevelData _tutorial8 = LevelData(
+  levelId: 9008,
+  gridWidth: 4,
+  gridHeight: 4,
+  nodes: [
+    NodeData(
+      id: 0,
+      x: 0,
+      y: 0,
+      dir: Direction.up,
+      color: _c(0),
+      colorSlot: 0,
+    ),
+    NodeData(
+      id: 1,
+      x: 3,
+      y: 3,
+      dir: Direction.down,
+      color: _c(1),
+      colorSlot: 1,
+    ),
+    NodeData(
+      id: 2,
+      x: 1,
+      y: 2,
+      dir: Direction.left,
+      color: _c(2),
+      colorSlot: 2,
+      phaseGroup: 1,
+    ),
+    NodeData(
+      id: 3,
+      x: 2,
+      y: 1,
+      dir: Direction.right,
+      color: _c(3),
+      colorSlot: 3,
+      phaseGroup: 1,
+    ),
+  ],
+);
+
+/// Graduation board — every arrow type at once on a 5×5, in two acts.
+///
+/// **Act one** (`phaseGroup: 0`) forces each mechanic to be *used*, not merely
+/// seen:
+/// - `0` normal, free from the start, and the padlock's only live neighbour.
+/// - `1` relay, free; popping it rotates row 2 clockwise.
+/// - `2` normal, aimed up into core `6`. Because every core is `phaseGroup: 1`
+///   and so cannot leave before act one ends, node `2` is provably reachable
+///   *only* via the relay rotation (up → right, then a clear ray east).
+/// - `3` locked, held by node `0` until it clears, then exits north.
+///
+/// **Act two** (`phaseGroup: 1`) unlocks once act one is empty: the dimmed
+/// normal `4`, then the two gold cores `5`/`6` whose extraction wins the level.
+/// Node `7` trails behind so the cascade finale still has something to sweep —
+/// unlike [_tutorial5]'s stuck pair, `7` *is* removable in ID order, so this
+/// board satisfies [LevelValidator] end to end.
+///
+/// No player ordering can soft-lock it: node `2`'s only unblocker is the relay,
+/// the relay is free from turn one, and act two cannot open early.
+final LevelData _tutorial9 = LevelData(
+  levelId: 9009,
+  gridWidth: 5,
+  gridHeight: 5,
+  nodes: [
+    NodeData(
+      id: 0,
+      x: 3,
+      y: 0,
+      dir: Direction.up,
+      color: _c(0),
+      colorSlot: 0,
+    ),
+    NodeData(
+      id: 1,
+      x: 0,
+      y: 2,
+      dir: Direction.left,
+      color: _c(1),
+      colorSlot: 1,
+      kind: NodeKind.relay,
+    ),
+    NodeData(
+      id: 2,
+      x: 2,
+      y: 2,
+      dir: Direction.up,
+      color: _c(2),
+      colorSlot: 2,
+    ),
+    NodeData(
+      id: 3,
+      x: 4,
+      y: 0,
+      dir: Direction.up,
+      color: _c(3),
+      colorSlot: 3,
+      kind: NodeKind.locked,
+    ),
+    NodeData(
+      id: 4,
+      x: 0,
+      y: 4,
+      dir: Direction.left,
+      color: _c(4),
+      colorSlot: 4,
+      phaseGroup: 1,
+    ),
+    NodeData(
+      id: 5,
+      x: 1,
+      y: 1,
+      dir: Direction.up,
+      color: _c(5),
+      colorSlot: 5,
+      isCore: true,
+      phaseGroup: 1,
+    ),
+    NodeData(
+      id: 6,
+      x: 2,
+      y: 1,
+      dir: Direction.up,
+      color: _c(0),
+      colorSlot: 0,
+      isCore: true,
+      phaseGroup: 1,
+    ),
+    NodeData(
+      id: 7,
+      x: 4,
+      y: 4,
+      dir: Direction.down,
+      color: _c(1),
+      colorSlot: 1,
+      phaseGroup: 1,
     ),
   ],
 );

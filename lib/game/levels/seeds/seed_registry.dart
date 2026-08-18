@@ -39,6 +39,8 @@ LevelSeed? milestoneSeedFor(LevelConfiguration config) {
   final mod = lvl % 100;
   if (mod == 75) return ringMilestoneSeed;
   if (mod == 25) return diamondMilestoneSeed;
+  if (mod == 50) return milestoneOverloadSeed;
+  if (mod == 0) return milestoneSniperSeed;
   return null;
 }
 

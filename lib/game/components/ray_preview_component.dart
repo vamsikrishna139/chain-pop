@@ -37,15 +37,67 @@ class RayPreviewComponent extends PositionComponent
 
   @override
   void render(Canvas canvas) {
-    final start = Offset(
-      (source.x + 0.5) * cellSize,
-      (source.y + 0.5) * cellSize,
-    );
-    final end = _endCenter();
-
-    _drawDottedRay(canvas, start, end);
+    final gw = game.levelData.gridWidth;
+    final gh = game.levelData.gridHeight;
+    var cx = source.x;
+    var cy = source.y;
+    var hops = 0;
+    
+    // Draw segments until we reach the trace end or a blocker
+    while (hops < 50) {
+      var nextX = cx;
+      var nextY = cy;
+      switch (source.dir) {
+        case Direction.up: nextY--; break;
+        case Direction.down: nextY++; break;
+        case Direction.left: nextX--; break;
+        case Direction.right: nextX++; break;
+      }
+      
+      if (nextX < 0 || nextX >= gw || nextY < 0 || nextY >= gh) {
+        _drawDottedRay(
+          canvas, 
+          Offset((cx + 0.5) * cellSize, (cy + 0.5) * cellSize),
+          _edgeOffset(cx, cy, source.dir, gw, gh)
+        );
+        break;
+      }
+      
+      // Stop exactly at the trace end (which is the blocker or last cell)
+      if (nextX == trace.endX && nextY == trace.endY) {
+        _drawDottedRay(
+          canvas, 
+          Offset((cx + 0.5) * cellSize, (cy + 0.5) * cellSize),
+          Offset((nextX + 0.5) * cellSize, (nextY + 0.5) * cellSize)
+        );
+        break;
+      }
+      
+      _drawDottedRay(
+        canvas, 
+        Offset((cx + 0.5) * cellSize, (cy + 0.5) * cellSize),
+        Offset((nextX + 0.5) * cellSize, (nextY + 0.5) * cellSize)
+      );
+      
+      cx = nextX;
+      cy = nextY;
+      
+      bool warped = false;
+      for (final p in game.levelData.portalPairs) {
+        if (p.x1 == cx && p.y1 == cy) {
+          cx = p.x2; cy = p.y2; warped = true; break;
+        } else if (p.x2 == cx && p.y2 == cy) {
+          cx = p.x1; cy = p.y1; warped = true; break;
+        }
+      }
+      if (warped && cx == trace.endX && cy == trace.endY) {
+         break;
+      }
+      hops++;
+    }
 
     if (trace.hitsBlocker) {
+      final end = Offset((trace.endX + 0.5) * cellSize, (trace.endY + 0.5) * cellSize);
       final half = cellSize * 0.41;
       final rect = Rect.fromCenter(
         center: end,
@@ -66,26 +118,20 @@ class RayPreviewComponent extends PositionComponent
     }
   }
 
-  Offset _endCenter() {
-    final gw = game.levelData.gridWidth;
-    final gh = game.levelData.gridHeight;
-    var x = trace.endX;
-    var y = trace.endY;
-
-    if (x < 0) {
-      return Offset(0, (source.y + 0.5) * cellSize);
+  Offset _edgeOffset(int cx, int cy, Direction dir, int gw, int gh) {
+    if (dir == Direction.left) {
+      return Offset(0, (cy + 0.5) * cellSize);
     }
-    if (x >= gw) {
-      return Offset(gw * cellSize, (source.y + 0.5) * cellSize);
+    if (dir == Direction.right) {
+      return Offset(gw * cellSize, (cy + 0.5) * cellSize);
     }
-    if (y < 0) {
-      return Offset((source.x + 0.5) * cellSize, 0);
+    if (dir == Direction.up) {
+      return Offset((cx + 0.5) * cellSize, 0);
     }
-    if (y >= gh) {
-      return Offset((source.x + 0.5) * cellSize, gh * cellSize);
+    if (dir == Direction.down) {
+      return Offset((cx + 0.5) * cellSize, gh * cellSize);
     }
-
-    return Offset((x + 0.5) * cellSize, (y + 0.5) * cellSize);
+    return Offset.zero;
   }
 
   void _drawDottedRay(Canvas canvas, Offset start, Offset end) {

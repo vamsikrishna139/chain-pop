@@ -1,6 +1,5 @@
 import 'package:chain_pop/game/levels/generation/archetype.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
-import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/motifs.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';

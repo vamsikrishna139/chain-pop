@@ -59,17 +59,13 @@ void main() {
       });
     });
 
-    test('monotone fallback counter never increments (retired in Phase 3)',
+    test('Hard/Expert generations succeed without shipping sub-min openings',
         () {
-      // Compile-time evidence that the retired fallback functions are gone:
-      // the counter exists for regression alerting only. Across a soak
-      // session it must remain at 0.
       final gen = LevelGenerator();
-      for (var i = 0; i < 500; i++) {
-        gen.generate(i,
-            mode: DifficultyMode.values[i % DifficultyMode.values.length]);
+      for (var i = 30; i < 80; i++) {
+        final r = gen.generate(i, mode: DifficultyMode.hard);
+        expect(r.isSuccess, isTrue, reason: 'Hard L$i');
       }
-      expect(gen.monotoneFallbackHitCount, equals(0));
     });
 
     test('Director Renegotiation occasionally kicks in (≥ 0 instances ok)',

@@ -7,16 +7,19 @@ import 'difficulty_mode.dart';
 import 'difficulty_profile.dart';
 import 'level_configuration.dart';
 import 'level_validator.dart';
+import 'progression_profile.dart';
 
 /// Post-processes generated [LevelData] with cores, locked nodes, and relays.
 LevelData enrichLevel(
   LevelData level,
   LevelConfiguration config,
-  DifficultyTier tier,
-) {
+  DifficultyTier tier, {
+  MechanicBudgetOverride? mechanicOverride,
+}) {
   var nodes = level.nodes.map((n) => n.clone()).toList();
-  nodes = _markCoreNodes(nodes, tier);
-  nodes = _markSpecialNodes(nodes, config, level);
+  nodes =
+      _markCoreNodes(nodes, config.difficulty.mode, level, mechanicOverride);
+  nodes = _markSpecialNodes(nodes, config, level, mechanicOverride);
   return LevelData(
     levelId: level.levelId,
     gridWidth: level.gridWidth,
@@ -26,43 +29,189 @@ LevelData enrichLevel(
   );
 }
 
-List<NodeData> _markCoreNodes(List<NodeData> nodes, DifficultyTier tier) {
-  if (tier != DifficultyTier.hard && tier != DifficultyTier.expert) {
-    return nodes;
-  }
+/// Removal-wave percentile band a core must fall in. Mid-route by design: the
+/// player must clear a meaningful slice of the board to expose a core, but the
+/// win still fires with ~35% of the board standing so the cascade finale is a
+/// real payoff rather than a 2-node mop-up. (The old behaviour — the three
+/// highest-id, i.e. last-popped, nodes — made the core-win fire at ~92% cleared,
+/// so "going for the cores" was indistinguishable from clearing everything.)
+const double _kCoreBandLo = 0.35;
+const double _kCoreBandHi = 0.65;
+
+/// Widened band tried once before falling back to the legacy highest-id picks,
+/// so an adversarial board never ships with fewer than three cores.
+const double _kCoreBandLoRelaxed = 0.25;
+const double _kCoreBandHiRelaxed = 0.78;
+
+/// Rebuilds a [LevelData] with [nodes] but [level]'s geometry — used to query
+/// the solver against a working node list.
+LevelData _withNodes(LevelData level, List<NodeData> nodes) => LevelData(
+      levelId: level.levelId,
+      gridWidth: level.gridWidth,
+      gridHeight: level.gridHeight,
+      playCells: level.playCells,
+      nodes: nodes,
+    );
+
+List<NodeData> _markCoreNodes(
+  List<NodeData> nodes,
+  DifficultyMode mode,
+  LevelData level,
+  MechanicBudgetOverride? mechanicOverride,
+) {
+  final budget = budgetForLevel(
+    levelId: level.levelId,
+    mode: mode,
+    mechanicOverride: mechanicOverride,
+  );
+
+  if (budget.coreCount == 0) return nodes;
   if (nodes.length < 6) return nodes;
 
-  final sorted = List<NodeData>.from(nodes)..sort((a, b) => b.id.compareTo(a.id));
-  final picks = <NodeData>[];
-  for (final n in sorted) {
-    if (picks.length >= 3) break;
-    if (picks.any((p) => (p.x - n.x).abs() + (p.y - n.y).abs() < 2)) continue;
-    picks.add(n);
-  }
-  while (picks.length < 3 && picks.length < sorted.length) {
-    final next = sorted[picks.length];
-    if (!picks.contains(next)) picks.add(next);
+  final probe = _withNodes(level, nodes);
+  final waves = LevelSolver.nodeWaveIndices(probe);
+  final maxWave =
+      waves.isEmpty ? 0 : waves.values.reduce((a, b) => a > b ? a : b);
+
+  // No wave depth (every node exits immediately) ⇒ percentile bands are
+  // meaningless; keep the original last-node behaviour.
+  var coreIds = maxWave <= 0
+      ? _legacyCoreIds(nodes, budget.coreCount)
+      : _climaxBandCoreIds(nodes, probe, waves, maxWave, budget.coreCount);
+  if (coreIds.length < budget.coreCount) {
+    coreIds = _legacyCoreIds(nodes, budget.coreCount);
   }
 
-  final coreIds = picks.map((n) => n.id).toSet();
   return [
     for (final n in nodes) n.copyWith(isCore: coreIds.contains(n.id)),
   ];
+}
+
+/// Picks up to three guarded, mid-route, spread-out, central nodes as cores by
+/// removal-wave percentile. One core is drawn from each third of the band when
+/// possible (a reach-1 → reach-2 → climax arc), then the selection tops up from
+/// the whole band and, if still short, a widened band. Fully deterministic — no
+/// RNG, a pure function of [probe].
+Set<int> _climaxBandCoreIds(
+  List<NodeData> nodes,
+  LevelData probe,
+  Map<int, int> waves,
+  int maxWave,
+  int count,
+) {
+  // Board centroid, for a centrality tie-break: central cores read as the
+  // "heart" the player routes toward.
+  var sx = 0, sy = 0;
+  for (final n in nodes) {
+    sx += n.x;
+    sy += n.y;
+  }
+  final cx = sx / nodes.length;
+  final cy = sy / nodes.length;
+  double centrality(NodeData n) =>
+      (n.x - cx) * (n.x - cx) + (n.y - cy) * (n.y - cy);
+
+  // Candidates in a [lo, hi] percentile slice: normal, guarded (not removable
+  // from the opening state, so reaching them needs deliberate setup), sorted
+  // central-first with a stable id tie-break.
+  List<NodeData> qualifying(double lo, double hi) {
+    final out = <NodeData>[];
+    for (final n in nodes) {
+      if (n.kind != NodeKind.normal) continue;
+      final w = waves[n.id];
+      if (w == null) continue;
+      final pct = w / maxWave;
+      if (pct < lo || pct > hi) continue;
+      if (LevelSolver.canRemove(n, nodes, probe)) continue;
+      out.add(n);
+    }
+    out.sort((a, b) {
+      final d = centrality(a).compareTo(centrality(b));
+      return d != 0 ? d : b.id.compareTo(a.id);
+    });
+    return out;
+  }
+
+  final picks = <NodeData>[];
+  bool spreadOk(NodeData n) =>
+      picks.every((p) => (p.x - n.x).abs() + (p.y - n.y).abs() >= 2);
+
+  // Pass 1: one core per equal slice of the strict band -> difficulty arc.
+  const step = (_kCoreBandHi - _kCoreBandLo) / 3;
+  for (var i = 0; i < count; i++) {
+    final lo = _kCoreBandLo + i * step;
+    final hi = i == count - 1 ? _kCoreBandHi : _kCoreBandLo + (i + 1) * step;
+    for (final n in qualifying(lo, hi)) {
+      if (picks.any((p) => p.id == n.id)) continue;
+      if (spreadOk(n)) {
+        picks.add(n);
+        break;
+      }
+    }
+  }
+  // Pass 2: top up from the full strict band.
+  if (picks.length < count) {
+    for (final n in qualifying(_kCoreBandLo, _kCoreBandHi)) {
+      if (picks.length >= count) break;
+      if (picks.any((p) => p.id == n.id)) continue;
+      if (spreadOk(n)) picks.add(n);
+    }
+  }
+  // Pass 3: relax the band once before giving up to the legacy fallback.
+  if (picks.length < count) {
+    for (final n in qualifying(_kCoreBandLoRelaxed, _kCoreBandHiRelaxed)) {
+      if (picks.length >= count) break;
+      if (picks.any((p) => p.id == n.id)) continue;
+      if (spreadOk(n)) picks.add(n);
+    }
+  }
+
+  if (picks.length >= count) return picks.take(count).map((n) => n.id).toSet();
+
+  picks.clear();
+  final allCandidates = List<NodeData>.from(nodes);
+  allCandidates.sort((a, b) => b.id.compareTo(a.id));
+  return allCandidates.take(count).map((n) => n.id).toSet();
+}
+
+/// Original highest-id (last-popped) core picks. Retained only as the last-resort
+/// fallback so a board with no wave depth — or no qualifying in-band guarded
+/// nodes — still ships with three cores.
+Set<int> _legacyCoreIds(List<NodeData> nodes, int count) {
+  final sorted = List<NodeData>.from(nodes)
+    ..sort((a, b) => b.id.compareTo(a.id));
+  final picks = <NodeData>[];
+  for (final n in sorted) {
+    if (picks.length >= count) break;
+    if (picks.any((p) => (p.x - n.x).abs() + (p.y - n.y).abs() < 2)) continue;
+    picks.add(n);
+  }
+  while (picks.length < count && picks.length < sorted.length) {
+    final next = sorted[picks.length];
+    if (!picks.contains(next)) picks.add(next);
+  }
+  return picks.map((n) => n.id).toSet();
 }
 
 List<NodeData> _markSpecialNodes(
   List<NodeData> nodes,
   LevelConfiguration config,
   LevelData level,
+  MechanicBudgetOverride? mechanicOverride,
 ) {
-  final lvl = config.levelId;
+  final lvl = level.levelId;
   final mode = config.difficulty.mode;
-  if (mode != DifficultyMode.hard) return nodes;
 
   final rng = Random(lvl * 7919 + 13);
   var result = nodes;
 
-  if (lvl >= 26) {
+  final budget = budgetForLevel(
+    levelId: lvl,
+    mode: mode,
+    mechanicOverride: mechanicOverride,
+  );
+
+  if (budget.lockCount > 0) {
     final candidates = result
         .where(
           (n) =>
@@ -72,15 +221,15 @@ List<NodeData> _markSpecialNodes(
         )
         .toList()
       ..shuffle(rng);
-    final lockCount = lvl >= 45 ? 2 : 1;
-    final lockedIds = candidates.take(lockCount).map((n) => n.id).toSet();
+    final lockedIds =
+        candidates.take(budget.lockCount).map((n) => n.id).toSet();
     result = [
       for (final n in result)
         lockedIds.contains(n.id) ? n.copyWith(kind: NodeKind.locked) : n,
     ];
   }
 
-  if (lvl >= 51) {
+  if (budget.relayCount > 0) {
     // A relay rotates its whole row when popped, which can spin arrows into
     // permanent face-offs. Relay-free Chain Pop can never soft-lock (removing a
     // node only ever frees rays), so a relay is the *only* mechanic that can
@@ -93,36 +242,81 @@ List<NodeData> _markSpecialNodes(
     // breaks ID order would get the whole level discarded downstream.
     // If no candidate survives, ship the level without a relay.
     final coreRows = {for (final n in result.where((n) => n.isCore)) n.y};
-    final sorted = List<NodeData>.from(result)..sort((a, b) => b.id.compareTo(a.id));
+    final sorted = List<NodeData>.from(result)
+      ..sort((a, b) => b.id.compareTo(a.id));
     final relayCandidates = sorted
         .where(
           (n) =>
-              n.kind == NodeKind.normal &&
-              !n.isCore &&
-              !coreRows.contains(n.y),
+              n.kind == NodeKind.normal && !n.isCore && !coreRows.contains(n.y),
         )
-        .take(6)
+        .take(10)
         .toList()
       ..shuffle(rng);
     final validator = LevelValidator();
-    for (final candidate in relayCandidates) {
-      final withRelay = [
-        for (final n in result)
-          n.id == candidate.id ? n.copyWith(kind: NodeKind.relay) : n,
-      ];
-      final probe = LevelData(
-        levelId: level.levelId,
-        gridWidth: level.gridWidth,
-        gridHeight: level.gridHeight,
-        playCells: level.playCells,
-        nodes: withRelay,
-      );
-      if (_relayIsSoftlockSafe(probe, candidate.id) &&
-          validator.validate(probe).isValid) {
-        result = withRelay;
-        break;
+
+    if (budget.relayCount == 1) {
+      for (final candidate in relayCandidates) {
+        final withRelay = [
+          for (final n in result)
+            n.id == candidate.id ? n.copyWith(kind: NodeKind.relay) : n,
+        ];
+        final probe = LevelData(
+          levelId: level.levelId,
+          gridWidth: level.gridWidth,
+          gridHeight: level.gridHeight,
+          playCells: level.playCells,
+          nodes: withRelay,
+        );
+        if (_relayIsSoftlockSafe(probe, {candidate.id}) &&
+            validator.validate(probe).isValid) {
+          result = withRelay;
+          break;
+        }
+      }
+    } else if (budget.relayCount == 2) {
+      bool found = false;
+      for (int i = 0; i < relayCandidates.length; i++) {
+        for (int j = i + 1; j < relayCandidates.length; j++) {
+          final c1 = relayCandidates[i];
+          final c2 = relayCandidates[j];
+          if (c1.y == c2.y) continue;
+
+          final withRelays = [
+            for (final n in result)
+              (n.id == c1.id || n.id == c2.id)
+                  ? n.copyWith(kind: NodeKind.relay)
+                  : n,
+          ];
+          final probe = LevelData(
+            levelId: level.levelId,
+            gridWidth: level.gridWidth,
+            gridHeight: level.gridHeight,
+            playCells: level.playCells,
+            nodes: withRelays,
+          );
+          if (_relayIsSoftlockSafe(probe, {c1.id, c2.id}) &&
+              validator.validate(probe).isValid) {
+            result = withRelays;
+            found = true;
+            break;
+          }
+        }
+        if (found) break;
       }
     }
+  }
+
+  if (budget.phaseGateCount > 0) {
+    final groups = budget.phaseGateCount + 1;
+    // Node ids are 0-based and contiguous, and the canonical solve order *is*
+    // id order, so chunking by id keeps the constructed solution legal while
+    // forbidding the out-of-order deviations the gate is meant to block.
+    final chunkSize = (result.length / groups).ceil();
+    result = [
+      for (final n in result)
+        n.copyWith(
+            phaseGroup: (n.id ~/ chunkSize).clamp(0, budget.phaseGateCount)),
+    ];
   }
 
   return result;
@@ -143,51 +337,70 @@ List<NodeData> _markSpecialNodes(
 /// every other poppable state has *more* nodes removed and is easier by
 /// monotonicity. So if popping the relay from that worst case leaves a solvable
 /// (now relay-free) board, every reachable pop is safe too.
-bool _relayIsSoftlockSafe(LevelData level, int relayId) {
+bool _relayIsSoftlockSafe(LevelData level, Set<int> relayIds) {
+  if (relayIds.isEmpty) return LevelSolver.isSolvable(level);
+
   final byCell = <int, NodeData>{
     for (final n in level.nodes) gridCellKey(n.x, n.y): n,
   };
-  final relay = level.nodes.firstWhere((n) => n.id == relayId);
 
-  final must = <int>{};
-  final stack = <NodeData>[];
-  void requireOccupant(int cell) {
-    final occ = byCell[cell];
-    if (occ != null && occ.id != relay.id && must.add(occ.id)) stack.add(occ);
-  }
+  var foundPoppableRelay = false;
+  for (final relayId in relayIds) {
+    final relay = level.nodes.firstWhere((n) => n.id == relayId);
 
-  for (final c in _rayCellKeys(relay, level)) {
-    requireOccupant(c);
-  }
-  while (stack.isNotEmpty) {
-    final node = stack.removeLast();
-    for (final c in _rayCellKeys(node, level)) {
-      requireOccupant(c);
-    }
-    // A locked node can only be removed once all four neighbours are gone, so
-    // those are prerequisites of clearing it too.
-    if (node.kind == NodeKind.locked) {
-      for (final (dx, dy) in const [(0, -1), (0, 1), (-1, 0), (1, 0)]) {
-        requireOccupant(gridCellKey(node.x + dx, node.y + dy));
+    final must = <int>{};
+    final stack = <NodeData>[];
+    bool canBePoppedFirst = true;
+
+    void requireOccupant(int cell) {
+      if (!canBePoppedFirst) return;
+      final occ = byCell[cell];
+      if (occ != null && occ.id != relay.id) {
+        if (relayIds.contains(occ.id)) {
+          canBePoppedFirst = false;
+        } else if (must.add(occ.id)) {
+          stack.add(occ);
+        }
       }
     }
-  }
 
-  // Worst-case poppable state with the relay removed and its row rotated. The
-  // result is relay-free, so monotone solvability ([LevelSolver.isSolvable])
-  // is exact.
-  final afterPop = <NodeData>[
-    for (final n in level.nodes)
-      if (!must.contains(n.id) && n.id != relay.id)
-        (n.y == relay.y ? n.copyWith(dir: n.dir.rotatedCw) : n),
-  ];
-  return LevelSolver.isSolvable(LevelData(
-    levelId: level.levelId,
-    gridWidth: level.gridWidth,
-    gridHeight: level.gridHeight,
-    playCells: level.playCells,
-    nodes: afterPop,
-  ));
+    for (final c in _rayCellKeys(relay, level)) {
+      requireOccupant(c);
+    }
+    while (stack.isNotEmpty && canBePoppedFirst) {
+      final node = stack.removeLast();
+      for (final c in _rayCellKeys(node, level)) {
+        requireOccupant(c);
+      }
+      if (node.kind == NodeKind.locked) {
+        for (final (dx, dy) in const [(0, -1), (0, 1), (-1, 0), (1, 0)]) {
+          requireOccupant(gridCellKey(node.x + dx, node.y + dy));
+        }
+      }
+    }
+
+    if (!canBePoppedFirst) continue;
+    foundPoppableRelay = true;
+
+    final afterPop = <NodeData>[
+      for (final n in level.nodes)
+        if (!must.contains(n.id) && n.id != relay.id)
+          (n.y == relay.y ? n.copyWith(dir: n.dir.rotatedCw) : n),
+    ];
+
+    final nextLevel = LevelData(
+      levelId: level.levelId,
+      gridWidth: level.gridWidth,
+      gridHeight: level.gridHeight,
+      playCells: level.playCells,
+      nodes: afterPop,
+    );
+    final nextRelays = relayIds.difference({relayId});
+    if (!_relayIsSoftlockSafe(nextLevel, nextRelays)) {
+      return false;
+    }
+  }
+  return foundPoppableRelay;
 }
 
 /// Grid-cell keys the node's facing ray passes through, edge-clipped. Rays
@@ -196,7 +409,9 @@ List<int> _rayCellKeys(NodeData n, LevelData level) {
   final cells = <int>[];
   var x = n.x;
   var y = n.y;
-  while (true) {
+  var hops = 0;
+  
+  while (hops < 50) {
     switch (n.dir) {
       case Direction.up:
         y--;
@@ -209,6 +424,21 @@ List<int> _rayCellKeys(NodeData n, LevelData level) {
     }
     if (x < 0 || x >= level.gridWidth || y < 0 || y >= level.gridHeight) break;
     cells.add(gridCellKey(x, y));
+    
+    if (level.portalPairs.isNotEmpty) {
+      for (final p in level.portalPairs) {
+        if (p.x1 == x && p.y1 == y) {
+          x = p.x2;
+          y = p.y2;
+          break;
+        } else if (p.x2 == x && p.y2 == y) {
+          x = p.x1;
+          y = p.y1;
+          break;
+        }
+      }
+    }
+    hops++;
   }
   return cells;
 }

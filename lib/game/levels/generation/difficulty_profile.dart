@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'difficulty_mode.dart';
+import 'dependency_graph.dart';
 import 'metrics.dart';
 
 /// Difficulty tier used by the Phase 2 evaluator.
@@ -83,13 +84,48 @@ class DifficultyProfile {
     this.arcSpec,
   });
 
-  /// Hard cap on [LevelMetrics.forcedSequenceRatio] when [nodeCount] exceeds
-  /// this threshold — §6 "FSR vs node-count cap". 28 in the plan.
+  /// Threshold above which the node-banded FSR cap begins to apply.
+  /// Below this node count, FSR is uncapped (tier bands still apply).
   static const int fsrCapNodeThreshold = 28;
 
-  /// Maximum [LevelMetrics.forcedSequenceRatio] permitted once
-  /// `nodeCount > [fsrCapNodeThreshold]`, regardless of tier.
-  static const double fsrCapValue = 0.40;
+  /// FSR cap at exactly [fsrCapNodeThreshold] nodes — the gentle end.
+  static const double fsrCapAtThreshold = 0.65;
+
+  /// FSR cap at [fsrCapNodeCeiling] nodes — the strict end.
+  static const double fsrCapAtCeiling = 0.35;
+
+  /// Node count at which the FSR cap reaches its minimum ([fsrCapAtCeiling]).
+  static const int fsrCapNodeCeiling = 55;
+
+  /// Returns the maximum allowed FSR for a given [nodeCount].
+  ///
+  /// Below [fsrCapNodeThreshold] the cap is effectively infinite (returns 1.0).
+  /// Between threshold and ceiling the cap interpolates linearly from
+  /// [fsrCapAtThreshold] (0.65) down to [fsrCapAtCeiling] (0.35).
+  /// Above the ceiling the cap stays at [fsrCapAtCeiling].
+  static double fsrCapForNodeCount(int nodeCount) {
+    if (nodeCount <= fsrCapNodeThreshold) return 1.0;
+    if (nodeCount >= fsrCapNodeCeiling) return fsrCapAtCeiling;
+    final t = (nodeCount - fsrCapNodeThreshold) /
+        (fsrCapNodeCeiling - fsrCapNodeThreshold);
+    return fsrCapAtThreshold + (fsrCapAtCeiling - fsrCapAtThreshold) * t;
+  }
+
+  /// Honest Hard/Expert opening band (first legal moves / wave-zero width).
+  ///
+  /// Recalibrated from the original `[3, 5]` target after Phase B proved
+  /// that ≤5 is structurally unreachable with retrograde construction:
+  /// ray-free nodes can only be capped by lower-id blockers, but low ids are
+  /// placed last and rarely land on the needed rays (geometric starvation).
+  /// Measured Hard/Daily openings cluster at ~8–11; see
+  /// `docs/OPENING_BAND_DECISION.md`.
+  static const MetricRange<int> hardExpertOpeningBand = MetricRange(3, 11);
+
+  /// Soft topology targets for Hard-band candidate ranking (B3).
+  static const MetricRange<int> hardChokePointBand = MetricRange(1, 2);
+
+  /// Preferred hub fan-in window for Hard levels.
+  static const MetricRange<int> hardHubInDegreeBand = MetricRange(2, 4);
 
   /// §6 Easy band. Relaxed tempo (flat).
   static const DifficultyProfile easy = DifficultyProfile(
@@ -103,7 +139,32 @@ class DifficultyProfile {
     tempoShape: TempoProfileShape.relaxed,
   );
 
-  /// §6 Medium band. Mild rise.
+  /// Measured p75 of `forcedSequenceRatio` across the 100-board Medium corpus
+  /// (`docs/playtests/report_medium_100.csv`), which the ceiling below is
+  /// derived from rather than guessed. Distribution: min 0.367, p25 0.640,
+  /// p50 0.750, **p75 0.833**, p95 0.900, max 0.967.
+  static const double mediumMeasuredFsrP75 = 0.833;
+
+  /// §6 Medium band.
+  ///
+  /// The FSR ceiling was `0.65`, which rejected **73 of 100** boards the
+  /// constructor deliberately builds — the single largest source of Medium
+  /// K-loop thrash and of the 27 % in-band rate. That band was never measured
+  /// against what Medium generation actually produces; it was inherited.
+  ///
+  /// Raised to `0.85`, the nearest clean constant at or above the measured p75
+  /// of [mediumMeasuredFsrP75]. This changes **no board** — only whether the
+  /// evaluator admits the boards it was already constructing. FSR drops from
+  /// 73 failures to 19.
+  ///
+  /// This equals the Expert ceiling, which is itself the finding: Medium
+  /// generation is as forcing as Expert. The honest band makes that visible
+  /// instead of hiding it behind mass rejection. If telemetry shows Medium
+  /// plays too hard, the fix belongs in generation (fewer forced corridors —
+  /// see [ChoiceRhythm], wired as a ranking term), not in re-tightening a band
+  /// that generation ignores.
+  ///
+  /// **Rollback:** set the ceiling back to `0.65`.
   static const DifficultyProfile medium = DifficultyProfile(
     tier: DifficultyTier.medium,
     nodeCount: MetricRange(14, 22),
@@ -111,17 +172,20 @@ class DifficultyProfile {
     averageBranchingFactor: MetricRange(3.0, 8.0),
     firstLegalMoveCount: MetricRange(4, 11),
     criticalUnlockDepth: MetricRange(3, 8),
-    forcedSequenceRatio: MetricRange(0.35, 0.65),
+    forcedSequenceRatio: MetricRange(0.35, 0.85),
     tempoShape: TempoProfileShape.mildRise,
   );
 
   /// §6 Hard band — organic crunch sweet spot.
+  ///
+  /// Node max trimmed from 50 → 42 to stay within comfortable FSR headroom
+  /// against the node-banded cap (cap at 42 ≈ 0.505, floor 0.45).
   static const DifficultyProfile hard = DifficultyProfile(
     tier: DifficultyTier.hard,
-    nodeCount: MetricRange(25, 50),
+    nodeCount: MetricRange(25, 42),
     waveDepth: MetricRange(5, 8),
     averageBranchingFactor: MetricRange(3.0, 8.0),
-    firstLegalMoveCount: MetricRange(3, 5),
+    firstLegalMoveCount: hardExpertOpeningBand,
     criticalUnlockDepth: MetricRange(5, 12),
     forcedSequenceRatio: MetricRange(0.45, 0.90),
     tempoShape: TempoProfileShape.dramatic,
@@ -133,13 +197,15 @@ class DifficultyProfile {
   );
 
   /// §6 Expert / Daily band. Compression tempo.
+  ///
+  /// Node max trimmed from 55 → 39 to stay within comfortable FSR headroom
+  /// against the node-banded cap (cap at 39 ≈ 0.528, floor 0.50).
   static const DifficultyProfile expert = DifficultyProfile(
     tier: DifficultyTier.expert,
-    // Widened for 70–80% silhouette fill on Daily / Expert boards.
-    nodeCount: MetricRange(28, 55),
+    nodeCount: MetricRange(28, 39),
     waveDepth: MetricRange(6, 10),
     averageBranchingFactor: MetricRange(3.0, 9.0),
-    firstLegalMoveCount: MetricRange(3, 5),
+    firstLegalMoveCount: hardExpertOpeningBand,
     criticalUnlockDepth: MetricRange(6, 14),
     forcedSequenceRatio: MetricRange(0.50, 0.85),
     tempoShape: TempoProfileShape.compression,
@@ -190,13 +256,12 @@ class DifficultyProfile {
       return false;
     }
     if (!waveDepth.contains(metrics.waveDepth)) return false;
-    if (metrics.nodeCount > fsrCapNodeThreshold &&
-        metrics.forcedSequenceRatio > fsrCapValue) {
+    if (metrics.forcedSequenceRatio > fsrCapForNodeCount(metrics.nodeCount)) {
       return false;
     }
     if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
       final w0 = metrics.waveZeroWidth;
-      if (w0 < 3 || w0 > 5) return false;
+      if (!hardExpertOpeningBand.contains(w0)) return false;
     }
 
     // Temporary: Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
@@ -277,54 +342,75 @@ class DifficultyProfile {
     return segment.where((m) => m == 1).length / segment.length;
   }
 
-  static bool _matchesTempoShape(
-    List<int> tempo,
-    TempoProfileShape shape,
-  ) {
-    if (tempo.length < 4) return true;
-    switch (shape) {
-      case TempoProfileShape.relaxed:
-      case TempoProfileShape.mildRise:
-        return true;
-      case TempoProfileShape.dramatic:
-        final n = tempo.length;
-        final midStart = max(1, n ~/ 4);
-        final midEnd = max(midStart + 1, (3 * n) ~/ 4);
-        final lastStart = max(midEnd, (4 * n) ~/ 5);
-        final openAvg = _avg(tempo.sublist(0, midStart));
-        final midPeak =
-            tempo.sublist(midStart, midEnd).reduce((a, b) => a > b ? a : b);
-        final lastAvg = _avg(tempo.sublist(lastStart));
-        return midPeak > openAvg &&
-            midPeak > lastAvg &&
-            lastAvg <= openAvg + 0.5;
-      case TempoProfileShape.compression:
-        final n = tempo.length;
-        final half = max(1, n ~/ 2);
-        final firstHalf = _avg(tempo.sublist(0, half));
-        final secondHalf = _avg(tempo.sublist(half));
-        if (secondHalf >= firstHalf - 0.25) return false;
-        final openEnd = max(1, n ~/ 5);
-        final openSlice = tempo.sublist(0, openEnd);
-        if (openSlice.length > 1) {
-          final spread =
-              openSlice.reduce((a, b) => a > b ? a : b) -
-                  openSlice.reduce((a, b) => a < b ? a : b);
-          if (spread <= 0 && firstHalf - secondHalf < 1.0) return false;
-        }
-        return true;
+  /// Soft topology preference for Hard/Expert in-band ranking (B3).
+  ///
+  /// Rewards 1–2 choke points, in-band critical paths, and controlled hub
+  /// fan-in. Not a hard gate — used only for candidate ordering.
+  double topologySoftScore({
+    required int chokePointCount,
+    required int criticalPathLength,
+    required int maxHubInDegree,
+  }) {
+    if (tier != DifficultyTier.hard && tier != DifficultyTier.expert) {
+      return 0;
     }
+
+    var score = 0.0;
+
+    if (hardChokePointBand.contains(chokePointCount)) {
+      score += 2.0 - (chokePointCount - 1.5).abs() * 0.5;
+    } else if (chokePointCount == 0) {
+      score -= 0.5;
+    } else if (chokePointCount > hardChokePointBand.max) {
+      score -= (chokePointCount - hardChokePointBand.max) * 0.25;
+    }
+
+    if (criticalUnlockDepth.contains(criticalPathLength)) {
+      score += 1.0;
+      final target =
+          (criticalUnlockDepth.min + criticalUnlockDepth.max) / 2.0;
+      score += 0.3 *
+          (1.0 - (criticalPathLength - target).abs() /
+              (criticalUnlockDepth.max - criticalUnlockDepth.min + 1));
+    }
+
+    if (hardHubInDegreeBand.contains(maxHubInDegree)) {
+      score += 1.0;
+    } else if (maxHubInDegree > hardHubInDegreeBand.max) {
+      score -= (maxHubInDegree - hardHubInDegreeBand.max) * 0.3;
+    }
+
+    return score;
   }
+
+  /// Convenience wrapper over a [DependencyGraph].
+  double topologySoftScoreFromGraph(DependencyGraph graph) {
+    return topologySoftScore(
+      chokePointCount: graph.chokePointCount,
+      criticalPathLength: graph.criticalPathLength,
+      maxHubInDegree: graph.maxHubInDegree,
+    );
+  }
+
+  /// Convenience wrapper over [LevelMetrics] topology fields.
+  double topologySoftScoreFromMetrics(LevelMetrics metrics) {
+    return topologySoftScore(
+      chokePointCount: metrics.chokePointCount,
+      criticalPathLength: metrics.criticalUnlockDepth,
+      maxHubInDegree: metrics.maxHubInDegree,
+    );
+  }
+
 
   static double _avg(List<int> values) {
     if (values.isEmpty) return 0;
     return values.fold<int>(0, (a, b) => a + b) / values.length;
   }
 
-  /// True iff [metrics] satisfies the FSR cap rule. Useful as a standalone
-  /// gate even when the full per-tier band check would be too strict.
+  /// True iff [metrics] satisfies the node-banded FSR cap rule.
+  /// Useful as a standalone gate even when the full per-tier band check
+  /// would be too strict.
   static bool passesFsrCap(LevelMetrics metrics) {
-    if (metrics.nodeCount <= fsrCapNodeThreshold) return true;
-    return metrics.forcedSequenceRatio <= fsrCapValue;
+    return metrics.forcedSequenceRatio <= fsrCapForNodeCount(metrics.nodeCount);
   }
 }

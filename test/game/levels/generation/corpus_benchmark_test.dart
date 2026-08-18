@@ -3,7 +3,9 @@ import 'package:chain_pop/game/levels/generation/archetype.dart';
 import 'package:chain_pop/game/levels/generation/director.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
+import 'package:chain_pop/game/levels/generation/progression_profile.dart';
 import 'package:chain_pop/game/levels/generation/silhouettes.dart';
+import 'package:chain_pop/game/levels/level.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'corpus_benchmark_utils.dart';
@@ -36,22 +38,35 @@ void main() {
   });
 
   group('Milestone telemetry seed annotations', () {
-    test('milestone:maxDensity on synthetic max-density IDs', () {
+    test('milestone-overload on synthetic max-density IDs', () {
       final sink = InMemoryAnalyticsSink();
-      LevelGenerator(analyticsSink: sink)
+      final result = LevelGenerator(analyticsSink: sink)
           .generate(150, mode: DifficultyMode.hard);
+      expect(result.isSuccess, isTrue);
       expect(sink.events, hasLength(1));
-      expect(sink.events.single.seedId, 'milestone:maxDensity');
+      expect(sink.events.single.seedId, 'milestone-overload');
+      _expectMechanicsMatchBudget(result.value, levelId: 150);
     });
 
-    test('milestone:sparseSniper every hundred on Hard', () {
+    test('milestone-sniper every hundred on Hard', () {
       final sink = InMemoryAnalyticsSink();
-      LevelGenerator(analyticsSink: sink)
+      final result = LevelGenerator(analyticsSink: sink)
           .generate(300, mode: DifficultyMode.hard);
+      expect(result.isSuccess, isTrue);
       expect(sink.events, hasLength(1));
-      expect(sink.events.single.seedId, 'milestone:sparseSniper');
+      expect(sink.events.single.seedId, 'milestone-sniper');
+      _expectMechanicsMatchBudget(result.value, levelId: 300);
     });
   });
+}
+
+void _expectMechanicsMatchBudget(LevelData level, {required int levelId}) {
+  final budget = budgetFor(levelId: levelId, mode: DifficultyMode.hard);
+  expect(level.nodes.where((n) => n.isCore), hasLength(budget.coreCount));
+  expect(level.nodes.where((n) => n.kind == NodeKind.locked),
+      hasLength(budget.lockCount));
+  expect(level.nodes.where((n) => n.kind == NodeKind.relay),
+      hasLength(budget.relayCount));
 }
 
 void _runSequentialCorpusHard({
@@ -96,8 +111,7 @@ void _runSequentialCorpusHard({
 
   if (maskAttempts.isNotEmpty) {
     // ignore: avoid_print
-    print(
-        'Director mask rectangle fallback attempts (${maskAttempts.length}): '
+    print('Director mask rectangle fallback attempts (${maskAttempts.length}): '
         '${silhouetteTallyPretty(maskAttempts)}');
   } else {
     // ignore: avoid_print
@@ -106,14 +120,15 @@ void _runSequentialCorpusHard({
 
   if (zeroDeltaLevels.isNotEmpty) {
     // ignore: avoid_print
-    print('Levels with telemetry delta 0 (unexpected unless generator skips analytics): '
+    print(
+        'Levels with telemetry delta 0 (unexpected unless generator skips analytics): '
         '$zeroDeltaLevels');
   }
 
   final ids = silhouetteIdHistogram(sink.events);
   final macros = silhouetteMacroHistogram(sink.events);
-  expect(macros[SilhouetteVisualFamily.geometricLattice],
-      greaterThanOrEqualTo(10),
+  expect(
+      macros[SilhouetteVisualFamily.geometricLattice], greaterThanOrEqualTo(10),
       reason: 'geometric lattice should dominate large portions of corpus');
   if (expectArchipelago) {
     expect(macros[SilhouetteVisualFamily.archipelago], greaterThan(0));
@@ -137,23 +152,24 @@ void _runSequentialCorpusHard({
       streakDistribution(sink.events.map((e) => e.silhouette).toList());
   final macroStreak = streakDistribution(macroSequence(sink.events));
   // ignore: avoid_print
-  print('Silhouette streaks max=${silStreak['max']} hist=${silStreak['histogram']}');
+  print(
+      'Silhouette streaks max=${silStreak['max']} hist=${silStreak['histogram']}');
   // ignore: avoid_print
-  print('Macro streaks max=${macroStreak['max']} hist=${macroStreak['histogram']}');
+  print(
+      'Macro streaks max=${macroStreak['max']} hist=${macroStreak['histogram']}');
 
   final macroSeq = macroSequence(sink.events);
   const windowsToSummarize = <int>[5, 10, 20];
   for (final w in windowsToSummarize) {
     final stats = macroBucketWindowStats(macroSequence: macroSeq, window: w);
     // ignore: avoid_print
-    print(
-        'Macro sliding W=$w: minDistinct=${stats.minDistinct} '
+    print('Macro sliding W=$w: minDistinct=${stats.minDistinct} '
         'maxDistinct=${stats.maxDistinct} avg=${stats.avgDistinct.toStringAsFixed(2)} '
         'pureLatticeWindows=${stats.latticeOnlyWindows}');
 
-    expect(stats.avgDistinct,
-        greaterThan(1.0),
-        reason: 'Hard corpus should roam multiple macro visuals by W=$w'); // heuristic
+    expect(stats.avgDistinct, greaterThan(1.0),
+        reason:
+            'Hard corpus should roam multiple macro visuals by W=$w'); // heuristic
     if (levels >= 200) {
       expect(stats.latticeOnlyWindows, lessThan(macroSeq.length - w),
           reason: 'expect some temporal mixing beyond pure lattice streaks');

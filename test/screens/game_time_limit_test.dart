@@ -10,6 +10,11 @@ void main() {
       expect(computeTutorialCountdownSec(4), 45);
       expect(computeTutorialCountdownSec(5), 60);
       expect(computeTutorialCountdownSec(7), 60);
+      expect(computeTutorialCountdownSec(8), 60);
+    });
+
+    test('graduation board (index 9) gets 90s for all five arrow types', () {
+      expect(computeTutorialCountdownSec(9), 90);
     });
   });
 

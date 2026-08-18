@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../game/levels/generation/difficulty_mode.dart';
+
 import '../theme/app_colors.dart';
 
 /// Extension on [DifficultyMode] that adds UI metadata.
@@ -55,18 +56,6 @@ extension DifficultyExt on DifficultyMode {
     }
   }
 
-  // ── Star thresholds ───────────────────────────────────────────────────────
-
-  /// Calculates 1–3 stars based on [jamCount].
-  ///
-  /// ⭐⭐⭐ = no jams at all (perfect run)
-  /// ⭐⭐  = 1 or 2 jams
-  /// ⭐   = 3+ jams or restarted at least once
-  int starsForJams(int jamCount) {
-    if (jamCount == 0) return 3;
-    if (jamCount <= 2) return 2;
-    return 1;
-  }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 

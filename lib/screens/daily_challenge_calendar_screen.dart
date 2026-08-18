@@ -9,14 +9,14 @@ import '../models/difficulty.dart';
 import '../services/ads/ad_placements.dart';
 import '../services/ads/ads_locator.dart';
 import '../services/daily_challenge_play_policy.dart';
-import '../services/storage_service.dart';
+import '../services/storage/storage_locator.dart';
 import '../theme/app_colors.dart';
 import 'game/widgets/game_dialogs.dart';
 import 'game_screen.dart';
 
 /// Month grid for the **current local month**: future days are locked; **today** is
 /// free. Earlier days replay after a one-time rewarded unlock per day when
-/// [DailyChallengePlayPolicy.showRewardedAd] is set ([StorageService.isDailyUnlockedViaAd]).
+/// [DailyChallengePlayPolicy.showRewardedAd] is set ([StorageLocator.instance.isDailyUnlockedViaAd]).
 class DailyChallengeCalendarScreen extends StatefulWidget {
   final DailyChallengePlayPolicy policy;
 
@@ -178,13 +178,13 @@ class _DailyChallengeCalendarScreenState
                       }
                       final day = DateTime(y, m, dayNum);
                       final isFuture = day.isAfter(today);
-                      final stars = StorageService.dailyStarsForDayKey(
+                      final stars = StorageLocator.instance.dailyStarsForDayKey(
                         DailyChallenge.dateKeyLocal(day),
                       );
                       final isToday = day == today;
                       final inFree =
                           widget.policy.isInFreeCalendarWindow(day, now);
-                      final adOk = StorageService.isDailyUnlockedViaAd(
+                      final adOk = StorageLocator.instance.isDailyUnlockedViaAd(
                         DailyChallenge.dateKeyLocal(day),
                       );
                       final playable = widget.policy.mayBePlayable(day, now);

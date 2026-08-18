@@ -194,9 +194,9 @@ class _LockCluster implements Motif {
 
       // Optional inner entry nodes (inside bbox, not on perimeter).
       if (targetSize >= 6) {
-        final inner = Point<int>(cx, cy - 1);
         // Already used — pick offset inner cell instead.
         final entry = Point<int>(cx - 1, cy - 1);
+
         if (!cells.any((c) => c.x == entry.x && c.y == entry.y)) {
           cells.add(entry);
           reservations.add(

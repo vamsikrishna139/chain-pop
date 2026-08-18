@@ -226,14 +226,14 @@ void main() {
       // Zero bulk slots before motifs — exercises motif phase alone. Removal
       // order lists deferred motifs first (last steps of forward construction).
       final reservations = <MotifReservation>[
-        MotifReservation(
-            position: const Point<int>(0, 0), direction: Direction.left),
-        MotifReservation(
-            position: const Point<int>(3, 0), direction: Direction.right),
-        MotifReservation(
-            position: const Point<int>(0, 3), direction: Direction.left),
-        MotifReservation(
-            position: const Point<int>(3, 3), direction: Direction.right),
+        const MotifReservation(
+            position: Point<int>(0, 0), direction: Direction.left),
+        const MotifReservation(
+            position: Point<int>(3, 0), direction: Direction.right),
+        const MotifReservation(
+            position: Point<int>(0, 3), direction: Direction.left),
+        const MotifReservation(
+            position: Point<int>(3, 3), direction: Direction.right),
       ];
       final ctor = RetrogradeConstructor(
         gridWidth: 4,
@@ -273,14 +273,14 @@ void main() {
       const cx = 3;
       const cy = 3;
       final reservations = <MotifReservation>[
-        MotifReservation(
-            position: const Point<int>(cx, cy - 1), direction: Direction.up),
-        MotifReservation(
-            position: const Point<int>(cx, cy + 1), direction: Direction.down),
-        MotifReservation(
-            position: const Point<int>(cx - 1, cy), direction: Direction.left),
-        MotifReservation(
-            position: const Point<int>(cx + 1, cy),
+        const MotifReservation(
+            position: Point<int>(cx, cy - 1), direction: Direction.up),
+        const MotifReservation(
+            position: Point<int>(cx, cy + 1), direction: Direction.down),
+        const MotifReservation(
+            position: Point<int>(cx - 1, cy), direction: Direction.left),
+        const MotifReservation(
+            position: Point<int>(cx + 1, cy),
             direction: Direction.right),
       ];
       final ctor = RetrogradeConstructor(
@@ -305,8 +305,8 @@ void main() {
     test('returns null when reservation lives outside the silhouette', () {
       // (10, 10) is well off a 4x4 grid; the motif placement must abort.
       final reservations = <MotifReservation>[
-        MotifReservation(
-            position: const Point<int>(10, 10), direction: Direction.up),
+        const MotifReservation(
+            position: Point<int>(10, 10), direction: Direction.up),
       ];
       final ctor = RetrogradeConstructor(
         gridWidth: 4,
@@ -389,7 +389,6 @@ void main() {
         final crunchStart = (n * 0.35).floor().clamp(1, n - 1);
         final crunchEnd = (n * 0.65).ceil().clamp(crunchStart, n - 1);
         for (var i = crunchStart; i <= crunchEnd; i++) {
-          final node = placements[i];
           final target = _firstRayTarget(level, i);
           if (target != null) {
             expect(

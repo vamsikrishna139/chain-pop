@@ -1,74 +1,176 @@
-part of 'package:chain_pop/screens/game_screen.dart';
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../../game/daily_challenge.dart';
+import '../../game/difficulty_exports.dart';
+import '../../game/levels/generation/silhouettes.dart';
+import '../../game/levels/level_directive.dart';
+import '../../game/levels/tutorial_levels.dart';
+import '../../game/world_registry.dart';
+import '../../services/achievements/achievements_locator.dart';
+import '../../services/achievements/game_event.dart';
+import '../../services/ads/campaign_interstitial_frustration_gate.dart';
+import '../../services/ads/campaign_between_levels_ads.dart';
+import '../../services/game_sfx.dart';
+import '../../services/session_campaign_streak.dart';
+import '../game_screen.dart';
+import 'game_screen_constants.dart';
+import 'game_screen_controller_host.dart';
 
 final class GameFlowController {
-  GameFlowController(this._s);
+  GameFlowController(this._host);
 
-  final GameScreenState _s;
+  final GameScreenControllerHost _host;
 
   void flushLifetimeGameplayDelta({bool clearTrackedAfter = false}) {
-    if (_s.widget.isTutorial) return;
-    final elapsed = _s._stopwatch.elapsed;
-    final delta = elapsed - _s._lifetimeGameplaySyncedUpTo;
+    if (_host.isTutorial) return;
+    final elapsed = _host.stopwatch.elapsed;
+    final delta = elapsed - _host.lifetimeGameplaySyncedUpTo;
     final secs = delta.inSeconds.clamp(0, 8 * 3600);
     if (secs <= 0) {
       if (clearTrackedAfter) {
-        _s._lifetimeGameplaySyncedUpTo = Duration.zero;
+        _host.lifetimeGameplaySyncedUpTo = Duration.zero;
       }
       return;
     }
-    unawaited(_s._progress.accumulateLifetimeGameplaySeconds(secs));
-    _s._lifetimeGameplaySyncedUpTo =
+    unawaited(_host.progress.accumulateLifetimeGameplaySeconds(secs));
+    _host.lifetimeGameplaySyncedUpTo =
         clearTrackedAfter ? Duration.zero : elapsed;
+  }
+
+  /// Feeds a campaign win to the achievement tracker.
+  ///
+  /// Fire-and-forget and fully swallowed: achievements are additive to
+  /// gameplay, so nothing here may ever surface into the win flow. A tracker
+  /// fault costs a missed unlock, which the next win re-evaluates from the same
+  /// local aggregates anyway.
+  Future<void> _recordCampaignAchievementEvent(
+    LevelResult result,
+    int earned,
+  ) async {
+    try {
+      final data = _host.engine.levelData;
+      final silhouette = data.silhouetteId;
+      await AchievementsLocator.instance.record(
+        CampaignLevelWon(
+          mode: _host.difficulty,
+          levelId: _host.level,
+          starsEarned: earned,
+          directive: directiveFor(
+            levelId: _host.level,
+            mode: _host.difficulty,
+          ),
+          jamCount: result.jamCount,
+          undosUsed: result.undosUsed,
+          hintsUsed: _host.hintAdPolicy.hintsUsedThisAttempt,
+          networkIntegrity: _host.engine.networkIntegrity,
+          nodeCount: data.nodes.length,
+          coreCount: data.coreCount,
+          lockCount: data.lockCount,
+          relayCount: data.relayCount,
+          phaseGateCount: data.phaseGateCount,
+          portalPairCount: data.portalPairs.length,
+          dayKey: DailyChallenge.dateKeyLocal(DateTime.now()),
+          silhouetteFamily:
+              silhouette == null ? null : silhouetteVisualFamily(silhouette),
+        ),
+      );
+    } catch (_) {
+      // Intentionally ignored — see doc comment.
+    }
+  }
+
+  Future<void> _recordDailyAchievementEvent(int earned) async {
+    try {
+      final dayKey = _host.dailyDayKey;
+      if (dayKey == null) return;
+      await AchievementsLocator.instance.record(
+        DailyChallengeCompleted(
+          challengeDayKey: dayKey,
+          todayDayKey: DailyChallenge.dateKeyLocal(DateTime.now()),
+          starsEarned: earned,
+        ),
+      );
+    } catch (_) {
+      // Intentionally ignored — see [_recordCampaignAchievementEvent].
+    }
   }
 
   Future<void> handleWin() async {
     flushLifetimeGameplayDelta();
-    _s._stopwatch.stop();
-    _s._timers.countdownTimer?.cancel();
-    _s._timers.ghostHintTimer?.cancel();
-    _s._engine.playSfx(GameSfx.win);
+    _host.stopwatch.stop();
+    _host.timers.countdownTimer?.cancel();
+    _host.timers.ghostHintTimer?.cancel();
+    _host.engine.playSfx(GameSfx.win);
 
     var goalCompleted = false;
 
-    final earned = _s.widget.difficulty.starsForJams(
-      GameScreenConstants.maxLives - _s._livesRemaining,
+    final result = LevelResult(
+      levelId: _host.level,
+      jamCount: GameScreenConstants.maxLives - _host.livesRemaining,
+      elapsedSeconds: _host.stopwatch.elapsed.inSeconds,
+      undosUsed: _host.undosUsed,
+      movesTaken: _host.movesTaken,
+      totalNodes: _host.totalNodes,
+      mode: _host.difficulty,
+      isTutorial: _host.isTutorial,
     );
-    if (_s.widget.isTutorial) {
-      if (_s.widget.tutorialIndex == tutorialLevels.length - 1) {
-        await _s._progress.setTutorialCompleted(true);
+    final earned = result.earnedStars;
+    if (_host.isTutorial) {
+      if (_host.tutorialIndex == tutorialLevels.length - 1) {
+        await _host.progress.setTutorialCompleted(true);
       }
-    } else if (_s.widget.isDailyChallenge) {
-      await _s._progress.saveDailyStars(_s.widget.dailyDayKey!, earned);
+    } else if (_host.isDailyChallenge) {
+      await _host.progress.saveDailyStars(_host.dailyDayKey!, earned);
+      unawaited(_recordDailyAchievementEvent(earned));
     } else {
-      _s._streak.onCampaignWin();
-      _s._pacing.onCampaignWin();
-      goalCompleted = _s._goals.recordWin(surge: _s._isSurge);
-      await _s._progress.incrementLifetimeCampaignClears();
+      _host.streak.onCampaignWin();
+      _host.pacing.onCampaignWin();
+      // One session goal is active at a time, so at most one of these advances;
+      // OR their completion so the toast fires whichever it was.
+      final engine = _host.engine;
+      final flawless = _host.livesRemaining == GameScreenConstants.maxLives;
+      goalCompleted = _host.goals.recordWin(surge: _host.isSurge);
+      if (engine.totalCores > 0 &&
+          _host.goals.recordCoresRestored(engine.totalCores)) {
+        goalCompleted = true;
+      }
+      if (_host.goals.recordNodesCleared(engine.levelData.nodes.length)) {
+        goalCompleted = true;
+      }
+      if (flawless && _host.goals.recordFlawlessWin()) {
+        goalCompleted = true;
+      }
+      await _host.progress.incrementLifetimeCampaignClears();
       CampaignInterstitialFrustrationGate.noteCampaignWin();
-      await _s._progress.saveStars(_s.widget.difficulty, _s.widget.level, earned);
-      await _s._progress.unlockLevel(_s.widget.difficulty, _s.widget.level + 1);
+      await _host.progress.saveStars(_host.difficulty, _host.level, earned);
+      await _host.progress.unlockLevel(_host.difficulty, _host.level + 1);
+      // After the stars and the unlock land, so the tracker's snapshot of
+      // frontier and star total already includes this win.
+      unawaited(_recordCampaignAchievementEvent(result, earned));
     }
 
-    if (!_s.mounted) return;
+    if (!_host.mounted) return;
 
     final quick = _shouldQuickWin();
-    _s.patchState(() {
-      _s._hasWon = true;
-      _s._earnedStars = earned;
-      _s._quickWin = quick;
-      _s._autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
+    _host.markDirty(() {
+      _host.hasWon = true;
+      _host.earnedStars = earned;
+      _host.quickWin = quick;
+      _host.autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
     });
-    if (goalCompleted) _s._showGoalCompleteToast();
+    if (goalCompleted) _host.showGoalCompleteToast();
 
-    if (_s.widget.isDailyChallenge) {
+    if (_host.isDailyChallenge) {
       return;
     }
 
-    if (_s.widget.isTutorial &&
-        _s.widget.tutorialIndex == tutorialLevels.length - 1) {
-      _s._timers.tutorialExitTimer?.cancel();
-      _s._timers.tutorialExitTimer = Timer(const Duration(seconds: 3), () {
-        if (_s.mounted) goMenu();
+    if (_host.isTutorial &&
+        _host.tutorialIndex == tutorialLevels.length - 1) {
+      _host.timers.tutorialExitTimer?.cancel();
+      _host.timers.tutorialExitTimer = Timer(const Duration(seconds: 3), () {
+        if (_host.mounted) _host.goMenu();
       });
       return;
     }
@@ -77,31 +179,31 @@ final class GameFlowController {
       // Flow-preserving fast clear: brief banner, then advance. No interstitial
       // is due (gated in [_shouldQuickWin]), so [goNextLevel]'s ad check is a
       // no-op here — never an ad mid-quick-transition.
-      _s._timers.autoAdvanceTimer?.cancel();
-      _s._timers.autoAdvanceTimer = Timer(
+      _host.timers.autoAdvanceTimer?.cancel();
+      _host.timers.autoAdvanceTimer = Timer(
         const Duration(milliseconds: GameScreenConstants.quickWinBannerMs),
         () {
-          if (!_s.mounted || !_s._hasWon || _s._goingNext) return;
+          if (!_host.mounted || !_host.hasWon || _host.goingNext) return;
           unawaited(goNextLevel());
         },
       );
       return;
     }
 
-    _s._timers.autoAdvanceDelayTimer?.cancel();
-    _s._timers.autoAdvanceTimer?.cancel();
-    _s._timers.autoAdvanceDelayTimer = Timer(
+    _host.timers.autoAdvanceDelayTimer?.cancel();
+    _host.timers.autoAdvanceTimer?.cancel();
+    _host.timers.autoAdvanceDelayTimer = Timer(
       const Duration(milliseconds: GameScreenConstants.winAutoAdvanceDelayMs),
       () {
-        if (!_s.mounted || !_s._hasWon || _s._goingNext) return;
-        _s._timers.autoAdvanceTimer =
+        if (!_host.mounted || !_host.hasWon || _host.goingNext) return;
+        _host.timers.autoAdvanceTimer =
             Timer.periodic(const Duration(seconds: 1), (t) {
-          if (!_s.mounted || !_s._hasWon || _s._goingNext) {
+          if (!_host.mounted || !_host.hasWon || _host.goingNext) {
             t.cancel();
             return;
           }
-          _s.patchState(() => _s._autoAdvanceSec--);
-          if (_s._autoAdvanceSec <= 0) {
+          _host.markDirty(() => _host.autoAdvanceSec--);
+          if (_host.autoAdvanceSec <= 0) {
             t.cancel();
             unawaited(goNextLevel());
           }
@@ -115,11 +217,10 @@ final class GameFlowController {
   /// interstitial is due keep the full [WinPanel] (the big moments — and never
   /// rush an ad).
   bool _shouldQuickWin() {
-    final w = _s.widget;
-    if (w.isTutorial || w.isDailyChallenge) return false;
-    if (isBossLevel(w.level)) return false;
-    if (kLevelMissionOverrides.containsKey(w.level)) return false;
-    if (_s._stopwatch.elapsed.inMilliseconds >=
+    if (_host.isTutorial || _host.isDailyChallenge) return false;
+    if (isBossLevel(_host.level)) return false;
+    if (kLevelMissionOverrides.containsKey(_host.level)) return false;
+    if (_host.stopwatch.elapsed.inMilliseconds >=
         GameScreenConstants.quickWinMaxClearMs) {
       return false;
     }
@@ -131,71 +232,73 @@ final class GameFlowController {
   /// streak threshold is met an interstitial may show on the next transition,
   /// so we keep the full panel even if engagement gates might later suppress it.
   bool _interstitialLikelyDue() {
-    final w = _s.widget;
-    if (w.isTutorial || w.isDailyChallenge) return false;
+    if (_host.isTutorial || _host.isDailyChallenge) return false;
     return SessionCampaignStreak.wins >=
-        SessionCampaignStreak.interstitialStreakThreshold(w.difficulty);
+        SessionCampaignStreak.interstitialStreakThreshold(_host.difficulty);
   }
 
   void resetForRetry() {
     flushLifetimeGameplayDelta();
-    _s._lifetimeGameplaySyncedUpTo = Duration.zero;
-    _s._timers.tutorialExitTimer?.cancel();
+    _host.lifetimeGameplaySyncedUpTo = Duration.zero;
+    _host.timers.tutorialExitTimer?.cancel();
     cancelWinAdvanceTimers();
-    _s._goingNext = false;
-    _s._timers.countdownTimer?.cancel();
-    _s._timers.ghostHintTimer?.cancel();
-    _s._timers.easyHudTimer?.cancel();
-    _s._undoAdPolicy.resetForNewAttempt();
-    _s._hintAdPolicy.resetForNewAttempt();
-    _s.patchState(() {
-      _s._isPaused = false;
-      _s._livesRemaining = GameScreenConstants.maxLives;
-      _s._hasWon = false;
-      _s._quickWin = false;
-      _s._removedNodes = 0;
-      _s._earnedStars = 0;
-      _s._timeLeftSec = _s._timeLimitSec;
-      _s._autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
-      _s._stopwatch
+    _host.goingNext = false;
+    _host.timers.countdownTimer?.cancel();
+    _host.timers.ghostHintTimer?.cancel();
+    _host.timers.easyHudTimer?.cancel();
+    _host.undoAdPolicy.resetForNewAttempt();
+    _host.hintAdPolicy.resetForNewAttempt();
+    _host.markDirty(() {
+      _host.isPaused = false;
+      _host.livesRemaining = GameScreenConstants.maxLives;
+      _host.hasWon = false;
+      _host.quickWin = false;
+      _host.removedNodes = 0;
+      _host.earnedStars = 0;
+      _host.timeLeftSec = _host.timeLimitSec;
+      _host.autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
+      _host.stopwatch
         ..reset()
         ..start();
     });
-    _s._engine.resumeEngine();
+    _host.engine.resumeEngine();
     unawaited(
-      _s._audio.setAmbientGameplayPaused(false, _s._settings.soundEnabled),
+      _host.audio.setAmbientGameplayPaused(false, _host.settings.soundEnabled),
     );
-    _s._engine.restart();
-    _s._engine.playSfx(GameSfx.restart);
-    _s._timerController.startCountdown();
-    _s._timerController.resetGhostHintTimer();
-    _s._timerController.startEasyHudTimer();
+    _host.engine.restart();
+    _host.engine.playSfx(GameSfx.restart);
+    _host.startCountdown();
+    _host.resetGhostHintTimer();
+    _host.startEasyHudTimer();
   }
 
   void cancelWinAdvanceTimers() {
-    _s._timers.cancelWinAdvanceTimers();
+    _host.timers.cancelWinAdvanceTimers();
   }
 
   Future<void> goNextLevel() async {
-    if (!_s.mounted || _s.widget.isDailyChallenge) return;
-    if (_s._goingNext) return;
-    _s._goingNext = true;
+    if (!_host.mounted || _host.isDailyChallenge) return;
+    if (_host.goingNext) return;
+    _host.goingNext = true;
     cancelWinAdvanceTimers();
 
     try {
       await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
-        ads: _s._ads,
-        difficulty: _s.widget.difficulty,
-        isTutorial: _s.widget.isTutorial,
-        isDailyChallenge: _s.widget.isDailyChallenge,
+        ads: _host.ads,
+        difficulty: _host.difficulty,
+        isTutorial: _host.isTutorial,
+        isDailyChallenge: _host.isDailyChallenge,
       );
 
-      if (!_s.mounted) return;
+      if (!_host.mounted) return;
 
-      if (_s.widget.isTutorial) {
-        final next = _s.widget.tutorialIndex + 1;
+      if (_host.isTutorial) {
+        final next = _host.tutorialIndex + 1;
         if (next >= tutorialLevels.length) return;
-        Navigator.of(_s.context).pushReplacement(
+        // `_host.mounted` is checked above with no intervening await; the lint
+        // just cannot see through the GameScreenControllerHost interface.
+        // ignore: use_build_context_synchronously
+        Navigator.of(_host.context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (_, __, ___) => GameScreen(
               level: next + 1,
@@ -203,11 +306,11 @@ final class GameFlowController {
               fixedLevel: tutorialLevels[next],
               isTutorial: true,
               tutorialIndex: next,
-              adService: _s.widget.adService,
-              audioHandleFactory: _s.widget.audioHandleFactory,
-              progressStore: _s.widget.progressStore,
-              campaignStreak: _s.widget.campaignStreak,
-              sessionPacing: _s.widget.sessionPacing,
+              adService: _host.adServiceOverride,
+              audioHandleFactory: _host.audioHandleFactory,
+              progressStore: _host.progressStoreOverride,
+              campaignStreak: _host.campaignStreakOverride,
+              sessionPacing: _host.sessionPacingOverride,
             ),
             transitionsBuilder: (_, anim, __, child) => FadeTransition(
               opacity: anim,
@@ -218,16 +321,18 @@ final class GameFlowController {
         );
         return;
       }
-      Navigator.of(_s.context).pushReplacement(
+      // Same as above: guarded by the `_host.mounted` check, no await between.
+      // ignore: use_build_context_synchronously
+      Navigator.of(_host.context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (_, __, ___) => GameScreen(
-            level: _s.widget.level + 1,
-            difficulty: _s.widget.difficulty,
-            adService: _s.widget.adService,
-            audioHandleFactory: _s.widget.audioHandleFactory,
-            progressStore: _s.widget.progressStore,
-            campaignStreak: _s.widget.campaignStreak,
-            sessionPacing: _s.widget.sessionPacing,
+            level: _host.level + 1,
+            difficulty: _host.difficulty,
+            adService: _host.adServiceOverride,
+            audioHandleFactory: _host.audioHandleFactory,
+            progressStore: _host.progressStoreOverride,
+            campaignStreak: _host.campaignStreakOverride,
+            sessionPacing: _host.sessionPacingOverride,
           ),
           transitionsBuilder: (_, anim, __, child) => FadeTransition(
             opacity: anim,
@@ -237,17 +342,17 @@ final class GameFlowController {
         ),
       );
     } finally {
-      if (_s.mounted) _s._goingNext = false;
+      if (_host.mounted) _host.goingNext = false;
     }
   }
 
   void goMenu() {
-    _s._streak.resetSession();
-    _s._pacing.resetSession();
-    _s._goals.resetSession();
-    _s._timers.tutorialExitTimer?.cancel();
+    _host.streak.resetSession();
+    _host.pacing.resetSession();
+    _host.goals.resetSession();
+    _host.timers.tutorialExitTimer?.cancel();
     cancelWinAdvanceTimers();
-    _s._goingNext = false;
-    Navigator.of(_s.context).popUntil((r) => r.isFirst);
+    _host.goingNext = false;
+    Navigator.of(_host.context).popUntil((r) => r.isFirst);
   }
 }

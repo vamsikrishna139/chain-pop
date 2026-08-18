@@ -2,6 +2,7 @@ import 'dart:math';
 import 'difficulty_mode.dart';
 import 'difficulty_parameters.dart';
 import 'validation_result.dart';
+import '../../world_registry.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Supporting enums
@@ -297,24 +298,24 @@ class LevelConfiguration {
     switch (archetype) {
       case LevelArchetype.standard:
       case LevelArchetype.chaos:
-        return _clampGridDimensions(base, base, mode);
+        return _clampGridDimensions(base, base, mode, levelId: levelId);
       case LevelArchetype.claustrophobic:
         final s = max(3, base - 1);
-        return _clampGridDimensions(s, s, mode);
+        return _clampGridDimensions(s, s, mode, levelId: levelId);
       case LevelArchetype.openField:
       case LevelArchetype.sniper:
         final s = min(20, base + 2);
-        return _clampGridDimensions(s, s, mode);
+        return _clampGridDimensions(s, s, mode, levelId: levelId);
       case LevelArchetype.corridor:
         final longAxis = (base * 1.35).round();
         final shortAxis = (base * 0.70).round();
         final (w, h) = levelId.isEven
             ? (shortAxis, longAxis)
             : (longAxis, shortAxis);
-        return _clampGridDimensions(w, h, mode);
+        return _clampGridDimensions(w, h, mode, levelId: levelId);
       case LevelArchetype.fortress:
         final s = max(5, base);
-        return _clampGridDimensions(s, s, mode);
+        return _clampGridDimensions(s, s, mode, levelId: levelId);
     }
   }
 
@@ -336,27 +337,17 @@ class LevelConfiguration {
     int h,
     DifficultyMode mode, {
     bool isDaily = false,
+    int levelId = 1,
   }) {
+    final sector = levelId > 10000 ? 8 : worldForLevel(levelId).sector.mechanicBudgetTier;
     final (minSpan, maxSpan) = switch (mode) {
       DifficultyMode.easy => (6, 8),
       DifficultyMode.medium => (6, 9),
-      DifficultyMode.hard => (6, 8),
+      DifficultyMode.hard => (6, sector >= 5 ? 9 : 8),
     };
     return (w.clamp(minSpan, maxSpan), h.clamp(minSpan, maxSpan));
   }
 
-  /// Logarithmic grid growth, capped per mode.
-  static int _baseGridSize(int levelId, DifficultyMode mode) {
-    final logLevel = levelId >= 0 ? log(levelId + 1) / ln2 : 0.0;
-    switch (mode) {
-      case DifficultyMode.easy:
-        return (4 + logLevel * 0.55).floor().clamp(4, 8);
-      case DifficultyMode.medium:
-        return (6 + logLevel * 0.60).floor().clamp(6, 9);
-      case DifficultyMode.hard:
-        return (6 + logLevel * 0.75).floor().clamp(6, 8);
-    }
-  }
 
   // ── Node count ─────────────────────────────────────────────────────────
 
@@ -388,7 +379,7 @@ class LevelConfiguration {
         (area * difficulty.densityFactor * densityMod).floor();
     final clamped = baseCount.clamp(
       difficulty.minNodes,
-      min(effectiveMaxNodes, maxPossible),
+      max(difficulty.minNodes, min(effectiveMaxNodes, maxPossible)),
     );
 
     final m = 1.0 +

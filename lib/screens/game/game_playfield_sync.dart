@@ -1,56 +1,58 @@
-part of 'package:chain_pop/screens/game_screen.dart';
+import 'package:flutter/material.dart';
+
+import 'game_screen_controller_host.dart';
 
 /// Maps Flutter HUD geometry to [ChainPopGame] playfield reserves (logical px).
 final class GamePlayfieldInsetController {
-  GamePlayfieldInsetController(this._s);
+  GamePlayfieldInsetController(this._host);
 
-  final GameScreenState _s;
+  final GameScreenControllerHost _host;
 
   void scheduleSync() {
-    if (_s._game == null) return;
-    if (_s._playfieldInsetFrameScheduled) return;
-    _s._playfieldInsetFrameScheduled = true;
+    if (_host.game == null) return;
+    if (_host.playfieldInsetFrameScheduled) return;
+    _host.playfieldInsetFrameScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _s._playfieldInsetFrameScheduled = false;
-      if (!_s.mounted) return;
+      _host.playfieldInsetFrameScheduled = false;
+      if (!_host.mounted) return;
       syncFromHud();
     });
   }
 
   void syncFromHud() {
-    if (_s._game == null) return;
-    final mq = MediaQuery.of(_s.context);
+    if (_host.game == null) return;
+    final mq = MediaQuery.of(_host.context);
     final h = mq.size.height;
 
     double topReserved = mq.padding.top + 128;
     final headerBox =
-        _s._headerHudKey.currentContext?.findRenderObject() as RenderBox?;
+        _host.headerHudKey.currentContext?.findRenderObject() as RenderBox?;
     final stackBox =
-        _s._bodyStackKey.currentContext?.findRenderObject() as RenderBox?;
+        _host.bodyStackKey.currentContext?.findRenderObject() as RenderBox?;
     if (headerBox != null && headerBox.hasSize) {
       final headerBottom =
           headerBox.localToGlobal(Offset(0, headerBox.size.height)).dy;
       topReserved = headerBottom + 20;
 
-      if (_s.widget.isTutorial && stackBox != null && stackBox.hasSize) {
-        final hintTop = stackBox
+      if (stackBox != null && stackBox.hasSize) {
+        final bannerTop = stackBox
             .globalToLocal(
               headerBox.localToGlobal(Offset(0, headerBox.size.height)),
             )
             .dy;
-        final next = (hintTop + 8).clamp(72.0, h * 0.4);
-        if ((_s._tutorialHintTop - next).abs() > 0.5) {
-          _s.patchState(() {
-            _s._tutorialHintTop = next;
+        final next = (bannerTop + 8).clamp(72.0, h * 0.4);
+        if ((_host.hudBannerTop - next).abs() > 0.5) {
+          _host.markDirty(() {
+            _host.hudBannerTop = next;
           });
         }
       }
     }
 
     double bottomReserved = mq.padding.bottom + 88;
-    if (!_s._hasWon) {
+    if (!_host.hasWon) {
       final footerBox =
-          _s._footerHudKey.currentContext?.findRenderObject() as RenderBox?;
+          _host.footerHudKey.currentContext?.findRenderObject() as RenderBox?;
       if (footerBox != null && footerBox.hasSize) {
         final footerTop = footerBox.localToGlobal(Offset.zero).dy;
         bottomReserved = (h - footerTop) + 16;
@@ -60,6 +62,6 @@ final class GamePlayfieldInsetController {
     topReserved = topReserved.clamp(96.0, h * 0.55);
     bottomReserved = bottomReserved.clamp(64.0, h * 0.5);
 
-    _s._engine.configurePlayfieldInsets(top: topReserved, bottom: bottomReserved);
+    _host.engine.configurePlayfieldInsets(top: topReserved, bottom: bottomReserved);
   }
 }

@@ -46,4 +46,8 @@ abstract class AdService {
   /// Bottom anchored adaptive banner on the in-game pause overlay.
   /// [NoOpAdService] and tests return zero-height spacer.
   Widget buildGamePauseBanner(BuildContext context);
+
+  /// Bottom anchored adaptive banner for the game screen, shown below the toolbar.
+  /// [NoOpAdService] and tests return zero-height spacer.
+  Widget buildGameScreenBanner(BuildContext context);
 }

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// Dual-purpose control: **tap → undo**, **hold → restart**.
-///
-/// Hold uses a circular progress ring (no blocking dialog). Intended to be
-/// easy to gate behind a rewarded ad later.
+import '../../../theme/app_colors.dart';
+
 class UndoRestartButton extends StatefulWidget {
   final Color accent;
   final bool canUndo;
@@ -22,14 +21,11 @@ class UndoRestartButton extends StatefulWidget {
   State<UndoRestartButton> createState() => _UndoRestartButtonState();
 }
 
-class _UndoRestartButtonState extends State<UndoRestartButton>
-    with TickerProviderStateMixin {
+class _UndoRestartButtonState extends State<UndoRestartButton> with TickerProviderStateMixin {
   static const _holdDuration = Duration(milliseconds: 700);
 
   late final AnimationController _holdCtrl;
-  late final AnimationController _labelCtrl;
   bool _holding = false;
-  String _labelText = '';
 
   @override
   void initState() {
@@ -39,31 +35,19 @@ class _UndoRestartButtonState extends State<UndoRestartButton>
         if (s == AnimationStatus.completed) {
           _holding = false;
           _holdCtrl.reset();
-          _showLabel('RESTART');
           widget.onRestart();
         }
       });
-    _labelCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
   }
 
   @override
   void dispose() {
     _holdCtrl.dispose();
-    _labelCtrl.dispose();
     super.dispose();
-  }
-
-  void _showLabel(String text) {
-    setState(() => _labelText = text);
-    _labelCtrl.forward(from: 0);
   }
 
   void _onTap() {
     if (!widget.canUndo) return;
-    _showLabel('UNDO');
     widget.onUndo();
   }
 
@@ -89,116 +73,62 @@ class _UndoRestartButtonState extends State<UndoRestartButton>
   @override
   Widget build(BuildContext context) {
     final hasUndo = widget.canUndo;
-    return SizedBox(
-      width: 48,
-      height: 48,
-      child: Stack(
-        alignment: Alignment.center,
-        clipBehavior: Clip.none,
-        children: [
-          Positioned(
-            top: -22,
-            child: AnimatedBuilder(
-              animation: _labelCtrl,
-              builder: (context, _) {
-                final t = _labelCtrl.value;
-                final opacity = t < 0.15
-                    ? (t / 0.15)
-                    : t > 0.7
-                        ? ((1.0 - t) / 0.3).clamp(0.0, 1.0)
-                        : 1.0;
-                final slide = t < 0.15 ? (1.0 - t / 0.15) * 6 : 0.0;
-                if (opacity <= 0) return const SizedBox.shrink();
-                return Transform.translate(
-                  offset: Offset(0, slide),
-                  child: Opacity(
-                    opacity: opacity,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: widget.accent.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        _labelText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
+    return GestureDetector(
+      onTap: _onTap,
+      onLongPressStart: _onLongPressStart,
+      onLongPressEnd: _onLongPressEnd,
+      onLongPressCancel: _onLongPressCancel,
+      child: AnimatedBuilder(
+        animation: _holdCtrl,
+        builder: (context, _) {
+          final v = _holdCtrl.value;
+          return Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
-          ),
-          GestureDetector(
-            onTap: _onTap,
-            onLongPressStart: _onLongPressStart,
-            onLongPressEnd: _onLongPressEnd,
-            onLongPressCancel: _onLongPressCancel,
-            child: AnimatedBuilder(
-              animation: _holdCtrl,
-              builder: (context, _) {
-                final v = _holdCtrl.value;
-                return Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Color.lerp(
-                      Colors.white.withValues(alpha: hasUndo ? 0.06 : 0.03),
-                      widget.accent.withValues(alpha: 0.18),
-                      v,
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              alignment: Alignment.centerLeft,
+              children: [
+                if (v > 0)
+                  Positioned.fill(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: v,
+                        child: Container(color: Colors.redAccent.withValues(alpha: 0.3)),
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: v > 0
-                        ? [
-                            BoxShadow(
-                              color: widget.accent.withValues(alpha: v * 0.4),
-                              blurRadius: 12 * v,
-                              spreadRadius: 2 * v,
-                            ),
-                          ]
-                        : null,
                   ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      if (v > 0)
-                        SizedBox(
-                          width: 36,
-                          height: 36,
-                          child: CircularProgressIndicator(
-                            value: v,
-                            strokeWidth: 2.5,
-                            color: widget.accent,
-                            backgroundColor: Colors.white12,
-                          ),
-                        ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (v > 0)
                       Transform.rotate(
                         angle: v * 2 * 3.14159265,
-                        child: Icon(
-                          v > 0.1 ? Icons.refresh_rounded : Icons.undo_rounded,
-                          color: Color.lerp(
-                            hasUndo ? Colors.white70 : Colors.white24,
-                            widget.accent,
-                            v,
-                          ),
-                          size: 22,
-                        ),
+                        child: const Icon(Icons.refresh_rounded, color: Colors.redAccent, size: 16),
+                      )
+                    else
+                      Icon(Icons.undo_rounded, color: hasUndo ? Colors.white70 : Colors.white24, size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      v > 0.2 ? 'HOLD TO RESTART' : 'UNDO',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: hasUndo ? Colors.white70 : Colors.white24,
                       ),
-                    ],
-                  ),
-                );
-              },
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

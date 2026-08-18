@@ -1,6 +1,7 @@
 import 'archetype.dart';
 import 'difficulty_profile.dart';
 import 'motifs.dart';
+import 'progression_profile.dart';
 import 'silhouettes.dart';
 
 /// A hand-authorable "seed" — the designer's pinned choices for one level.
@@ -39,6 +40,11 @@ class LevelSeed {
   /// `difficultyTier` band.
   final int? targetNodeCount;
 
+  final int? gridWidth;
+  final int? gridHeight;
+
+  final MechanicBudgetOverride? mechanicOverride;
+
   const LevelSeed({
     required this.id,
     required this.silhouetteId,
@@ -47,6 +53,9 @@ class LevelSeed {
     this.motifMixId,
     this.seedRng,
     this.targetNodeCount,
+    this.gridWidth,
+    this.gridHeight,
+    this.mechanicOverride,
   });
 
   @override

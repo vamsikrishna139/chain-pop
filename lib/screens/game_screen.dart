@@ -11,14 +11,16 @@ import '../game/world_registry.dart';
 import '../game/difficulty_exports.dart';
 import '../game/levels/level.dart';
 import '../game/levels/level_manager.dart';
+
+import '../game/levels/level_directive.dart';
 import '../game/levels/tutorial_levels.dart';
+import '../utils/progress_format.dart';
 import '../models/game_settings.dart';
-import '../services/ads/ad_placements.dart';
+import '../services/achievements/achievements_locator.dart';
+import '../services/achievements/game_event.dart';
 import '../services/ads/ad_service.dart';
 import '../services/ads/ads_locator.dart';
 import '../services/crash_reporting.dart';
-import '../services/ads/campaign_between_levels_ads.dart';
-import '../services/ads/campaign_interstitial_frustration_gate.dart';
 import '../services/ads/hint_ad_policy.dart';
 import '../services/ads/undo_ad_policy.dart';
 import '../services/game_audio.dart';
@@ -31,23 +33,26 @@ import '../services/storage/chain_pop_storage.dart';
 import '../services/storage/storage_locator.dart';
 import '../theme/app_colors.dart';
 import '../theme/world_theme.dart';
+import 'game/game_ad_coordination.dart';
+import 'game/game_flow_controller.dart';
+import 'game/game_playfield_sync.dart';
 import 'game/game_screen_constants.dart';
+import 'game/game_screen_controller_host.dart';
 import 'game/game_screen_timer_coordinator.dart';
+import 'game/game_timer_controller.dart';
 import 'game/game_time_limit.dart';
 import 'game/widgets/game_bottom_toolbar.dart';
-import 'game/widgets/game_dialogs.dart';
 import 'game/widgets/game_header_hud.dart';
 import 'game/widgets/game_pause_overlay.dart';
 import 'game/widgets/game_settings_sheet.dart';
 import 'game/widgets/quick_win_banner.dart';
-import 'game/widgets/session_goal_chip.dart';
+
 import 'game/widgets/win_celebration_overlay.dart';
 import 'game/widgets/win_panel.dart';
 
-part 'game/game_playfield_sync.dart';
-part 'game/game_timer_controller.dart';
-part 'game/game_ad_coordination.dart';
-part 'game/game_flow_controller.dart';
+/// Combo length that earns the Chain Reaction achievement. Mirrors the
+/// tracker's own threshold; kept here so ordinary pops never reach the tracker.
+const int _kComboAchievementStreak = 5;
 
 /// Full-screen game view for a single level.
 ///
@@ -138,7 +143,9 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => GameScreenState();
 }
 
-class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
+class GameScreenState extends State<GameScreen>
+    with WidgetsBindingObserver
+    implements GameScreenControllerHost {
   /// Elapsed gameplay already persisted from this route (prevents duplicate adds).
   Duration _lifetimeGameplaySyncedUpTo = Duration.zero;
 
@@ -187,8 +194,219 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   late final GameAdCoordinator _adCoordinator = GameAdCoordinator(this);
   late final GameTimerController _timerController = GameTimerController(this);
 
-  late final ChainPopProgressStore _progress;
+  // ── GameScreenControllerHost ─────────────────────────────────────────────
 
+  @override
+  int get level => widget.level;
+
+  @override
+  DifficultyMode get difficulty => widget.difficulty;
+
+  @override
+  bool get isDailyChallenge => widget.isDailyChallenge;
+
+  @override
+  int? get dailyDayKey => widget.dailyDayKey;
+
+  @override
+  bool get isTutorial => widget.isTutorial;
+
+  @override
+  int get tutorialIndex => widget.tutorialIndex;
+
+  @override
+  AdService? get adServiceOverride => widget.adService;
+
+  @override
+  GameAudioHandle Function()? get audioHandleFactory =>
+      widget.audioHandleFactory;
+
+  @override
+  ChainPopProgressStore? get progressStoreOverride => widget.progressStore;
+
+  @override
+  CampaignStreakTracker? get campaignStreakOverride => widget.campaignStreak;
+
+  @override
+  SessionPacingController? get sessionPacingOverride => widget.sessionPacing;
+
+  @override
+  SessionGoalsController? get sessionGoalsOverride => widget.sessionGoals;
+
+  @override
+  GameScreenTimerCoordinator get timers => _timers;
+
+  @override
+  ChainPopGame? get game => _game;
+
+  @override
+  ChainPopGame get engine => _engine;
+
+  @override
+  int get livesRemaining => _livesRemaining;
+
+  @override
+  set livesRemaining(int value) => _livesRemaining = value;
+
+  @override
+  bool get hasWon => _hasWon;
+
+  @override
+  set hasWon(bool value) => _hasWon = value;
+
+  @override
+  bool get quickWin => _quickWin;
+
+  @override
+  set quickWin(bool value) => _quickWin = value;
+
+  @override
+  bool get isPaused => _isPaused;
+
+  @override
+  set isPaused(bool value) => _isPaused = value;
+
+  @override
+  bool get isSurge => _isSurge;
+
+  @override
+  bool get goingNext => _goingNext;
+
+  @override
+  set goingNext(bool value) => _goingNext = value;
+
+  @override
+  Stopwatch get stopwatch => _stopwatch;
+
+  @override
+  int get earnedStars => _earnedStars;
+
+  @override
+  set earnedStars(int value) => _earnedStars = value;
+
+  @override
+  int get removedNodes => _removedNodes;
+
+  @override
+  int get movesTaken => engine.movesTaken;
+
+  @override
+  int get undosUsed => engine.undosUsed;
+
+  @override
+  set removedNodes(int value) => _removedNodes = value;
+
+  @override
+  int get totalNodes => _totalNodes;
+
+  @override
+  int get autoAdvanceSec => _autoAdvanceSec;
+
+  @override
+  set autoAdvanceSec(int value) => _autoAdvanceSec = value;
+
+  @override
+  int? get timeLeftSec => _timeLeftSec;
+
+  @override
+  set timeLeftSec(int? value) => _timeLeftSec = value;
+
+  @override
+  int? get timeLimitSec => _timeLimitSec;
+
+  @override
+  Duration get lifetimeGameplaySyncedUpTo => _lifetimeGameplaySyncedUpTo;
+
+  @override
+  set lifetimeGameplaySyncedUpTo(Duration value) =>
+      _lifetimeGameplaySyncedUpTo = value;
+
+  @override
+  GameSettings get settings => _settings;
+
+  @override
+  GameAudioHandle get audio => _audio;
+
+  @override
+  ChainPopStorage get gameStorage => _gameStorage;
+
+  @override
+  ChainPopProgressStore get progress => _progress;
+
+  @override
+  AdService get ads => _ads;
+
+  @override
+  UndoAdPolicy get undoAdPolicy => _undoAdPolicy;
+
+  @override
+  HintAdPolicy get hintAdPolicy => _hintAdPolicy;
+
+  @override
+  bool get gateHintsWithAds => _gateHintsWithAds;
+
+  @override
+  bool get hardOrDailyFeatures => _hardOrDailyFeatures;
+
+  @override
+  bool get offerRewardedContinue => _offerRewardedContinue;
+
+  @override
+  GlobalKey get headerHudKey => _headerHudKey;
+
+  @override
+  GlobalKey get footerHudKey => _footerHudKey;
+
+  @override
+  GlobalKey get bodyStackKey => _bodyStackKey;
+
+  @override
+  bool get playfieldInsetFrameScheduled => _playfieldInsetFrameScheduled;
+
+  @override
+  set playfieldInsetFrameScheduled(bool value) =>
+      _playfieldInsetFrameScheduled = value;
+
+  @override
+  double get hudBannerTop => _hudBannerTop;
+
+  @override
+  set hudBannerTop(double value) => _hudBannerTop = value;
+
+  @override
+  CampaignStreakTracker get streak => _streak;
+
+  @override
+  SessionPacingController get pacing => _pacing;
+
+  @override
+  SessionGoalsController get goals => _goals;
+
+  @override
+  void markDirty(VoidCallback fn) => setState(fn);
+
+  @override
+  void showGoalCompleteToast() => _showGoalCompleteToast();
+
+  @override
+  void handleTimeUp() => _adCoordinator.handleTimeUp();
+
+  @override
+  void startCountdown() => _timerController.startCountdown();
+
+  @override
+  void startEasyHudTimer() => _timerController.startEasyHudTimer();
+
+  @override
+  void resetGhostHintTimer() => _timerController.resetGhostHintTimer();
+
+  @override
+  void resetForRetry() => _gameFlow.resetForRetry();
+
+  @override
+  void goMenu() => _gameFlow.goMenu();
+
+  late final ChainPopProgressStore _progress;
 
   CampaignStreakTracker get _streak =>
       widget.campaignStreak ?? defaultCampaignStreakTracker;
@@ -258,11 +476,8 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool _goingNext = false;
 
   /// Stack-local Y for tutorial hint banner (below measured [GameHeaderHud]).
-  double _tutorialHintTop = 118;
+  double _hudBannerTop = 118;
 
-  /// Controllers declared in `part` files rebuild through this helper because
-  /// [setState] is protected outside [State] subclasses.
-  void patchState(VoidCallback fn) => setState(fn);
 
   @override
   void initState() {
@@ -271,6 +486,14 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       freeBudget: _hardOrDailyFeatures ? 0 : 2,
     );
     WidgetsBinding.instance.addObserver(this);
+
+    // Vary the session's opening goal by day so it isn't always "Win 3 levels".
+    // Idempotent for the app run; later resetSession calls advance from here.
+    if (_isCampaign) {
+      _goals.seedRotation(
+        DateTime.now().millisecondsSinceEpoch ~/ Duration.millisecondsPerDay,
+      );
+    }
 
     _gameStorage = widget.storage ?? StorageLocator.instance;
     _progress = widget.progressStore ??
@@ -341,6 +564,8 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           .clamp(SessionPacing.timedSurgeFloorSec, _timeLimitSec!);
     }
 
+
+
     _timeLeftSec = _timeLimitSec;
 
     if (!_stopwatch.isRunning) _stopwatch.start();
@@ -399,6 +624,7 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     g.colorblindPalette = _settings.colorblindFriendly;
     g.showAimRay = _settings.showAimRay;
     g.ambientMotion = _settings.ambientMotion;
+    g.tutorialCoaching = widget.isTutorial;
     g.onSfx = (sfx, {double playbackRate = 1.0}) =>
         unawaited(_audio.play(sfx, playbackRate: playbackRate));
   }
@@ -419,10 +645,25 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           : () => unawaited(_gameFlow.handleWin()),
       onJam: _handleFoul,
       onNodeRemoved: _handleNodeRemoved,
+      onComboStreak: _handleComboStreak,
       preloadedLevel: _levelData!,
       theme: WorldTheme.fromAccent(accent),
     );
     _pushFeedbackToGame();
+  }
+
+  /// Reports combo milestones to the achievement tracker.
+  ///
+  /// Fires on every extraction, so it filters before touching the tracker —
+  /// this sits on the hot path and must stay near-free for ordinary pops.
+  void _handleComboStreak(int streak) {
+    if (streak < _kComboAchievementStreak) return;
+    if (widget.isTutorial || widget.autoplay) return;
+    unawaited(
+      AchievementsLocator.instance.record(ComboReached(streak)).catchError(
+        (_) {},
+      ),
+    );
   }
 
   void _handleFoul() {
@@ -457,19 +698,19 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       return DailyChallenge.incidentTitle(widget.dailyDayKey!);
     }
     if (widget.difficulty == DifficultyMode.hard) {
-      return worldHudLabel(widget.level);
+      return 'LEVEL ${ProgressFormat.level(widget.level)}';
     }
-    return null;
+    return 'LEVEL ${ProgressFormat.level(widget.level)}';
   }
 
   String? _missionLabel() {
     if (widget.isDailyChallenge) {
       return DailyChallenge.incidentObjective(widget.dailyDayKey!);
     }
-    if (!widget.isTutorial && widget.difficulty == DifficultyMode.hard) {
-      return missionForLevel(widget.level);
+    if (!widget.isTutorial) {
+      return directiveFor(levelId: widget.level, mode: widget.difficulty).label;
     }
-    return null;
+    return 'TRAINING';
   }
 
   /// Invokes the same path as the win rail **Next** control (for automated tests).
@@ -560,31 +801,35 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   String _tutorialHintText() {
     switch (widget.tutorialIndex) {
       case 0:
-        return 'Tap an arrow whose path is clear to the edge and clear the board before the countdown reaches zero. '
-            'Pinch or tap Zoom in for a closer look; Reset zoom snaps back to the full board.';
+        return 'Tap an arrow that has a clear path off the board. Follow the pointer.';
       case 1:
-        return 'Arrows block each other—clear a free exit first and watch the countdown. '
-            'Tap the grid button for alignment lines along shared rows and columns.';
+        return 'Some arrows block each other. Clear a free one first — follow the pointer.';
       case 2:
-        return 'Chain good pops in a safe order—the timer only counts down, pops never add time. '
-            'Unsure what is safe? Tap the lightbulb hint and a removable arrow PULSES to show a move.';
+        return 'Clear arrows in a safe order. The pointer always shows a safe move.';
       case 3:
-        return 'Bigger board: plan clears and watch the countdown—zoom or alignment lines help scan paths.';
+        return 'Bigger board — keep following the pointer to clear it.';
       case 4:
-        return 'Recap: 8 arrows—clear everything before the 45s countdown hits zero. '
-            'Pinch out or Reset zoom if you need the full board again.';
+        return 'Clear the whole board. The pointer shows a safe move each time.';
       case 5:
-        return 'Gold-ringed arrows are CORES—extract all three to win. The other two point at '
-            'each other and can never move; popping the last core auto-clears them. '
-            'Watch INTEGRITY (top-left): your network health drops if you misfire a blocked '
-            'arrow and rises as you restore cores.';
+        return 'Gold-ringed arrows are CORES — clear all 3 to win. '
+            'The two stuck arrows clear themselves once the cores are gone.';
       case 6:
-        return 'The arrow with the green ring is a RELAY. Popping it spins every arrow in its '
-            'row a quarter turn clockwise—fire it to free the pair stuck face-to-face, '
-            'then clear what remains.';
+        return 'The green-ringed arrow is a SPINNER. Tap it to turn its whole row '
+            'and free the arrows stuck facing each other.';
+      case 7:
+        return 'The padlocked arrow is LOCKED. Clear the tiles right next to it '
+            'first, then tap it.';
+      case 8:
+        return 'The two dim arrows are PHASE-LOCKED. Their paths are already '
+            'clear — they just wait their turn. Clear both bright arrows and '
+            'watch the dim ones light up.';
+      case 9:
+        return 'FINAL TEST — every arrow type at once. Clear the bright ones '
+            'first: SPINNER turns its row, PADLOCK opens once its neighbour '
+            'goes. That lights up the dim PHASE arrows and the gold CORES — '
+            'take both cores to win.';
       default:
-        return 'The padlocked arrow is LOCKED until the tiles around it are empty. '
-            'Clear its two neighbors first, then send it on its way.';
+        return 'Follow the pointer — it always shows a safe move.';
     }
   }
 
@@ -638,7 +883,10 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             Positioned.fill(
               child: QuickWinBanner(
                 stars: _earnedStars,
-                levelLabel: 'LEVEL ${widget.level} CLEAR',
+                levelLabel: 'LEVEL ${ProgressFormat.level(widget.level)} CLEAR',
+                directiveLabel: _isCampaign
+                    ? directiveFor(levelId: widget.level, mode: widget.difficulty).label
+                    : null,
                 sessionWins: _pacing.winsThisSession,
                 accent: accent,
               ),
@@ -665,29 +913,14 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
             timeLimitSec: _timeLimitSec,
             elapsed: _stopwatch.elapsed,
             onTogglePause: _togglePause,
+            sessionGoalLabel: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.activeGoal.label : null,
+            sessionGoalProgress: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.progress : null,
+            sessionGoalTarget: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.target : null,
           ),
-          // Hide once complete: the completion is celebrated by the goal-
-          // complete toast on the winning level, so a persistent "DONE" chip on
-          // every later level of the session is just visual clutter.
-          if (_isCampaign && !_hasWon && !_goals.isComplete)
-            Positioned(
-              top: _tutorialHintTop,
-              left: 0,
-              right: 0,
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: SessionGoalChip(
-                  label: _goals.activeGoal.label,
-                  progress: _goals.progress,
-                  target: _goals.target,
-                  complete: _goals.isComplete,
-                  accent: accent,
-                ),
-              ),
-            ),
+
           if (widget.isTutorial && !_hasWon)
             Positioned(
-              top: _tutorialHintTop,
+              top: _hudBannerTop,
               left: 12,
               right: 12,
               child: IgnorePointer(
@@ -726,30 +959,41 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               ),
             ),
           if (!_hasWon)
-            GameBottomToolbar(
-              measureKey: _footerHudKey,
-              accent: accent,
-              showHintAdBadge: _hardOrDailyFeatures,
-              axisGuidesVisible: _engine.axisGuidesVisible,
-              canUndo: _engine.canUndo,
-              onHint: () => unawaited(_adCoordinator.handleHint()),
-              onToggleGuides: () {
-                if (_isPaused) return;
-                _engine.toggleAxisGuides();
-                setState(() {});
-              },
-              onZoomIn: widget.isTutorial
-                  ? () {
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GameBottomToolbar(
+                    measureKey: _footerHudKey,
+                    accent: accent,
+                    showHintAdBadge: _hardOrDailyFeatures,
+                    axisGuidesVisible: _engine.axisGuidesVisible,
+                    canUndo: _engine.canUndo,
+                    onHint: () => unawaited(_adCoordinator.handleHint()),
+                    onToggleGuides: () {
                       if (_isPaused) return;
-                      _engine.zoomInStep();
-                    }
-                  : null,
-              onResetView: () {
-                if (_isPaused) return;
-                _engine.resetView();
-              },
-              onUndo: () => unawaited(_adCoordinator.handleUndo()),
-              onRestart: _gameFlow.resetForRetry,
+                      _engine.toggleAxisGuides();
+                      setState(() {});
+                    },
+                    onZoomIn: widget.isTutorial
+                        ? () {
+                            if (_isPaused) return;
+                            _engine.zoomInStep();
+                          }
+                        : null,
+                    onResetView: () {
+                      if (_isPaused) return;
+                      _engine.resetView();
+                    },
+                    onUndo: () => unawaited(_adCoordinator.handleUndo()),
+                    onRestart: _gameFlow.resetForRetry,
+                  ),
+                  _ads.buildGameScreenBanner(context),
+                ],
+              ),
             ),
           if (_isPaused && !_hasWon)
             GamePauseOverlay(
@@ -789,13 +1033,18 @@ class GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       (!widget.isTutorial ||
                           widget.tutorialIndex < tutorialLevels.length - 1),
                   titleLine: widget.isDailyChallenge
-                      ? DailyChallenge.incidentResolvedTitle(
-                          widget.dailyDayKey!,
-                        )
+                      ? DailyChallenge.incidentTitle(widget.dailyDayKey!)
                       : (widget.isTutorial
-                          ? 'TUTORIAL · STEP ${widget.tutorialIndex + 1} '
-                              '/ ${tutorialLevels.length}'
-                          : null),
+                          ? 'TUTORIAL ${widget.tutorialIndex + 1} CLEAR'
+                          : 'LEVEL ${ProgressFormat.level(widget.level)}'),
+                  directiveLabel: _isCampaign
+                      ? directiveFor(levelId: widget.level, mode: widget.difficulty).label
+                      : null,
+                  missionLabel: _isCampaign ? missionShortForLevel(widget.level) : null,
+                  sessionGoalLabel: _isCampaign ? _goals.activeGoal.label : null,
+                  sessionGoalProgress: _isCampaign ? _goals.progress : null,
+                  sessionGoalTarget: _isCampaign ? _goals.target : null,
+                  sessionGoalComplete: _isCampaign ? _goals.isComplete : null,
                 ),
               ),
             ),

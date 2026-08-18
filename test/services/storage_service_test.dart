@@ -23,7 +23,7 @@ void main() {
   group('StorageService', () {
     test('Hive schema marker is current after init/clearProgress', () {
       final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
-      expect(box.get('_chain_pop_storage_schema'), 2);
+      expect(box.get('_chain_pop_storage_schema'), 3);
     });
 
     group('Hive schema reconciliation', () {
@@ -35,15 +35,15 @@ void main() {
         await box.delete('_chain_pop_storage_schema');
         expect(StorageService.debugSchemaMarkerOrZero, 0);
         await StorageService.debugReconcileStorageSchemaMarker();
-        expect(box.get('_chain_pop_storage_schema'), 2);
-        expect(StorageService.debugSchemaMarkerOrZero, 2);
+        expect(box.get('_chain_pop_storage_schema'), 3);
+        expect(StorageService.debugSchemaMarkerOrZero, 3);
       });
 
       test('reconcile is idempotent when marker already current', () async {
         await StorageService.clearProgress();
         await StorageService.debugReconcileStorageSchemaMarker();
         final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
-        expect(box.get('_chain_pop_storage_schema'), 2);
+        expect(box.get('_chain_pop_storage_schema'), 3);
       });
     });
 

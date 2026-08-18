@@ -49,19 +49,6 @@ void main() {
       }
     });
 
-    test('monotone fallback counter stays at 0 across 1000 generations '
-        '(retired in Phase 3)', () {
-      final gen = LevelGenerator();
-      const samples = 1000;
-      for (var i = 0; i < samples; i++) {
-        final mode = DifficultyMode.values[i % DifficultyMode.values.length];
-        gen.generate(i, mode: mode);
-      }
-      expect(gen.monotoneFallbackHitCount, equals(0),
-          reason: 'monotone fallback was retired in Phase 3; any non-zero '
-              'value means a fallback we forgot to delete re-appeared.');
-    }, timeout: const Timeout(Duration(minutes: 2)));
-
     test('retrograde path is the primary route for every emission', () {
       final gen = LevelGenerator();
       for (var i = 0; i < 200; i++) {

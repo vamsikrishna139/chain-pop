@@ -54,7 +54,7 @@ void _sampleHardCampaign(
     final m = LevelMetrics.compute(level, includeViablePath: true);
     final area = level.gridWidth * level.gridHeight;
     final fill = level.nodes.length / area;
-    final profile = DifficultyProfile.hard;
+    const profile = DifficultyProfile.hard;
     final passes = profile.passes(m);
     final topo = LevelTopologyMetrics.compute(level);
 
@@ -94,7 +94,7 @@ void _sampleHardCampaign(
     'FSR=${(fsrSum / n * 100).toStringAsFixed(0)}% '
     'waves=${(waveSum / n).toStringAsFixed(1)} '
     'openingMoves=${(flmSum / n).toStringAsFixed(1)} '
-    'evaluatorInBand=${inBand}/$count '
+    'evaluatorInBand=$inBand/$count '
     'chainDepthMax=${(chainDepthMaxSum / n).toStringAsFixed(1)} '
     'maxHub=${(maxHubSum / n).toStringAsFixed(1)} '
     'avgFanout=${(fanoutSum / n).toStringAsFixed(1)} '
@@ -133,7 +133,7 @@ void _sampleDailies(
     final m = LevelMetrics.compute(level, includeViablePath: true);
     final area = level.gridWidth * level.gridHeight;
     final fill = level.nodes.length / area;
-    final profile = DifficultyProfile.expert;
+    const profile = DifficultyProfile.expert;
     final passes = profile.passes(m);
     print(
       '  $key: ${level.gridWidth}x${level.gridHeight} '

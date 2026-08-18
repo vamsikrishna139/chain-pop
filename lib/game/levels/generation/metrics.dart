@@ -3,6 +3,8 @@ import 'dart:math';
 import '../grid_cell_key.dart';
 import '../level.dart';
 import '../level_solver.dart';
+import 'dependency_graph.dart';
+import 'search_effort.dart';
 
 /// Logic + tempo + uniqueness metrics computed over a generated [LevelData].
 ///
@@ -50,6 +52,19 @@ class LevelMetrics {
   /// Used for pacing curve analysis.
   final List<int> wavePeelingProfile;
 
+  /// Bounded human-like solver effort (expansions + backtracks). Measured only;
+  /// not yet used for gating.
+  final int searchEffortScore;
+
+  /// Ray-dependency topology: nodes with fan-in ≥ 2.
+  final int chokePointCount;
+
+  /// Ray-dependency topology: widest parallel-removal wave.
+  final int maxAntichainWidth;
+
+  /// Ray-dependency topology: maximum hub fan-in.
+  final int maxHubInDegree;
+
   const LevelMetrics({
     required this.nodeCount,
     required this.waveDepth,
@@ -62,6 +77,10 @@ class LevelMetrics {
     required this.viablePathCount,
     required this.viablePathCountCapped,
     required this.wavePeelingProfile,
+    this.searchEffortScore = 0,
+    this.chokePointCount = 0,
+    this.maxAntichainWidth = 0,
+    this.maxHubInDegree = 0,
   });
 
   /// Width of the opening parallel-removal wave (turn-one choice count).
@@ -82,10 +101,9 @@ class LevelMetrics {
         ? 0.0
         : tempo.fold<int>(0, (a, b) => a + b) / tempo.length;
     final firstLegal = tempo.isEmpty ? 0 : tempo.first;
-    final fsr = tempo.isEmpty
-        ? 0.0
-        : tempo.where((m) => m == 1).length / tempo.length;
     final variance = _stddev(tempo, avgBF);
+
+
     final cud = computeCriticalUnlockDepth(level);
 
     var paths = -1;
@@ -102,6 +120,8 @@ class LevelMetrics {
 
     final wavePeelingProfile = computeWavePeelingProfile(level);
     final forcedSequenceRatio = calculateFSRFromProfile(wavePeelingProfile, level.nodes.length);
+    final graph = DependencyGraph.fromLevel(level);
+    final effort = computeSearchEffort(level);
 
     return LevelMetrics(
       nodeCount: level.nodes.length,
@@ -115,6 +135,10 @@ class LevelMetrics {
       viablePathCount: paths,
       viablePathCountCapped: capped,
       wavePeelingProfile: wavePeelingProfile,
+      searchEffortScore: effort.searchEffortScore,
+      chokePointCount: graph.chokePointCount,
+      maxAntichainWidth: graph.maxAntichainWidth,
+      maxHubInDegree: graph.maxHubInDegree,
     );
   }
 
@@ -215,6 +239,85 @@ double calculateFSRFromProfile(List<int> waveBranchingFactors, int totalNodes) {
   return result;
 }
 
+/// How the *shape* of the player's choice over time reads, as opposed to how
+/// much of it there is.
+///
+/// [LevelMetrics.forcedSequenceRatio] is an aggregate: it says a board is 75 %
+/// forced but not whether that is one long corridor with a wide finish, or
+/// choice and constraint alternating throughout. Those play completely
+/// differently at identical FSR. Choice rhythm splits them apart, computed from
+/// the [computeTempoProfile] the metrics already produce — no extra solving.
+///
+/// **Ranking term only.** Deliberately not a gate: FSR became a liability
+/// precisely by being promoted to a gate before there was evidence for the
+/// band. Promotion requires corpus + player data (plan §5.5, Experiment F).
+class ChoiceRhythm {
+  const ChoiceRhythm({
+    required this.directionChanges,
+    required this.longestForcedRun,
+    required this.multiChoiceFraction,
+  });
+
+  /// Times the per-step legal-move count reverses direction (opening up after
+  /// tightening, or vice versa). Low means monotone; high means it breathes.
+  final int directionChanges;
+
+  /// Longest run of consecutive steps offering exactly one legal move — the
+  /// longest stretch where the player is not choosing, only executing.
+  final int longestForcedRun;
+
+  /// Share of steps offering two or more legal moves.
+  final double multiChoiceFraction;
+
+  static const ChoiceRhythm zero = ChoiceRhythm(
+    directionChanges: 0,
+    longestForcedRun: 0,
+    multiChoiceFraction: 0,
+  );
+
+  static ChoiceRhythm fromTempoProfile(List<int> tempo) {
+    if (tempo.isEmpty) return zero;
+
+    var changes = 0;
+    var lastSign = 0;
+    for (var i = 1; i < tempo.length; i++) {
+      final d = tempo[i] - tempo[i - 1];
+      if (d == 0) continue;
+      final sign = d > 0 ? 1 : -1;
+      if (lastSign != 0 && sign != lastSign) changes++;
+      lastSign = sign;
+    }
+
+    var run = 0;
+    var longest = 0;
+    var multi = 0;
+    for (final t in tempo) {
+      if (t <= 1) {
+        run++;
+        if (run > longest) longest = run;
+      } else {
+        run = 0;
+      }
+      if (t >= 2) multi++;
+    }
+
+    return ChoiceRhythm(
+      directionChanges: changes,
+      longestForcedRun: longest,
+      multiChoiceFraction: multi / tempo.length,
+    );
+  }
+
+  /// Higher is better for candidate ranking: reward boards that keep offering
+  /// a choice and that vary, penalise long unbroken forced corridors. The
+  /// weights are a starting point, not a calibrated model — they only ever
+  /// break ties between candidates that already passed the band.
+  double get rankingScore =>
+      multiChoiceFraction * 2.0 +
+      (directionChanges / 10.0).clamp(0.0, 1.0) -
+      (longestForcedRun / 5.0).clamp(0.0, 2.0);
+}
+
 /// Longest prerequisite chain in the dependency graph. A node `m` is a
 /// prerequisite of `n` iff `m` sits on `n`'s initial ray (and therefore must
 /// be removed before `n` becomes extractable).
@@ -234,7 +337,8 @@ int computeCriticalUnlockDepth(LevelData level) {
     final list = <int>[];
     var cx = n.x;
     var cy = n.y;
-    while (true) {
+    var hops = 0;
+    while (hops < 50) {
       switch (n.dir) {
         case Direction.up:
           cy--;
@@ -253,6 +357,21 @@ int computeCriticalUnlockDepth(LevelData level) {
       }
       final id = positionToId[gridCellKey(cx, cy)];
       if (id != null) list.add(id);
+      // Portal teleport
+      if (level.portalPairs.isNotEmpty) {
+        for (final p in level.portalPairs) {
+          if (p.x1 == cx && p.y1 == cy) {
+            cx = p.x2;
+            cy = p.y2;
+            break;
+          } else if (p.x2 == cx && p.y2 == cy) {
+            cx = p.x1;
+            cy = p.y1;
+            break;
+          }
+        }
+      }
+      hops++;
     }
     prereqs[n.id] = list;
   }
@@ -407,7 +526,8 @@ int? _firstRayTargetId(
 ) {
   var x = node.x;
   var y = node.y;
-  while (true) {
+  var hops = 0;
+  while (hops < 50) {
     switch (node.dir) {
       case Direction.up:
         y--;
@@ -426,5 +546,21 @@ int? _firstRayTargetId(
     }
     final hit = positionToId[gridCellKey(x, y)];
     if (hit != null) return hit;
+    // Portal teleport
+    if (level.portalPairs.isNotEmpty) {
+      for (final p in level.portalPairs) {
+        if (p.x1 == x && p.y1 == y) {
+          x = p.x2;
+          y = p.y2;
+          break;
+        } else if (p.x2 == x && p.y2 == y) {
+          x = p.x1;
+          y = p.y1;
+          break;
+        }
+      }
+    }
+    hops++;
   }
+  return null; // Hop limit exceeded
 }

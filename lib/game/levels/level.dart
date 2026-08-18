@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+import 'generation/silhouettes.dart';
 
 enum Direction { up, down, left, right }
 
@@ -41,8 +42,10 @@ class NodeData {
   /// Locked until all 4-neighbors are cleared; relay rotates its row on extract.
   final NodeKind kind;
 
-  /// Critical network node — restoring all cores can win the level.
   final bool isCore;
+
+  /// Phase gates block extraction until the preceding phase is fully cleared.
+  final int phaseGroup;
 
   NodeData({
     required this.id,
@@ -53,6 +56,7 @@ class NodeData {
     this.colorSlot = -1,
     this.kind = NodeKind.normal,
     this.isCore = false,
+    this.phaseGroup = 0,
   });
 
   NodeData clone() => NodeData(
@@ -64,6 +68,7 @@ class NodeData {
         colorSlot: colorSlot,
         kind: kind,
         isCore: isCore,
+        phaseGroup: phaseGroup,
       );
 
   NodeData copyWith({
@@ -75,6 +80,7 @@ class NodeData {
     int? colorSlot,
     NodeKind? kind,
     bool? isCore,
+    int? phaseGroup,
   }) =>
       NodeData(
         id: id ?? this.id,
@@ -85,10 +91,23 @@ class NodeData {
         colorSlot: colorSlot ?? this.colorSlot,
         kind: kind ?? this.kind,
         isCore: isCore ?? this.isCore,
+        phaseGroup: phaseGroup ?? this.phaseGroup,
       );
 
   @override
   String toString() => 'Node($id, at: $x,$y, dir: $dir)';
+}
+
+class PortalPair {
+  final int x1;
+  final int y1;
+  final int x2;
+  final int y2;
+
+  const PortalPair(this.x1, this.y1, this.x2, this.y2);
+
+  String get cell1 => '$x1,$y1';
+  String get cell2 => '$x2,$y2';
 }
 
 class LevelData {
@@ -102,6 +121,15 @@ class LevelData {
   final Set<String>? playCells;
 
   final List<NodeData> nodes;
+  final List<PortalPair> portalPairs;
+
+  /// Silhouette the Director picked for this board, when known.
+  ///
+  /// Pure metadata — nothing about generation or gameplay reads it, so it never
+  /// affects level bytes. Null for boards that do not come from the Director
+  /// (tutorial levels, hand-authored seeds), and consumers must treat null as
+  /// "unknown" rather than guessing a family.
+  final SilhouetteId? silhouetteId;
 
   LevelData({
     required this.levelId,
@@ -109,7 +137,24 @@ class LevelData {
     required this.gridHeight,
     required this.nodes,
     this.playCells,
+    this.portalPairs = const [],
+    this.silhouetteId,
   });
+
+  /// Cores on the board.
+  int get coreCount => nodes.where((n) => n.isCore).length;
+
+  /// Locked nodes on the board.
+  int get lockCount =>
+      nodes.where((n) => n.kind == NodeKind.locked).length;
+
+  /// Relay nodes on the board.
+  int get relayCount => nodes.where((n) => n.kind == NodeKind.relay).length;
+
+  /// Distinct phase gates — one per non-zero phase group, since a gate is the
+  /// boundary between groups rather than a property of each node.
+  int get phaseGateCount =>
+      nodes.map((n) => n.phaseGroup).where((g) => g > 0).toSet().length;
 
   /// Layout invariants (not solvability). Returns `null` if valid.
   static String? layoutValidationMessage(LevelData data) {

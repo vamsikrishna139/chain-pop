@@ -30,6 +30,8 @@ class NodeComponent extends PositionComponent
   double _relayRotation = 0.0;
   bool _isLockActive = true;
   bool _lastLockActive = false;
+  bool _isPhaseBlocked = false;
+  bool _lastPhaseBlocked = false;
 
   late Rect _rect;
   late RRect _rrect;
@@ -74,6 +76,16 @@ class NodeComponent extends PositionComponent
     _buildRenderCaches();
     _isLockActive = data.kind == NodeKind.locked && _hasActiveNeighbors();
     _lastLockActive = _isLockActive;
+    _isPhaseBlocked = _checkPhaseBlocked();
+    _lastPhaseBlocked = _isPhaseBlocked;
+  }
+
+  bool _checkPhaseBlocked() {
+    if (data.phaseGroup == 0) return false;
+    for (final other in game.activeNodes) {
+      if (other.phaseGroup < data.phaseGroup) return true;
+    }
+    return false;
   }
 
   bool _hasActiveNeighbors() {
@@ -240,10 +252,21 @@ class NodeComponent extends PositionComponent
           .withSaturation((hsl.saturation * 0.45).clamp(0.0, 1.0))
           .withLightness((hsl.lightness * 0.60).clamp(0.0, 1.0))
           .toColor();
+    } else if (_isPhaseBlocked) {
+      final hsl = HSLColor.fromColor(effective);
+      effective = hsl
+          .withSaturation((hsl.saturation * 0.30).clamp(0.0, 1.0))
+          .withLightness((hsl.lightness * 0.20).clamp(0.0, 1.0))
+          .toColor();
     }
-    if (_cachedEffectiveColor == effective && _lastLockActive == activeLock) return;
+    if (_cachedEffectiveColor == effective &&
+        _lastLockActive == activeLock &&
+        _lastPhaseBlocked == _isPhaseBlocked) {
+      return;
+    }
     _cachedEffectiveColor = effective;
     _lastLockActive = activeLock;
+    _lastPhaseBlocked = _isPhaseBlocked;
     _fillPaint.color = effective.withValues(alpha: 1.0);
     _shadowGlowColor = effective.withValues(alpha: 0.55);
   }
@@ -493,13 +516,21 @@ class NodeComponent extends PositionComponent
       _relayRotation += dt * 1.5;
     }
 
-    if (data.kind == NodeKind.locked && !isPopping) {
-      final active = _hasActiveNeighbors();
-      if (_isLockActive && !active) {
-        // Unlocked!
+    _blockerFlashTimer -= dt;
+    _arrowSpinTimer -= dt;
+
+    if (!isPopping && !isJamming) {
+      final activeLock = data.kind == NodeKind.locked && _hasActiveNeighbors();
+      if (_isLockActive && !activeLock) {
         telegraphFreed();
       }
-      _isLockActive = active;
+      _isLockActive = activeLock;
+
+      final phaseBlocked = _checkPhaseBlocked();
+      if (_isPhaseBlocked && !phaseBlocked) {
+        telegraphFreed();
+      }
+      _isPhaseBlocked = phaseBlocked;
     }
 
     // ── Highlight timeout (replaces Future.delayed — no memory leak) ─────────
@@ -614,6 +645,43 @@ class NodeComponent extends PositionComponent
       game.reportJam(data);
     }
   }
+
+  /// The painted tile is `cellSize × 0.82`, which at a shipped 40 px cell is a
+  /// 33 px interaction target — under both the 44 pt iOS and 48 dp Android
+  /// minimums. The *hit* region is decoupled from the art and expanded to the
+  /// whole cell, which is the largest region that cannot steal a tap from a
+  /// neighbour: nodes sit at cell centres, so full-cell regions tile the board
+  /// exactly. Intervals are half-open on the far edge so a tap landing exactly
+  /// on a shared boundary resolves to precisely one node instead of two or four.
+  ///
+  /// The whole tiling is nudged by [_hitBoundaryEpsilon] so that a point at an
+  /// exact multiple of the cell size falls strictly *inside* one interval
+  /// rather than on its edge. Without it, cell centres and grid lines computed
+  /// by different float paths (`(x + 0.5) * cell` vs `x * cell`) can disagree
+  /// in the last bit and drop the tap entirely.
+  ///
+  /// **Rollback:** delete this override — the default `PositionComponent` rect
+  /// over [size] is the previous behaviour.
+  @override
+  bool containsLocalPoint(Vector2 point) {
+    if (cellSize <= 0) return super.containsLocalPoint(point);
+    // Local space runs 0..size with the anchor centred, so the surrounding cell
+    // extends by half the difference on each side.
+    final padX = (cellSize - size.x) / 2;
+    final padY = (cellSize - size.y) / 2;
+    // The interval is [-pad, size + pad) shifted down by epsilon, so grid lines
+    // land strictly inside the higher-indexed cell rather than on a seam.
+    const e = _hitBoundaryEpsilon;
+    return point.x >= -padX - e &&
+        point.x < size.x + padX - e &&
+        point.y >= -padY - e &&
+        point.y < size.y + padY - e;
+  }
+
+  /// Sub-pixel nudge that keeps the full-cell hit tiling gap-free and
+  /// overlap-free at exact grid lines. Far below one logical pixel, so it has
+  /// no perceptible effect on where a tap lands.
+  static const double _hitBoundaryEpsilon = 0.01;
 
   @override
   void onTapDown(TapDownEvent event) {

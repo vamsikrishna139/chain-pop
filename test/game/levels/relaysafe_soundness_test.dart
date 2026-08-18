@@ -176,6 +176,7 @@ void main() {
         }
       }
     }
+    // ignore: avoid_print
     print('fuzz done: safe=$safeCount unsafe=$unsafeCount '
         '(of which actually-free=$conservative)');
     expect(safeCount, greaterThan(100));

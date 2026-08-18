@@ -53,7 +53,7 @@ void main() {
         // Pause overlay
         final state =
             tester.state<GameScreenState>(find.byType(GameScreen));
-        await tester.tap(find.text('TAP TO PAUSE'), warnIfMissed: false);
+        await tester.tap(find.byIcon(Icons.pause_rounded), warnIfMissed: false);
         await tester.pump(const Duration(milliseconds: 400));
         expect(tester.takeException(), isNull, reason: 'pause step $i');
 

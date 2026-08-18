@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui';
 
 import 'package:chain_pop/game/levels/generation/removal_order.dart';
 import 'package:flutter_test/flutter_test.dart';

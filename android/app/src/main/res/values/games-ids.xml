@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--Google Play game services IDs. Save this file as res/values/games-ids.xml in your project.-->
+<resources>
+  <!--app_id-->
+  <string name="app_id" translatable="false">127337983333</string>
+  <!--package_name-->
+  <string name="package_name" translatable="false">com.adbkv.chainpop</string>
+  <!--achievement Cold Start-->
+  <string name="achievement_cold_start" translatable="false">CgkI5dq9r9oDEAIQFA</string>
+  <!--achievement Finding Footing-->
+  <string name="achievement_finding_footing" translatable="false">CgkI5dq9r9oDEAIQLQ</string>
+  <!--achievement Hundred Down-->
+  <string name="achievement_hundred_down" translatable="false">CgkI5dq9r9oDEAIQKw</string>
+  <!--achievement First Guardian-->
+  <string name="achievement_first_guardian" translatable="false">CgkI5dq9r9oDEAIQJw</string>
+  <!--achievement Journey Begun-->
+  <string name="achievement_journey_begun" translatable="false">CgkI5dq9r9oDEAIQGw</string>
+  <!--achievement Century-->
+  <string name="achievement_century" translatable="false">CgkI5dq9r9oDEAIQHw</string>
+  <!--achievement Deep Run-->
+  <string name="achievement_deep_run" translatable="false">CgkI5dq9r9oDEAIQJA</string>
+  <!--achievement Halfway Home-->
+  <string name="achievement_halfway_home" translatable="false">CgkI5dq9r9oDEAIQAw</string>
+  <!--achievement Final Approach-->
+  <string name="achievement_final_approach" translatable="false">CgkI5dq9r9oDEAIQKQ</string>
+  <!--achievement Guardian 40-->
+  <string name="achievement_guardian_40" translatable="false">CgkI5dq9r9oDEAIQGQ</string>
+  <!--achievement Three Fronts-->
+  <string name="achievement_three_fronts" translatable="false">CgkI5dq9r9oDEAIQGg</string>
+  <!--achievement Triple Threat-->
+  <string name="achievement_triple_threat" translatable="false">CgkI5dq9r9oDEAIQFw</string>
+  <!--achievement Rising Star-->
+  <string name="achievement_rising_star" translatable="false">CgkI5dq9r9oDEAIQKA</string>
+  <!--achievement Star Collector-->
+  <string name="achievement_star_collector" translatable="false">CgkI5dq9r9oDEAIQIQ</string>
+  <!--achievement Constellation-->
+  <string name="achievement_constellation" translatable="false">CgkI5dq9r9oDEAIQFg</string>
+  <!--achievement Galaxy-->
+  <string name="achievement_galaxy" translatable="false">CgkI5dq9r9oDEAIQAA</string>
+  <!--achievement Node Runner-->
+  <string name="achievement_node_runner" translatable="false">CgkI5dq9r9oDEAIQLg</string>
+  <!--achievement Node Knight-->
+  <string name="achievement_node_knight" translatable="false">CgkI5dq9r9oDEAIQJQ</string>
+  <!--achievement Node Lord-->
+  <string name="achievement_node_lord" translatable="false">CgkI5dq9r9oDEAIQLw</string>
+  <!--achievement Node Legend-->
+  <string name="achievement_node_legend" translatable="false">CgkI5dq9r9oDEAIQHg</string>
+  <!--achievement Core Collector-->
+  <string name="achievement_core_collector" translatable="false">CgkI5dq9r9oDEAIQGA</string>
+  <!--achievement Locksmith-->
+  <string name="achievement_locksmith" translatable="false">CgkI5dq9r9oDEAIQAQ</string>
+  <!--achievement Relay Runner-->
+  <string name="achievement_relay_runner" translatable="false">CgkI5dq9r9oDEAIQDA</string>
+  <!--achievement Phase Shift-->
+  <string name="achievement_phase_shift" translatable="false">CgkI5dq9r9oDEAIQBQ</string>
+  <!--achievement Portal Hopper-->
+  <string name="achievement_portal_hopper" translatable="false">CgkI5dq9r9oDEAIQEw</string>
+  <!--achievement Guardian Hunter-->
+  <string name="achievement_guardian_hunter" translatable="false">CgkI5dq9r9oDEAIQBg</string>
+  <!--achievement Guardian Perfect-->
+  <string name="achievement_guardian_perfect" translatable="false">CgkI5dq9r9oDEAIQDQ</string>
+  <!--achievement Sector Clean-->
+  <string name="achievement_sector_clean" translatable="false">CgkI5dq9r9oDEAIQIg</string>
+  <!--achievement Swift Solver-->
+  <string name="achievement_swift_solver" translatable="false">CgkI5dq9r9oDEAIQCw</string>
+  <!--achievement Cascade Creator-->
+  <string name="achievement_cascade_creator" translatable="false">CgkI5dq9r9oDEAIQBw</string>
+  <!--achievement Unaided Mind-->
+  <string name="achievement_unaided_mind" translatable="false">CgkI5dq9r9oDEAIQIw</string>
+  <!--achievement Absolute Integrity-->
+  <string name="achievement_absolute_integrity" translatable="false">CgkI5dq9r9oDEAIQAg</string>
+  <!--achievement Flawless Execution-->
+  <string name="achievement_flawless_execution" translatable="false">CgkI5dq9r9oDEAIQKg</string>
+  <!--achievement Full Directive-->
+  <string name="achievement_full_directive" translatable="false">CgkI5dq9r9oDEAIQCA</string>
+  <!--achievement Chain Reaction-->
+  <string name="achievement_chain_reaction" translatable="false">CgkI5dq9r9oDEAIQDg</string>
+  <!--achievement Untouchable-->
+  <string name="achievement_untouchable" translatable="false">CgkI5dq9r9oDEAIQJg</string>
+  <!--achievement Perfect Ten-->
+  <string name="achievement_perfect_ten" translatable="false">CgkI5dq9r9oDEAIQEQ</string>
+  <!--achievement Master Planner-->
+  <string name="achievement_master_planner" translatable="false">CgkI5dq9r9oDEAIQLA</string>
+  <!--achievement Daily Dabbler-->
+  <string name="achievement_daily_dabbler" translatable="false">CgkI5dq9r9oDEAIQEg</string>
+  <!--achievement Daily Regular-->
+  <string name="achievement_daily_regular" translatable="false">CgkI5dq9r9oDEAIQCQ</string>
+  <!--achievement Daily Devotee-->
+  <string name="achievement_daily_devotee" translatable="false">CgkI5dq9r9oDEAIQCg</string>
+  <!--achievement Daily Archivist-->
+  <string name="achievement_daily_archivist" translatable="false">CgkI5dq9r9oDEAIQDw</string>
+  <!--achievement Calendar Closer-->
+  <string name="achievement_calendar_closer" translatable="false">CgkI5dq9r9oDEAIQHA</string>
+  <!--achievement Back Again-->
+  <string name="achievement_back_again" translatable="false">CgkI5dq9r9oDEAIQIA</string>
+  <!--achievement Weekly Warrior-->
+  <string name="achievement_weekly_warrior" translatable="false">CgkI5dq9r9oDEAIQFQ</string>
+  <!--achievement Dedicated-->
+  <string name="achievement_dedicated" translatable="false">CgkI5dq9r9oDEAIQEA</string>
+  <!--achievement Unbreakable-->
+  <string name="achievement_unbreakable" translatable="false">CgkI5dq9r9oDEAIQHQ</string>
+  <!--achievement Full Spectrum-->
+  <string name="achievement_full_spectrum" translatable="false">CgkI5dq9r9oDEAIQBA</string>
+</resources>

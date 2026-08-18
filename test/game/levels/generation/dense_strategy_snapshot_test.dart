@@ -84,16 +84,11 @@ void main() {
 
   test('Hard L30-39 waveZeroWidth gate (informational)', () {
     final gen = LevelGenerator(enableDiversityGating: false);
-    var waveZeroSum = 0;
-    var waveZeroMax = 0;
     var successCount = 0;
     for (var id = 30; id < 40; id++) {
       final r = gen.generate(id, mode: DifficultyMode.hard);
       if (!r.isSuccess) continue;
       successCount++;
-      final m = LevelMetrics.compute(r.value);
-      waveZeroSum += m.waveZeroWidth;
-      waveZeroMax = max(waveZeroMax, m.waveZeroWidth);
       expect(r.value.gridWidth, lessThanOrEqualTo(8));
       expect(r.value.gridHeight, lessThanOrEqualTo(8));
     }

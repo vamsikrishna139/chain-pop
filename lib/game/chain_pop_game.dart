@@ -19,6 +19,7 @@ import 'components/node_component.dart';
 import 'components/ray_preview_component.dart';
 import 'components/relay_sweep_component.dart';
 import 'components/restored_network_component.dart';
+import 'components/tutorial_coach_mark.dart';
 import '../services/game_sfx.dart';
 import '../theme/app_colors.dart';
 import '../theme/world_theme.dart';
@@ -38,6 +39,12 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   final VoidCallback onWin;
   final VoidCallback? onJam;
   final void Function(int removed, int total)? onNodeRemoved;
+
+  /// Fires with the new extraction streak on every successful extraction.
+  ///
+  /// Lets [GameScreen] feed combo milestones to the achievement tracker without
+  /// the engine having to know that tracking exists.
+  final void Function(int streak)? onComboStreak;
 
   /// Playfield palette for the current world (or daily/tutorial fallback).
   final WorldTheme theme;
@@ -73,8 +80,18 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   bool hasWon = false;
   bool isGameOver = false;
+  
+  int movesTaken = 0;
+  int undosUsed = 0;
+  
   late PositionComponent board;
   double _cellSize = 0;
+
+  /// When true (set by [GameScreen] for tutorials), a [TutorialCoachMark] points
+  /// at the next valid move after every pop, walking the player through the
+  /// board. No effect on normal play.
+  bool tutorialCoaching = false;
+  TutorialCoachMark? _coachMark;
 
   // ── Board zoom / pan (scale is around board centre; pan in screen space) ──
   static const double _minZoom = 1.0;
@@ -238,6 +255,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     required this.onWin,
     this.onJam,
     this.onNodeRemoved,
+    this.onComboStreak,
     this.preloadedLevel,
     WorldTheme? theme,
     this.topReserved = 140.0,
@@ -352,7 +370,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       bboxHeight: bounds.bboxHeight,
       gridWidth: levelData.gridWidth,
       gridHeight: levelData.gridHeight,
-      targetFill: 0.80,
+      widthFill: kBoardWidthFill,
+      heightFill: kBoardHeightFill,
     );
     if (cellSize <= 0 &&
         levelData.gridWidth > 0 &&
@@ -422,9 +441,15 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       board.add(NodeComponent(data: nodeData, cellSize: cellSize));
     }
 
+    if (tutorialCoaching) {
+      _coachMark = TutorialCoachMark(cellSize: cellSize);
+      board.add(_coachMark!);
+    }
+
     add(board);
     _boardLaidOut = true;
     _applyBoardTransform();
+    _refreshCoachMark();
 
     for (final o in orphans) {
       final node = o.$1;
@@ -560,6 +585,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _axisGuidesVisible = false;
     _jamCounts.clear();
     _extractionStreak++;
+    onComboStreak?.call(_extractionStreak);
     _lastExtractedX = data.x;
     _lastExtractedY = data.y;
     if (data.isCore) {
@@ -570,7 +596,9 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     }
     _undoStack.add(data.clone());
     activeNodes.removeWhere((n) => n.id == data.id);
+    movesTaken++;
     _rebuildExtractableIds();
+    _refreshCoachMark();
 
     _spawnExtractionVisuals(data);
     _ambient?.setStreak(_extractionStreak);
@@ -662,6 +690,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   bool undo() {
     if (_undoStack.isEmpty || hasWon || isGameOver) return false;
     final restored = _undoStack.removeLast();
+    undosUsed++;
     if (_extractionStreak > 0) _extractionStreak--;
     _ambient?.setStreak(_extractionStreak);
     if (restored.kind == NodeKind.relay) {
@@ -833,6 +862,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _jamCounts.clear();
     activeNodes.clear();
     _undoStack.clear();
+    movesTaken = 0;
+    undosUsed = 0;
     for (final node in levelData.nodes) {
       activeNodes.add(node.clone());
     }
@@ -868,5 +899,25 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _newlyExtractable
       ..clear()
       ..addAll(_extractableIds.difference(previous));
+  }
+
+  /// Tutorial only: point the coach mark at the next valid move (the solver's
+  /// hint), or hide it when the board is solved/won. Cheap — one [getHint] walk.
+  void _refreshCoachMark() {
+    final mark = _coachMark;
+    if (!tutorialCoaching || mark == null || !_boardLaidOut) return;
+    if (hasWon || isGameOver) {
+      mark.hide();
+      return;
+    }
+    final hint = LevelSolver.getHint(activeNodes, levelData);
+    if (hint == null) {
+      mark.hide();
+      return;
+    }
+    mark.showAt(Vector2(
+      (hint.x + 0.5) * _cellSize,
+      (hint.y + 0.5) * _cellSize,
+    ));
   }
 }

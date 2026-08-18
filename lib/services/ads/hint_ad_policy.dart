@@ -10,10 +10,19 @@ final class HintAdPolicy {
 
   int _freeUsed = 0;
   DateTime? _lastRewardedHintAt;
+  int _hintsThisAttempt = 0;
+
+  /// Hints taken on the current attempt, free and rewarded alike.
+  ///
+  /// [_freeUsed] saturates at [freeBudget], so it cannot answer "was any help
+  /// used?" once the budget is spent — which is exactly what the unaided
+  /// achievements need to know.
+  int get hintsUsedThisAttempt => _hintsThisAttempt;
 
   void resetForNewAttempt() {
     _freeUsed = 0;
     _lastRewardedHintAt = null;
+    _hintsThisAttempt = 0;
   }
 
   bool get hasFreeHint => _freeUsed < freeBudget;
@@ -29,10 +38,12 @@ final class HintAdPolicy {
 
   void recordFreeHint() {
     if (_freeUsed < freeBudget) _freeUsed++;
+    _hintsThisAttempt++;
   }
 
   void recordRewardedHint() {
     _lastRewardedHintAt = DateTime.now();
+    _hintsThisAttempt++;
   }
 
   bool needsRewardedForNextHint() => !hasFreeHint;
