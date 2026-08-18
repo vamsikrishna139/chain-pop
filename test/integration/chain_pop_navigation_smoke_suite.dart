@@ -1,4 +1,4 @@
-// Shared ChainPop smoke: menu → level select → Easy level 1 [GameScreen].
+// Shared ChainPop smoke: menu → Play (1-click) or Browse All Levels → Easy level 1 [GameScreen].
 //
 // Caller must supply [beforeAll] (e.g. [bootstrapChainPop] from `main.dart`).
 // Requires a plugin-capable embedding (`integration_test/` with `-d`); menus use
@@ -30,7 +30,7 @@ void registerChainPopNavigationSmoke({
     );
   });
 
-  testWidgets('main menu → Play → level select → Easy level 1 game', (tester) async {
+  testWidgets('main menu → Play → Easy level 1 game (1-click)', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -50,6 +50,28 @@ void registerChainPopNavigationSmoke({
     expect(play, findsOneWidget);
     await tester.ensureVisible(play.first);
     await tester.tap(play);
+    await _pumpFrames(tester, frames: 45);
+
+    // Play now jumps straight into the frontier level — with cleared
+    // progress that's Easy level 1 — skipping the level-select screen.
+    expect(find.byType(GameScreen), findsOneWidget);
+  });
+
+  testWidgets('main menu → Browse All Levels → level select → Easy level 1 game',
+      (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const ChainPopApp());
+
+    await _pumpFrames(tester, frames: 45);
+
+    final browse = find.text('Browse All Levels');
+    expect(browse, findsOneWidget);
+    await tester.ensureVisible(browse.first);
+    await tester.tap(browse);
     await _pumpFrames(tester, frames: 45);
 
     expect(find.byType(LevelSelectScreen), findsOneWidget);

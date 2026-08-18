@@ -49,10 +49,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     if (StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap));
     }
+    final frontier = StorageLocator.instance.highestUnlocked(_selected);
     Navigator.of(context)
         .push(
           MaterialPageRoute<void>(
-            builder: (_) => LevelSelectScreen(initialDifficulty: _selected),
+            builder: (_) => GameScreen(level: frontier, difficulty: _selected),
           ),
         )
         .then((_) {
