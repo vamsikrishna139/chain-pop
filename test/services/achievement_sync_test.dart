@@ -192,6 +192,61 @@ void main() {
       await onlineTracker.dispose();
     });
   });
+
+  /// Regression cover for a failure seen on-device: Play Games wiped the
+  /// tester's progress, the local cursor stayed where it was, and every
+  /// affected achievement was then skipped by sync() forever because its
+  /// cursor already met the desired value.
+  group('cursor reconciliation', () {
+    test('rewinds a cursor that has run ahead of the backend', () async {
+      await tracker.record(win(nodes: 40));
+      await tracker.sync();
+      expect(stepsFor(AchievementIds.nodeRunner).single.steps, 40);
+
+      // The backend loses that progress.
+      sink.stepCalls.clear();
+      sink.remote = {AchievementIds.nodeRunner: 0};
+
+      // Without reconcile the cursor blocks any re-push.
+      await tracker.sync();
+      expect(stepsFor(AchievementIds.nodeRunner), isEmpty);
+
+      await tracker.reconcile();
+      await tracker.sync();
+      expect(
+        stepsFor(AchievementIds.nodeRunner).single.steps,
+        40,
+        reason: 'reconcile must let the stranded entry re-push',
+      );
+    });
+
+    test('leaves cursors alone when the backend is ahead or equal', () async {
+      await tracker.record(win(nodes: 40));
+      await tracker.sync();
+      sink.stepCalls.clear();
+
+      sink.remote = {AchievementIds.nodeRunner: 999};
+      await tracker.reconcile();
+      await tracker.sync();
+
+      expect(stepsFor(AchievementIds.nodeRunner), isEmpty,
+          reason: 'nothing to repair, so nothing should be re-sent');
+    });
+
+    test('an unreadable backend is not treated as zero progress', () async {
+      await tracker.record(win(nodes: 40));
+      await tracker.sync();
+      sink.stepCalls.clear();
+
+      // remote stays null: loadAchievements failed or timed out.
+      sink.remote = null;
+      await tracker.reconcile();
+      await tracker.sync();
+
+      expect(stepsFor(AchievementIds.nodeRunner), isEmpty,
+          reason: 'a failed read must never rewind the cursor');
+    });
+  });
 }
 
 List<({String id, int steps})> _stepsFor(

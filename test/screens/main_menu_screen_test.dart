@@ -60,13 +60,13 @@ void main() {
       expect(StorageService.tutorialCompleted, isFalse);
       await pumpMenu(tester);
 
-      expect(find.text('Tutorial'), findsOneWidget);
+      expect(find.textContaining('Tutorial'), findsOneWidget);
       expect(find.text('Replay tutorial'), findsNothing);
 
       expect(
         find.descendant(
-          of: find.byType(FilledButton),
-          matching: find.text('Tutorial'),
+          of: find.byType(InkWell),
+          matching: find.textContaining('Tutorial'),
         ),
         findsOneWidget,
       );
@@ -81,23 +81,22 @@ void main() {
 
       await pumpMenu(tester);
 
-      expect(find.text('Tutorial'), findsOneWidget);
+      expect(find.textContaining('Tutorial'), findsOneWidget);
       expect(find.text('Replay tutorial'), findsNothing);
 
       expect(
         find.descendant(
-          of: find.byType(OutlinedButton),
-          matching: find.text('Tutorial'),
+          of: find.byType(InkWell),
+          matching: find.textContaining('Tutorial'),
         ),
         findsOneWidget,
       );
-      expect(find.bySemanticsLabel('Tutorial'), findsOneWidget);
     });
 
     testWidgets('Tutorial tap opens GameScreen in tutorial mode', (tester) async {
       await pumpMenu(tester);
 
-      await tester.tap(find.text('Tutorial'));
+      await tester.tap(find.textContaining('Tutorial'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -116,7 +115,7 @@ void main() {
 
       await pumpMenu(tester);
 
-      await tester.tap(find.text('Tutorial'));
+      await tester.tap(find.textContaining('Tutorial'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 

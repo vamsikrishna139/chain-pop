@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import '../../game/levels/generation/difficulty_mode.dart';
 import '../../game/world_registry.dart';
+import '../crash_reporting.dart';
 import '../storage/chain_pop_storage.dart';
 import '../storage/storage_locator.dart';
 import 'achievement_catalog.dart';
@@ -351,10 +354,43 @@ final class AchievementTracker {
   /// Safe to call at any time — on sign-in, on app resume, after every event.
   /// Nothing is sent for an achievement that has not changed, and a failure
   /// leaves the cursor untouched so the next call retries exactly that entry.
+  /// Pulls the backend's own view and rewinds any cursor that has run ahead of
+  /// it, so the next [sync] re-pushes those entries.
+  ///
+  /// Without this a cursor that drifts ahead — Play Games resetting tester
+  /// progress on an unpublished title, or a push acknowledged locally and then
+  /// lost — strands the achievement permanently: [sync] skips every entry whose
+  /// cursor already meets the desired value, so it is never retried.
+  Future<void> reconcile() async {
+    if (!_sink.isAvailable) return;
+
+    final remote = await _sink.remoteProgress();
+    if (remote == null) return;
+
+    final cursor = _store.achievementSyncCursor;
+    var rewound = 0;
+    for (final entry in cursor.entries) {
+      final actual = remote[entry.key];
+      if (actual == null || actual >= entry.value) continue;
+      await _store.setAchievementSyncCursor(entry.key, actual);
+      rewound++;
+    }
+    if (rewound > 0) {
+      debugPrint('[Sync] rewound $rewound cursor(s) behind the backend');
+    }
+  }
+
   Future<void> sync() async {
     if (!_sink.isAvailable) return;
 
     final cursor = _store.achievementSyncCursor;
+    var sent = 0;
+    var failed = 0;
+    Object? firstFailure;
+    // At most one reconnect attempt per sync: if it did not take, every
+    // remaining entry would pay ~1.5s to fail identically.
+    var recovered = false;
+    AchievementConnectionLost? connectionLost;
     for (final p in progress()) {
       final def = p.def;
       // An entry with no Play Console id is tracked locally but never sent.
@@ -370,16 +406,58 @@ final class AchievementTracker {
       if ((cursor[def.id] ?? 0) >= desired) continue;
 
       try {
-        if (def.kind == AchievementKind.standard) {
-          await _sink.unlock(def);
-        } else {
-          await _sink.setSteps(def, desired);
-        }
+        await _push(def, desired);
         await _store.setAchievementSyncCursor(def.id, desired);
-      } catch (_) {
+        sent++;
+      } on AchievementConnectionLost catch (e) {
+        // The write is not lost: the games client buffers it and flushes on
+        // reconnect. What matters is that every remaining entry would fail the
+        // same way, so try once to re-establish the connection and, failing
+        // that, abandon the batch. The cursor stays behind, so the next sync
+        // (or the next cold start) replays everything untouched.
+        if (!recovered && await _sink.recover()) {
+          recovered = true;
+          try {
+            await _push(def, desired);
+            await _store.setAchievementSyncCursor(def.id, desired);
+            sent++;
+            continue;
+          } on AchievementConnectionLost {
+            // Fall through to abandoning the batch.
+          }
+        }
+        connectionLost ??= e;
+        if (kDebugMode) debugPrint('[Sync] ${def.id} connection lost, stopping');
+        break;
+      } catch (e) {
         // Leave the cursor behind so this entry is retried next time. Never
-        // let a sync failure surface into gameplay.
+        // let a sync failure surface into gameplay — but never swallow it
+        // silently either: a totally quiet sync failure is exactly what made
+        // the original Play Games breakage impossible to see.
+        failed++;
+        firstFailure ??= e;
+        if (kDebugMode) debugPrint('[Sync] ${def.id} failed: $e');
       }
     }
+    if (failed > 0) {
+      // One report per sync, not per entry: a disconnected games client fails
+      // every achievement at once and would otherwise flood crash reporting.
+      debugPrint('[Sync] sent=$sent failed=$failed — $firstFailure');
+      recordNonFatal(
+        StateError('Achievement sync failed for $failed entries: $firstFailure'),
+        StackTrace.current,
+      );
+    }
+    // A lost connection is deliberately NOT reported: it is transient, it costs
+    // no data, and it recurs on every sync until the process restarts — one
+    // report per level completion per user would bury real faults.
+    if (connectionLost != null) {
+      debugPrint('[Sync] sent=$sent, deferred the rest: $connectionLost');
+    }
   }
+
+  Future<void> _push(AchievementDef def, int desired) =>
+      def.kind == AchievementKind.standard
+          ? _sink.unlock(def)
+          : _sink.setSteps(def, desired);
 }

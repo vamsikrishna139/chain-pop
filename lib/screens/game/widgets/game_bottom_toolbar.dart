@@ -1,21 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-import 'game_toolbar_button.dart';
+
 import 'undo_restart_button.dart';
+import '../../../theme/app_colors.dart';
 
 class GameBottomToolbar extends StatelessWidget {
-  /// Placed on the inner [Padding] for bottom inset measurement.
   final Key? measureKey;
   final Color accent;
-
-  /// Hard campaign + daily challenge: hints go through rewarded flow — show a small badge on the hint control.
   final bool showHintAdBadge;
   final bool axisGuidesVisible;
   final bool canUndo;
   final VoidCallback onHint;
   final VoidCallback onToggleGuides;
-
-  /// Tutorial: explicit zoom-in control (pinch still works in all modes).
   final VoidCallback? onZoomIn;
   final VoidCallback onResetView;
   final VoidCallback onUndo;
@@ -41,143 +38,126 @@ class GameBottomToolbar extends StatelessWidget {
     return SafeArea(
       child: Padding(
         key: measureKey,
-        padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final row = Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Semantics(
-                  button: true,
-                  label: showHintAdBadge
-                      ? 'Hint. Extra hints use a short video ad.'
-                      : 'Hint',
-                  child: SizedBox(
-                    width: 48,
-                    height: 48,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        ExcludeSemantics(
-                          child: GameToolbarButton(
-                            icon: Icons.lightbulb_outline_rounded,
-                            accent: accent,
-                            tooltip: 'Hint',
-                            onPressed: onHint,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Left Controls: Undo/Restart and Hint
+            Expanded(
+              child: Row(
+                children: [
+                UndoRestartButton(
+                  accent: accent,
+                  canUndo: canUndo,
+                  onUndo: onUndo,
+                  onRestart: onRestart,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: InkWell(
+                    onTap: onHint,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.lightbulb_outline_rounded, size: 16, color: Colors.amberAccent),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              'HINT',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amberAccent,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                        if (showHintAdBadge)
-                          Positioned(
-                            top: -4,
-                            right: -4,
-                            child: ExcludeSemantics(
-                              child: IgnorePointer(
-                                child: Container(
-                                  width: 23,
-                                  height: 23,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: accent,
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.28),
-                                        blurRadius: 3,
-                                        offset: const Offset(0, 1),
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Text(
-                                    'Ad',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w800,
-                                      height: 1,
-                                      letterSpacing: -0.2,
-                                    ),
-                                  ),
+                          if (showHintAdBadge) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amberAccent.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
+                              ),
+                              child: Text(
+                                'AD',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amberAccent,
                                 ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Semantics(
-                  button: true,
-                  label: axisGuidesVisible
-                      ? 'Hide alignment lines'
-                      : 'Show alignment lines',
-                  child: ExcludeSemantics(
-                    child: GameToolbarButton(
-                      icon: Icons.grid_on_rounded,
-                      accent: accent,
-                      tooltip: axisGuidesVisible
-                          ? 'Hide alignment lines'
-                          : 'Align lines',
-                      selected: axisGuidesVisible,
-                      onPressed: onToggleGuides,
-                    ),
-                  ),
-                ),
-                if (onZoomIn != null) ...[
-                  const SizedBox(width: 12),
-                  Semantics(
-                    button: true,
-                    label: 'Zoom in',
-                    child: ExcludeSemantics(
-                      child: GameToolbarButton(
-                        icon: Icons.zoom_in_rounded,
-                        accent: accent,
-                        tooltip: 'Zoom in',
-                        onPressed: onZoomIn!,
+                          ],
+                        ],
                       ),
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 12),
-                Semantics(
-                  button: true,
-                  label: 'Reset zoom',
-                  child: ExcludeSemantics(
-                    child: GameToolbarButton(
-                      icon: Icons.zoom_out_map_rounded,
-                      accent: accent,
-                      tooltip: 'Reset zoom',
-                      onPressed: onResetView,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Semantics(
-                  button: true,
-                  label:
-                      'Undo last move. Press and hold to restart the level.',
-                  child: ExcludeSemantics(
-                    child: UndoRestartButton(
-                      accent: accent,
-                      canUndo: canUndo,
-                      onUndo: onUndo,
-                      onRestart: onRestart,
                     ),
                   ),
                 ),
               ],
-            );
+            ),
+          ),
+            
+            // Right Controls: Grid, Zoom
+            Row(
+              children: [
+                _buildSmallBtn(
+                  label: 'Toggle Grid',
+                  icon: Icons.grid_on_rounded,
+                  active: axisGuidesVisible,
+                  onTap: onToggleGuides,
+                ),
+                if (onZoomIn != null) ...[
+                  const SizedBox(width: 8),
+                  _buildSmallBtn(
+                    label: 'Zoom In',
+                    icon: Icons.zoom_in_rounded,
+                    active: false,
+                    onTap: onZoomIn!,
+                  ),
+                ],
+                const SizedBox(width: 8),
+                _buildSmallBtn(
+                  label: 'Zoom Out',
+                  icon: Icons.zoom_out_map_rounded,
+                  active: false,
+                  onTap: onResetView,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-            return SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: row,
-              ),
-            );
-          },
+  Widget _buildSmallBtn({required String label, required IconData icon, required bool active, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: active ? accent.withValues(alpha: 0.2) : AppColors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: active ? accent : Colors.white.withValues(alpha: 0.1)),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: active ? accent : Colors.white70,
         ),
       ),
     );

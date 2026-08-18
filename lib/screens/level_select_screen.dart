@@ -2,15 +2,15 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import '../game/levels/generation/difficulty_mode.dart';
 import '../game/levels/level_grid_config.dart';
 import '../models/difficulty.dart';
+import '../theme/app_colors.dart';
 import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
 import '../services/storage/storage_locator.dart';
-import '../game/world_registry.dart';
-import '../theme/app_colors.dart';
-import '../utils/progress_format.dart';
 import 'game_screen.dart';
 
 const int _pageSize = kLevelsPerGridPage;
@@ -19,8 +19,6 @@ const int _pageSize = kLevelsPerGridPage;
 int visibleLevelCardCount(int highestUnlocked) {
   return highestUnlocked >= 19 ? highestUnlocked + 1 : 20;
 }
-
-// ── Navigation group model ──────────────────────────────────────────────────
 
 class NavGroup {
   final String label;
@@ -36,7 +34,6 @@ class NavGroup {
   bool containsPage(int page) => page >= firstPage && page <= lastPage;
   bool containsLevel(int level) => level >= firstLevel && level <= lastLevel;
 
-  /// Drill down hierarchy: 500 -> 100 -> 20 -> individual.
   bool get isDrillable => levelCount > 1;
   bool get isLeaf => levelCount == 1;
 }
@@ -55,34 +52,23 @@ List<NavGroup> _buildChunkGroups(int start, int end, int chunkSize) {
   return groups;
 }
 
-/// Top level:
-/// - Keep compact summary grouped by 100s (e.g., 1-700).
-/// - Show remaining tail as small ranges.
 List<NavGroup> buildNavGroups(int highestUnlocked) {
   final visible = visibleLevelCardCount(highestUnlocked);
   if (visible <= 100) {
     return _buildChunkGroups(1, visible, _pageSize);
   }
-
   final groups = <NavGroup>[];
   final completedHundreds = (highestUnlocked ~/ 100) * 100;
   final summaryEnd = completedHundreds.clamp(100, visible);
   if (summaryEnd >= 100) {
     groups.add(NavGroup(_rangeLabel(1, summaryEnd), 1, summaryEnd));
   }
-
   if (summaryEnd < visible) {
     groups.addAll(_buildChunkGroups(summaryEnd + 1, visible, 10));
   }
-
   return groups;
 }
 
-/// Drill-down hierarchy:
-/// - >500 levels: split by 500
-/// - >100 levels: split by 100
-/// - >20 levels: split by 20
-/// - <=20 levels: split to individual levels
 List<NavGroup> buildSubGroups(NavGroup parent, int highestUnlocked) {
   final visible = visibleLevelCardCount(highestUnlocked);
   final start = parent.firstLevel.clamp(1, visible);
@@ -94,8 +80,6 @@ List<NavGroup> buildSubGroups(NavGroup parent, int highestUnlocked) {
   if (span > 20) return _buildChunkGroups(start, end, 20);
   return _buildChunkGroups(start, end, 1);
 }
-
-// ── Level Select Screen ─────────────────────────────────────────────────────
 
 class LevelSelectScreen extends StatefulWidget {
   final DifficultyMode initialDifficulty;
@@ -109,25 +93,13 @@ class LevelSelectScreen extends StatefulWidget {
   State<LevelSelectScreen> createState() => _LevelSelectScreenState();
 }
 
-class _LevelSelectScreenState extends State<LevelSelectScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final _modes = DifficultyMode.values;
+class _LevelSelectScreenState extends State<LevelSelectScreen> {
+  late DifficultyMode _mode;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(
-      length: _modes.length,
-      vsync: this,
-      initialIndex: _modes.indexOf(widget.initialDifficulty),
-    );
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
+    _mode = widget.initialDifficulty;
   }
 
   void _openLevel(int levelId, DifficultyMode mode) async {
@@ -150,196 +122,100 @@ class _LevelSelectScreenState extends State<LevelSelectScreen>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _tabController,
-      builder: (context, _) {
-        final mode = _modes[_tabController.index];
-        final accent = mode.color;
-        final scheme = ColorScheme.fromSeed(
-          seedColor: accent,
-          brightness: Brightness.dark,
-          surface: AppColors.background,
-        );
+    final accent = _mode.color;
+    final highest = StorageLocator.instance.highestUnlocked(_mode);
 
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: scheme,
-            splashFactory: InkSparkle.splashFactory,
-          ),
-          child: Builder(
-            builder: (context) {
-              final cs = Theme.of(context).colorScheme;
-              return Scaffold(
-                backgroundColor: cs.surface,
-                body: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color.lerp(cs.surface, accent, 0.08)!,
-                        cs.surface,
-                        Color.lerp(
-                              cs.surface,
-                              cs.surfaceContainerHighest,
-                              0.35,
-                            )!,
-                      ],
-                      stops: const [0.0, 0.35, 1.0],
-                    ),
-                  ),
-                  child: SafeArea(
-                    child: Column(
-                      children: [
-                        _buildHeader(context, cs),
-                        _buildTabBar(context, cs),
-                        Expanded(
-                          child: TabBarView(
-                            controller: _tabController,
-                            children: _modes
-                                .map(
-                                  (m) => _ChapteredLevelView(
-                                    mode: m,
-                                    onTap: (id) => _openLevel(id, m),
-                                  ),
-                                )
-                                .toList(),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top Navigation Bar
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  InkWell(
+                    onTap: () {
+                      if (StorageLocator.instance.gameSettings.soundEnabled) {
+                        unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.9));
+                      }
+                      Navigator.of(context).pop();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.arrow_back_rounded, size: 16, color: Colors.white70),
+                          const SizedBox(width: 6),
+                          Text(
+                            'BACK',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 12,
+                              color: Colors.white70,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildHeader(BuildContext context, ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 8, 20, 4),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'Back',
-            icon: Icon(Icons.arrow_back_rounded, color: cs.onSurface),
-            onPressed: () {
-              if (StorageLocator.instance.gameSettings.soundEnabled) {
-                unawaited(
-                  ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.9),
-                );
-              }
-              Navigator.of(context).pop();
-            },
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Levels',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.2,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${_mode.label.toUpperCase()} TRACK',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          letterSpacing: 1.5,
+                          color: accent,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                ),
-                Text(
-                  'Pick a stage · Stars save per level',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
+                      Text(
+                        'FRONTIER: LEVEL $highest',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabBar(BuildContext context, ColorScheme cs) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-      child: Material(
-        color: cs.surfaceContainerHigh,
-        elevation: 0,
-        shadowColor: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: TabBar(
-            controller: _tabController,
-            splashBorderRadius: BorderRadius.circular(12),
-            indicator: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: cs.primary.withValues(alpha: 0.22),
-              border: Border.all(
-                color: cs.primary.withValues(alpha: 0.45),
+                    ],
+                  ),
+                ],
               ),
             ),
-            indicatorSize: TabBarIndicatorSize.tab,
-            dividerColor: Colors.transparent,
-            labelColor: cs.onSurface,
-            unselectedLabelColor:
-                cs.onSurfaceVariant.withValues(alpha: 0.75),
-            labelStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.4,
+            
+            // Breadcrumbs / Grid
+            Expanded(
+              child: _ChapteredLevelView(
+                mode: _mode,
+                highestUnlocked: highest,
+                onTap: (id) => _openLevel(id, _mode),
+              ),
             ),
-            unselectedLabelStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
-            ),
-            tabs: _modes
-                .map(
-                  (m) => Tab(
-                    height: 40,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(m.icon, size: 16),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            m.label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-                .toList(),
-            onTap: (_) {
-              if (StorageLocator.instance.gameSettings.soundEnabled) {
-                unawaited(
-                  ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.1),
-                );
-              }
-              setState(() {});
-            },
-          ),
+          ],
         ),
       ),
     );
   }
 }
 
-// ── Chaptered level view with drill-down ─────────────────────────────────────
-
 class _ChapteredLevelView extends StatefulWidget {
   final DifficultyMode mode;
+  final int highestUnlocked;
   final void Function(int levelId) onTap;
 
   const _ChapteredLevelView({
     required this.mode,
+    required this.highestUnlocked,
     required this.onTap,
   });
 
@@ -357,8 +233,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   @override
   void initState() {
     super.initState();
-    final highest = StorageLocator.instance.highestUnlocked(widget.mode);
-    _currentPage = ((highest - 1) / _pageSize).floor();
+    _currentPage = ((widget.highestUnlocked - 1) / _pageSize).floor();
     _pageCtrl = PageController(initialPage: _currentPage);
     _pillScrollCtrl = ScrollController();
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollPillIntoView());
@@ -373,9 +248,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _goToPage(int page) {
     if (page != _currentPage && StorageLocator.instance.gameSettings.soundEnabled) {
-      unawaited(
-        ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.2),
-      );
+      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.2));
     }
     _pageCtrl.animateToPage(
       page,
@@ -386,9 +259,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _onPillTap(NavGroup group) {
     if (StorageLocator.instance.gameSettings.soundEnabled) {
-      unawaited(
-        ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.05),
-      );
+      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.05));
     }
     if (group.isDrillable) {
       setState(() {
@@ -396,8 +267,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
         _selectedLeafLevel = null;
       });
       _goToPage(group.firstPage);
-      WidgetsBinding.instance
-          .addPostFrameCallback((_) => _scrollPillIntoView());
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollPillIntoView());
     } else {
       setState(() => _selectedLeafLevel = group.firstLevel);
       _goToPage(group.firstPage);
@@ -406,9 +276,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _closeDrill() {
     if (StorageLocator.instance.gameSettings.soundEnabled) {
-      unawaited(
-        ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.95),
-      );
+      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.95));
     }
     if (_drillPath.isEmpty) return;
     setState(() {
@@ -421,8 +289,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   List<NavGroup> _activePills(int highest) {
     var groups = buildNavGroups(highest);
     for (final selected in _drillPath) {
-      final stillVisible = groups.any((g) =>
-          g.firstLevel == selected.firstLevel && g.lastLevel == selected.lastLevel);
+      final stillVisible = groups.any((g) => g.firstLevel == selected.firstLevel && g.lastLevel == selected.lastLevel);
       if (!stillVisible) break;
       groups = buildSubGroups(selected, highest);
     }
@@ -438,8 +305,7 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _scrollPillIntoView() {
     if (!_pillScrollCtrl.hasClients) return;
-    final highest = StorageLocator.instance.highestUnlocked(widget.mode);
-    final pills = _activePills(highest);
+    final pills = _activePills(widget.highestUnlocked);
     final activeIdx = pills.indexWhere((g) => g.containsPage(_currentPage));
     if (activeIdx < 0) return;
 
@@ -474,159 +340,116 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final highest = StorageLocator.instance.highestUnlocked(widget.mode);
+    final highest = widget.highestUnlocked;
     final visible = visibleLevelCardCount(highest);
     final totalPages = (visible / _pageSize).ceil().clamp(1, 99999);
-    final nextLevelPage =
-        ((highest) / _pageSize).floor().clamp(0, totalPages - 1);
+    final nextLevelPage = ((highest) / _pageSize).floor().clamp(0, totalPages - 1);
 
     final pills = _activePills(highest);
-    final activeIdx = pills.indexWhere(_isCurrentGroup);
-    final activeGroup = activeIdx >= 0 ? pills[activeIdx] : null;
+    final accent = widget.mode.color;
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Material(
-            color: cs.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(14),
-            child: SizedBox(
-              height: 48,
-              child: Row(
-                children: [
-                  if (_drillPath.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Material(
-                        color: cs.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        child: InkWell(
-                          onTap: _closeDrill,
-                          borderRadius: BorderRadius.circular(10),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
+        // Ribbon
+        Container(
+          height: 44,
+          decoration: BoxDecoration(
+            border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+            ),
+          ),
+          child: Row(
+            children: [
+              if (_drillPath.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 12, right: 4),
+                  child: InkWell(
+                    onTap: _closeDrill,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.arrow_back_rounded, size: 14, color: accent),
+                          const SizedBox(width: 4),
+                          Text(
+                            _drillPath.last.label,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: accent,
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.arrow_back_rounded,
-                                  color: cs.primary,
-                                  size: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: ListView.builder(
+                  controller: _pillScrollCtrl,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  itemCount: pills.length,
+                  itemBuilder: (_, i) {
+                    final group = pills[i];
+                    final isCurrent = _isCurrentGroup(group);
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: InkWell(
+                        onTap: () => _onPillTap(group),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isCurrent ? Colors.white : AppColors.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isCurrent ? Colors.white : Colors.white.withValues(alpha: 0.1),
+                            ),
+                            boxShadow: isCurrent ? [BoxShadow(color: Colors.white.withValues(alpha: 0.3), blurRadius: 4)] : [],
+                          ),
+                          alignment: Alignment.center,
+                          child: Row(
+                            children: [
+                              Text(
+                                group.label,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                                  color: isCurrent ? Colors.black : Colors.white70,
                                 ),
+                              ),
+                              if (group.containsLevel(highest)) ...[
                                 const SizedBox(width: 4),
-                                Text(
-                                  _drillPath.last.label,
-                                  style: TextStyle(
-                                    color: cs.primary,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color: accent,
+                                    shape: BoxShape.circle,
                                   ),
                                 ),
                               ],
-                            ),
+                            ],
                           ),
                         ),
                       ),
-                    ),
-                  Expanded(
-                    child: ListView.builder(
-                      controller: _pillScrollCtrl,
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 6,
-                      ),
-                      itemCount: pills.length,
-                      itemBuilder: (_, i) {
-                        final group = pills[i];
-                        final isCurrent = _isCurrentGroup(group);
-
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 3),
-                          child: Material(
-                            color: isCurrent
-                                ? cs.primary.withValues(alpha: 0.18)
-                                : cs.surfaceContainer,
-                            borderRadius: BorderRadius.circular(10),
-                            child: InkWell(
-                              onTap: () => _onPillTap(group),
-                              borderRadius: BorderRadius.circular(10),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: isCurrent
-                                        ? cs.primary.withValues(alpha: 0.55)
-                                        : cs.outline.withValues(alpha: 0.28),
-                                    width: isCurrent ? 1.5 : 1,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        group.label,
-                                        style: TextStyle(
-                                          color: isCurrent
-                                              ? cs.onSurface
-                                              : cs.onSurfaceVariant,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0.3,
-                                        ),
-                                      ),
-                                      if (group.isDrillable) ...[
-                                        const SizedBox(width: 2),
-                                        Icon(
-                                          Icons.chevron_right_rounded,
-                                          size: 16,
-                                          color: isCurrent
-                                              ? cs.primary
-                                              : cs.onSurfaceVariant
-                                                  .withValues(alpha: 0.6),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                    );
+                  },
+                ),
               ),
-            ),
+            ],
           ),
         ),
 
-        if (activeGroup != null && activeGroup.pageCount > 1)
-          Padding(
-            padding: const EdgeInsets.only(top: 6, bottom: 4),
-            child: Text(
-              'Page ${_currentPage - activeGroup.firstPage + 1} of ${activeGroup.pageCount}',
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: cs.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-          )
-        else
-          const SizedBox(height: 8),
-
+        // Grid
         Expanded(
           child: Stack(
             children: [
@@ -647,20 +470,30 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                 Positioned(
                   right: 16,
                   bottom: 16,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () => _goToPage(nextLevelPage),
-                    icon: const Icon(Icons.flag_rounded, size: 18),
-                    label: Text(
-                      'Level ${ProgressFormat.level(highest + 1)}',
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      shape: RoundedRectangleBorder(
+                  child: InkWell(
+                    onTap: () => _goToPage(nextLevelPage),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: accent,
                         borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.5), blurRadius: 12)],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.flag_rounded, size: 18, color: Colors.black),
+                          const SizedBox(width: 8),
+                          Text(
+                            'LEVEL $highest',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -672,8 +505,6 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
     );
   }
 }
-
-// ── Single page grid (20 levels) ────────────────────────────────────────────
 
 class _ChapterGrid extends StatelessWidget {
   final int pageIndex;
@@ -692,15 +523,16 @@ class _ChapterGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     final startLevel = pageIndex * _pageSize + 1;
     final visible = visibleLevelCardCount(highestUnlocked);
+    final accent = mode.color;
 
     return GridView.builder(
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
+        crossAxisCount: 5,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.92,
+        childAspectRatio: 1.0,
       ),
       itemCount: _pageSize,
       itemBuilder: (_, index) {
@@ -715,255 +547,76 @@ class _ChapterGrid extends StatelessWidget {
         final isFrontier = isUnlocked && levelId == highestUnlocked;
         final starCount = StorageLocator.instance.stars(mode, levelId);
 
-        final card = _LevelCard(
-          levelId: levelId,
-          mode: mode,
-          stars: starCount,
-          isUnlocked: isUnlocked,
-          isNext: isNext,
-          isFrontier: isFrontier,
-          isBoss: mode == DifficultyMode.hard && isBossLevel(levelId),
-          worldAccent: mode == DifficultyMode.hard
-              ? worldForLevel(levelId).accent
-              : null,
-          onTap: isUnlocked ? () => onTap(levelId) : null,
-        );
-
-        if (isFrontier) {
-          return _FrontierLevelPulse(accent: mode.color, child: card);
-        }
-        return card;
-      },
-    );
-  }
-}
-
-/// Soft repeating glow around the **per-mode** frontier: the level index equal
-/// to [StorageLocator.instance.highestUnlocked] for this grid's [DifficultyMode] (each
-/// difficulty tab has its own unlock track).
-class _FrontierLevelPulse extends StatefulWidget {
-  final Color accent;
-  final Widget child;
-
-  const _FrontierLevelPulse({
-    required this.accent,
-    required this.child,
-  });
-
-  @override
-  State<_FrontierLevelPulse> createState() => _FrontierLevelPulseState();
-}
-
-class _FrontierLevelPulseState extends State<_FrontierLevelPulse>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1700),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, child) {
-        final t = Curves.easeInOut.transform(_ctrl.value);
-        final spread = 1.0 + t * 2.4;
-        final blur = 8.0 + t * 14.0;
-        final a = 0.2 + t * 0.42;
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: widget.accent.withValues(alpha: a),
-                blurRadius: blur,
-                spreadRadius: spread,
-              ),
-            ],
-          ),
-          child: child,
-        );
-      },
-      child: widget.child,
-    );
-  }
-}
-
-// ── Level card ───────────────────────────────────────────────────────────────
-
-class _LevelCard extends StatelessWidget {
-  final int levelId;
-  final DifficultyMode mode;
-  final int stars;
-  final bool isUnlocked;
-  final bool isNext;
-  final bool isFrontier;
-  final bool isBoss;
-  final Color? worldAccent;
-  final VoidCallback? onTap;
-
-  const _LevelCard({
-    required this.levelId,
-    required this.mode,
-    required this.stars,
-    required this.isUnlocked,
-    required this.isNext,
-    this.isFrontier = false,
-    this.isBoss = false,
-    this.worldAccent,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final accent = worldAccent ?? mode.color;
-    final locked = !isUnlocked;
-    final completed = isUnlocked && stars > 0;
-    final showcaseName = mode == DifficultyMode.hard
-        ? showcaseNameForLevel(levelId)
-        : null;
-
-    final fillColor = locked
-        ? cs.surfaceContainerLow
-        : completed
-            ? Color.lerp(cs.surfaceContainer, accent, 0.12)!
-            : Color.lerp(cs.surfaceContainer, accent, worldAccent != null ? 0.06 : 0)!;
-
-    final borderColor = isNext
-        ? cs.primary
-        : completed
-            ? cs.primary.withValues(alpha: 0.35)
-            : cs.outline.withValues(alpha: 0.35);
-
-    return Semantics(
-      button: true,
-      enabled: !locked,
-      label: locked
-          ? isNext
-              ? 'Level $levelId, next challenge, locked'
-              : 'Level $levelId, locked'
-          : isNext
-              ? 'Level $levelId, next challenge'
-              : isFrontier
-                  ? 'Level $levelId, current goal, $stars stars'
-                  : 'Level $levelId, $stars stars',
-      child: Material(
-        color: fillColor,
-        elevation: isNext ? 1 : 0,
-        shadowColor: isNext ? accent.withValues(alpha: 0.35) : null,
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          splashColor: accent.withValues(alpha: 0.2),
+        return InkWell(
+          onTap: (isUnlocked || isNext) ? () => onTap(levelId) : null,
+          borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              color: isFrontier ? const Color(0xFF1A1A26) : (isUnlocked ? AppColors.surface : AppColors.background),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: borderColor,
-                width: isNext ? 2 : 1,
+                color: isFrontier ? accent : (isUnlocked ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05)),
+                width: isFrontier ? 2 : 1,
               ),
+              boxShadow: isFrontier ? [BoxShadow(color: accent.withValues(alpha: 0.5), blurRadius: 18, spreadRadius: -2)] : [],
             ),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (isBoss && !locked)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Icon(
-                      Icons.shield_moon_outlined,
-                      color: accent.withValues(alpha: 0.85),
-                      size: 14,
-                    ),
+                Text(
+                  '$levelId',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                    color: isFrontier ? Colors.white : (isUnlocked ? Colors.white70 : Colors.white30),
                   ),
-                if (locked)
-                  Icon(
-                    Icons.lock_rounded,
-                    color: cs.onSurfaceVariant.withValues(alpha: 0.45),
-                    size: 20,
+                ),
+                if (isFrontier)
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, size: 14, color: Colors.black),
                   )
-                else if (showcaseName != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Text(
-                      showcaseName,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: isNext ? cs.primary : cs.onSurface,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            height: 1.1,
-                          ),
+                else if (isUnlocked)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      3,
+                      (i) => Icon(
+                        i < starCount ? Icons.star_rounded : Icons.star_border_rounded,
+                        size: 10,
+                        color: i < starCount ? AppColors.starGold : Colors.white24,
+                      ),
                     ),
                   )
-                else
-                  Text(
-                    ProgressFormat.level(levelId),
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: isNext ? cs.primary : cs.onSurface,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                const SizedBox(height: 4),
-                if (completed)
-                  _MiniStars(stars: stars, color: AppColors.starGold)
                 else if (isNext)
-                  Icon(
-                    Icons.play_circle_outline_rounded,
-                    color: cs.primary,
-                    size: 16,
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded, size: 14, color: Colors.white70),
                   )
                 else
-                  const SizedBox(height: 16),
+                  const Icon(Icons.lock_rounded, size: 14, color: Colors.white24),
+                Text(
+                  isFrontier ? 'ACTIVE' : (isUnlocked ? 'CLEAR' : (isNext ? 'NEXT' : 'LOCKED')),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 8,
+                    color: Colors.white54,
+                  ),
+                ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Mini stars ───────────────────────────────────────────────────────────────
-
-class _MiniStars extends StatelessWidget {
-  final int stars;
-  final Color color;
-  const _MiniStars({required this.stars, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final dim = Theme.of(context)
-        .colorScheme
-        .outline
-        .withValues(alpha: 0.45);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: List.generate(
-        3,
-        (i) => Icon(
-          i < stars ? Icons.star_rounded : Icons.star_outline_rounded,
-          size: 12,
-          color: i < stars ? color : dim,
-        ),
-      ),
+        );
+      },
     );
   }
 }

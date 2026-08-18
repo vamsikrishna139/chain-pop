@@ -46,7 +46,7 @@ import 'game/widgets/game_header_hud.dart';
 import 'game/widgets/game_pause_overlay.dart';
 import 'game/widgets/game_settings_sheet.dart';
 import 'game/widgets/quick_win_banner.dart';
-import 'game/widgets/session_goal_chip.dart';
+
 import 'game/widgets/win_celebration_overlay.dart';
 import 'game/widgets/win_panel.dart';
 
@@ -477,7 +477,7 @@ class GameScreenState extends State<GameScreen>
 
   /// Stack-local Y for tutorial hint banner (below measured [GameHeaderHud]).
   double _hudBannerTop = 118;
-  bool _goalIntroVisible = false;
+
 
   @override
   void initState() {
@@ -564,16 +564,7 @@ class GameScreenState extends State<GameScreen>
           .clamp(SessionPacing.timedSurgeFloorSec, _timeLimitSec!);
     }
 
-    if (_isCampaign && !_goals.isComplete && !widget.suppressGameplayTimers) {
-      _goalIntroVisible = true;
-      _timers.goalIntroTimer?.cancel();
-      _timers.goalIntroTimer = Timer(
-        const Duration(milliseconds: GameScreenConstants.sessionGoalIntroMs),
-        () {
-          if (mounted) setState(() => _goalIntroVisible = false);
-        },
-      );
-    }
+
 
     _timeLeftSec = _timeLimitSec;
 
@@ -707,9 +698,9 @@ class GameScreenState extends State<GameScreen>
       return DailyChallenge.incidentTitle(widget.dailyDayKey!);
     }
     if (widget.difficulty == DifficultyMode.hard) {
-      return worldHudLabel(widget.level);
+      return 'LEVEL ${ProgressFormat.level(widget.level)}';
     }
-    return null;
+    return 'LEVEL ${ProgressFormat.level(widget.level)}';
   }
 
   String? _missionLabel() {
@@ -717,10 +708,9 @@ class GameScreenState extends State<GameScreen>
       return DailyChallenge.incidentObjective(widget.dailyDayKey!);
     }
     if (!widget.isTutorial) {
-      final directive = directiveFor(levelId: widget.level, mode: widget.difficulty).label;
-      return '$directive · ${missionShortForLevel(widget.level)}';
+      return directiveFor(levelId: widget.level, mode: widget.difficulty).label;
     }
-    return null;
+    return 'TRAINING';
   }
 
   /// Invokes the same path as the win rail **Next** control (for automated tests).
@@ -923,31 +913,11 @@ class GameScreenState extends State<GameScreen>
             timeLimitSec: _timeLimitSec,
             elapsed: _stopwatch.elapsed,
             onTogglePause: _togglePause,
+            sessionGoalLabel: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.activeGoal.label : null,
+            sessionGoalProgress: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.progress : null,
+            sessionGoalTarget: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.target : null,
           ),
-          // Hide once complete: the completion is celebrated by the goal-
-          // complete toast on the winning level, so a persistent "DONE" chip on
-          // every later level of the session is just visual clutter.
-          if (_isCampaign && !_hasWon && !_goals.isComplete)
-            Positioned(
-              top: _hudBannerTop,
-              left: 0,
-              right: 0,
-              child: AnimatedOpacity(
-                opacity: _goalIntroVisible ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: SessionGoalChip(
-                    label: _goals.activeGoal.label,
-                    progress: _goals.progress,
-                    target: _goals.target,
-                    complete: _goals.isComplete,
-                    accent: accent,
-                  ),
-                ),
-              ),
-            ),
+
           if (widget.isTutorial && !_hasWon)
             Positioned(
               top: _hudBannerTop,

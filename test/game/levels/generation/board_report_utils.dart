@@ -41,14 +41,14 @@ const int kCanvasCells = kCanvasSpan * kCanvasSpan;
 /// [GameScreen] at each device size and asserts these constants stay in sync.
 const double kRefScreenW = 390;
 const double kRefScreenH = 844;
-const double kRefTopReserved = 172;
-const double kRefBottomReserved = 110;
+const double kRefTopReserved = 194.0;
+const double kRefBottomReserved = 102.0;
 
 /// Second reference device (iPhone 15 Pro Max class, safeTop 59).
 const double kRefScreenWLarge = 430;
 const double kRefScreenHLarge = 932;
-const double kRefTopReservedLarge = 184;
-const double kRefBottomReservedLarge = 110;
+const double kRefTopReservedLarge = 206.0;
+const double kRefBottomReservedLarge = 102.0;
 
 const double kRefMargin = 24;
 const double kBandW = kRefScreenW - kRefMargin * 2;

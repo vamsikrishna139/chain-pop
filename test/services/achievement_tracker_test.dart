@@ -454,12 +454,48 @@ void main() {
   });
 
   group('sync', () {
-    test('nothing is sent while no entry is mapped to Play Console', () async {
-      // The catalog ships with an empty id map, so the tracker must stay
-      // entirely local until Play Console setup happens.
-      await tracker.record(win(nodes: 200));
+    test('nothing is sent for an entry with no Play Console id', () async {
+      // Entries the catalog has not mapped stay local. This held for the whole
+      // catalog before Play Console setup; it now guards the per-entry case,
+      // e.g. an achievement added to the catalog ahead of its Console entry.
+      final unmapped = AchievementTracker(
+        storage: storage,
+        sink: sink,
+        now: () => DateTime.utc(2026, 8, 14),
+        playGamesIdResolver: (_) => null,
+      );
+      addTearDown(unmapped.dispose);
+
+      await unmapped.record(win(nodes: 200));
       expect(sink.stepCalls, isEmpty);
       expect(sink.unlockCalls, isEmpty);
+    });
+
+    test('a mapped entry is sent as absolute progress', () async {
+      await tracker.record(win(nodes: 200));
+
+      // Incremental entries report the total, never a delta — replaying is
+      // then always safe. Node Runner tracks 1,000 nodes at scale 1.
+      expect(
+        sink.stepCalls,
+        contains((id: AchievementIds.nodeRunner, steps: 200)),
+      );
+    });
+
+    test('a mapped standard entry unlocks outright', () async {
+      await tracker.record(win(levelId: 25, stars: 3));
+      expect(sink.unlockCalls, contains(AchievementIds.guardianPerfect));
+    });
+
+    test('a scaled entry reports steps divided by its scale', () async {
+      await tracker.record(win(nodes: 5000));
+
+      // Node Lord tracks 50,000 nodes as 5,000 steps of 10 — Google caps
+      // steps at 10,000, and Play Console holds the divided count.
+      expect(
+        sink.stepCalls,
+        contains((id: AchievementIds.nodeLord, steps: 500)),
+      );
     });
 
     test('an unavailable sink is never called', () async {
@@ -476,6 +512,58 @@ void main() {
       // The cursor stays empty, so the first live sink replays from zero
       // rather than starting from "now".
       expect(storage.achievementSyncCursor, isEmpty);
+    });
+  });
+
+  group('sync connection loss', () {
+    // Play Games answers 26502 CLIENT_RECONNECT_REQUIRED once its client goes
+    // stale, and then fails every subsequent call the same way at ~1.5s each.
+    // The batch must stop rather than grind through the whole catalog.
+    final lost = AchievementConnectionLost(Exception('26502'));
+
+    test('a recoverable connection is retried once and the entry lands',
+        () async {
+      sink.throwOnce = lost;
+      sink.recoverSucceeds = true;
+
+      await tracker.record(win(nodes: 200));
+
+      expect(sink.recoverCalls, 1, reason: 'exactly one reconnect attempt');
+      // The retry re-sends the same absolute value, so the entry still lands.
+      expect(
+        sink.stepCalls,
+        contains((id: AchievementIds.nodeRunner, steps: 200)),
+      );
+    });
+
+    test('an unrecoverable connection stops the batch', () async {
+      sink.throwOnce = lost;
+      sink.recoverSucceeds = false;
+
+      await tracker.record(win(nodes: 200, levelId: 25, stars: 3));
+
+      expect(sink.recoverCalls, 1);
+      // Nothing after the failing entry is attempted: no point paying ~1.5s
+      // per call for an identical failure.
+      expect(sink.stepCalls, isEmpty);
+      expect(sink.unlockCalls, isEmpty);
+    });
+
+    test('an abandoned batch leaves the cursor untouched so it replays',
+        () async {
+      sink.throwOnce = lost;
+      sink.recoverSucceeds = false;
+
+      await tracker.record(win(nodes: 200));
+      expect(storage.achievementSyncCursor, isEmpty);
+
+      // A later sync against a healthy sink replays the entry from local state.
+      sink.recoverSucceeds = true;
+      await tracker.sync();
+      expect(
+        sink.stepCalls,
+        contains((id: AchievementIds.nodeRunner, steps: 200)),
+      );
     });
   });
 

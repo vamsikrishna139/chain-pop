@@ -8,8 +8,11 @@ import 'package:chain_pop/services/achievements/achievement_tracker.dart';
 import 'package:chain_pop/services/achievements/achievements_locator.dart';
 import 'package:chain_pop/services/achievements/game_event.dart';
 import 'package:chain_pop/services/storage/hive_chain_pop_persistence.dart';
+import 'package:chain_pop/services/achievements/play_games_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:games_services/games_services.dart' as gs;
 import 'package:hive/hive.dart';
 
 CampaignLevelWon _win({int nodes = 10, int stars = 1}) => CampaignLevelWon(
@@ -51,6 +54,7 @@ void main() {
 
   tearDown(() async {
     AchievementsLocator.uninstall();
+    PlayGamesAuth.instance.disposeTesting();
     await tracker.dispose();
   });
 
@@ -72,9 +76,18 @@ void main() {
   /// for production (Navigator builds a new State on every push) but means
   /// re-pumping an identical widget would reuse the old State and show stale
   /// data. Unmounting first forces the re-read the test is asking for.
+  /// Auth is injected so the screen never reaches the real platform channel:
+  /// [AchievementsScreen] re-runs the native check on open, which throws
+  /// MissingPluginException under `flutter test`. A never-emitting stream holds
+  /// it at [PlayGamesAuthState.unknown] — the signed-out/offline path these
+  /// tests are about.
   Future<void> pumpScreen(WidgetTester tester) async {
+    final auth = PlayGamesAuth(
+      authStreamFactory: () => const Stream<gs.PlayerData?>.empty(),
+    );
+    addTearDown(auth.disposeTesting);
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pumpWidget(const MaterialApp(home: AchievementsScreen()));
+    await tester.pumpWidget(MaterialApp(home: AchievementsScreen(auth: auth)));
     await tester.pumpAndSettle();
   }
 
@@ -87,6 +100,7 @@ void main() {
       tester.runAsync(body).then((_) {});
 
   testWidgets('renders the whole catalog on a fresh install', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     useTallViewport(tester);
     await pumpScreen(tester);
 
@@ -97,9 +111,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('0 pts'), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('shows every track section', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     useTallViewport(tester);
     await pumpScreen(tester);
 
@@ -110,10 +126,12 @@ void main() {
         reason: track.name,
       );
     }
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('conceals a hidden achievement until it is earned',
       (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     useTallViewport(tester);
     await pumpScreen(tester);
 
@@ -125,9 +143,11 @@ void main() {
 
     expect(find.text('Chain Reaction'), findsOneWidget);
     expect(find.text('Hidden achievement'), findsNothing);
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('reflects earned achievements in the summary', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     useTallViewport(tester);
     await realAsync(tester, () async {
       await storage.unlockLevel(DifficultyMode.easy, 2);
@@ -138,14 +158,17 @@ void main() {
 
     // Cold Start (5) + Hundred Down (15) + Swift Solver (15) = 35.
     expect(find.text('35 pts'), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
   });
 
   testWidgets('shows a progress bar for a partially earned tier',
       (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
     useTallViewport(tester);
     await realAsync(tester, () => tracker.record(_win(nodes: 40)));
 
     await pumpScreen(tester);
     expect(find.text('40/100'), findsOneWidget);
+    debugDefaultTargetPlatformOverride = null;
   });
 }

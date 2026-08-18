@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../game/levels/generation/difficulty_mode.dart';
 import '../../../models/difficulty.dart';
-import 'difficulty_label.dart';
-import 'lives_display.dart';
-import 'phase_progress_bar.dart';
+import '../../../theme/app_colors.dart';
+import '../game_screen_constants.dart';
 import 'timer_pause_chip.dart';
 
+
 class GameHeaderHud extends StatelessWidget {
-  /// Placed on the inner [Padding] so [RenderBox] height matches stacked HUD.
   final Key? measureKey;
   final VoidCallback onBack;
   final VoidCallback onOpenSettings;
   final int livesRemaining;
   final DifficultyMode difficulty;
-
-  /// When non-null, shown instead of [DifficultyLabel] (e.g. daily incident).
   final String? headerModeLabel;
-
-  /// Secondary line under mode label (world mission, incident objective).
   final String? missionLabel;
   final int removedNodes;
   final int totalNodes;
@@ -29,6 +25,10 @@ class GameHeaderHud extends StatelessWidget {
   final int? timeLimitSec;
   final Duration elapsed;
   final VoidCallback onTogglePause;
+  int get maxLives => GameScreenConstants.maxLives;
+  final String? sessionGoalLabel;
+  final int? sessionGoalProgress;
+  final int? sessionGoalTarget;
 
   const GameHeaderHud({
     super.key,
@@ -48,164 +48,243 @@ class GameHeaderHud extends StatelessWidget {
     required this.timeLimitSec,
     required this.elapsed,
     required this.onTogglePause,
+    this.sessionGoalLabel,
+    this.sessionGoalProgress,
+    this.sessionGoalTarget,
   });
 
   @override
   Widget build(BuildContext context) {
     final accent = difficulty.color;
     final usesCores = (totalCores ?? 0) > 0;
-    final progressLabel = usesCores
-        ? 'Cores: ${coresRestored ?? 0}/${totalCores ?? 0}'
-        : '$removedNodes / $totalNodes nodes';
+    
+    final titleText = headerModeLabel ?? difficulty.label.toUpperCase();
+    final directiveText = missionLabel;
+
+    final remaining = usesCores
+        ? ((totalCores ?? 0) - (coresRestored ?? 0)).clamp(0, 999)
+        : (totalNodes - removedNodes).clamp(0, 999);
 
     return SafeArea(
       child: Padding(
         key: measureKey,
-        padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Clean Primary Navigation Bar
             Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                GestureDetector(
-                  onTap: onBack,
-                  behavior: HitTestBehavior.opaque,
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(
-                      Icons.chevron_left_rounded,
-                      color: Colors.white70,
-                      size: 28,
-                    ),
-                  ),
-                ),
-                // Centered between back and settings. FittedBox scales the
-                // label down on very narrow phones (≈320px) so the row never
-                // overflows when Integrity shows alongside lives + cores.
+                // Left Side: Back + Title + Directive Pill
                 Expanded(
-                  child: networkIntegrity == null
-                      ? const SizedBox.shrink()
-                      : Center(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              'Integrity: $networkIntegrity%',
-                              maxLines: 1,
-                              style: TextStyle(
-                                color: _integrityColor(networkIntegrity!)
-                                    .withValues(alpha: 0.9),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ),
-                        ),
-                ),
-                IconButton(
-                  onPressed: onOpenSettings,
-                  tooltip: 'Settings',
-                  icon: Icon(
-                    Icons.tune_rounded,
-                    color: Colors.white.withValues(alpha: 0.72),
-                    size: 26,
-                  ),
-                ),
-                const SizedBox(width: 2),
-                LivesDisplay(livesRemaining: livesRemaining),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (headerModeLabel != null)
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              headerModeLabel!,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: accent,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.1,
-                              ),
-                            ),
-                          )
-                        else
-                          DifficultyLabel(difficulty: difficulty),
-                        if (missionLabel != null) ...[
-                          const SizedBox(height: 2),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              missionLabel!,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.55),
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Row(
                     children: [
-                      Text(
-                        progressLabel,
-                        style: TextStyle(
-                          color: accent.withValues(alpha: 0.7),
-                          fontSize: 11,
-                          letterSpacing: 1,
-                          fontWeight: FontWeight.w600,
+                      // Dedicated Back Action
+                      InkWell(
+                        onTap: onBack,
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                          ),
+                          child: const Icon(Icons.arrow_back_rounded, size: 16, color: Colors.white70),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      PhaseProgressBar(
-                        removedNodes: removedNodes,
-                        totalNodes: totalNodes,
+                      const SizedBox(width: 8),
+                      // Level Title (No truncation)
+                      Flexible(
+                        child: Text(
+                          titleText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.rajdhani(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.0,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      if (directiveText != null) ...[
+                        const SizedBox(width: 8),
+                        // Sleek Directive Pill
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: accent.withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              directiveText.toUpperCase(),
+                              maxLines: 1,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: accent,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                // Right Side: Timer + Settings
+                Row(
+                  children: [
+                    // Integrated Timer & Pause
+                    TimerPauseChip(
+                      timeLeftSec: timeLeftSec,
+                      timeLimitSec: timeLimitSec,
+                      elapsed: elapsed,
+                      color: accent,
+                      onTap: onTogglePause,
+                    ),
+                    const SizedBox(width: 8),
+                    // Settings Action
+                    InkWell(
+                      onTap: onOpenSettings,
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                        ),
+                        child: const Icon(Icons.tune_rounded, size: 16, color: Colors.white70),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 10),
+
+            // Unified Telemetry Capsule Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surface.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Lives / Integrity
+                  Row(
+                    children: [
+                      Text(
+                        'LIVES',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: Colors.white54,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Row(
+                        children: List.generate(maxLives, (i) {
+                          final hasLife = i < livesRemaining;
+                          return Container(
+                            margin: const EdgeInsets.only(right: 5),
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: hasLife ? Colors.redAccent : Colors.white.withValues(alpha: 0.1),
+                              boxShadow: hasLife ? [BoxShadow(color: Colors.redAccent.withValues(alpha: 0.6), blurRadius: 6)] : [],
+                            ),
+                          );
+                        }),
                       ),
                     ],
                   ),
-                  const SizedBox(width: 8),
-                  TimerPauseChip(
-                    timeLeftSec: timeLeftSec,
-                    timeLimitSec: timeLimitSec,
-                    elapsed: elapsed,
-                    color: accent,
-                    onTap: onTogglePause,
+                  
+                  // Mission Objective (REMAINING 18)
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: usesCores ? 'CORES ' : 'REMAINING ',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        TextSpan(
+                          text: usesCores
+                              ? '${coresRestored ?? 0}/${totalCores ?? 0}'
+                              : '$remaining',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
+
+            // Session Directive Banner
+            if (sessionGoalLabel != null && sessionGoalLabel!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A26),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.bolt_rounded,
+                          size: 14,
+                          color: Colors.cyanAccent,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          sessionGoalLabel!,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (sessionGoalTarget != null && sessionGoalTarget! > 0)
+                      Text(
+                        '${sessionGoalProgress ?? 0}/$sessionGoalTarget',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
-  }
-
-  static Color _integrityColor(int value) {
-    if (value >= 70) return const Color(0xFF00FF87);
-    if (value >= 50) return const Color(0xFFFFC371);
-    return const Color(0xFFFF5252);
   }
 }

@@ -1,111 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../theme/app_colors.dart';
 
-class _TimerBadge extends StatefulWidget {
-  final int timeLeftSec;
-  final int timeLimitSec;
-  final Color color;
-
-  const _TimerBadge({
-    required this.timeLeftSec,
-    required this.timeLimitSec,
-    required this.color,
-  });
-
-  @override
-  State<_TimerBadge> createState() => _TimerBadgeState();
-}
-
-class _TimerBadgeState extends State<_TimerBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 450),
-    );
-    final frac = widget.timeLimitSec > 0
-        ? widget.timeLeftSec / widget.timeLimitSec
-        : 0.0;
-    if (frac < 0.22) {
-      _pulse.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _TimerBadge oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final frac = widget.timeLimitSec > 0
-        ? widget.timeLeftSec / widget.timeLimitSec
-        : 0.0;
-    final urgent = frac < 0.22;
-    if (urgent && !_pulse.isAnimating) {
-      _pulse.repeat(reverse: true);
-    } else if (!urgent && _pulse.isAnimating) {
-      _pulse.stop();
-      _pulse.value = 0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final frac = widget.timeLimitSec > 0
-        ? widget.timeLeftSec / widget.timeLimitSec
-        : 0.0;
-    final urgent = frac < 0.22;
-    final c = frac < 0.20
-        ? AppColors.timerWarning
-        : frac < 0.40
-            ? AppColors.timerCaution
-            : widget.color;
-    final m = (widget.timeLeftSec ~/ 60).toString();
-    final s = (widget.timeLeftSec % 60).toString().padLeft(2, '0');
-
-    final iconRow = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.timer_outlined, size: 14, color: c),
-        const SizedBox(width: 4),
-        Text(
-          '$m:$s',
-          style: TextStyle(
-            color: c,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1,
-          ),
-        ),
-      ],
-    );
-
-    return Semantics(
-      label:
-          'Time remaining $m minutes $s seconds${urgent ? ', running low' : ''}',
-      child: urgent
-          ? AnimatedBuilder(
-              animation: _pulse,
-              builder: (_, __) => Transform.scale(
-                scale: 1 + _pulse.value * 0.06,
-                child: iconRow,
-              ),
-            )
-          : iconRow,
-    );
-  }
-}
-
-/// Tappable timer (timed modes) or elapsed clock (Easy) — tap pauses / resumes.
-class TimerPauseChip extends StatelessWidget {
+class TimerPauseChip extends StatefulWidget {
   final int? timeLeftSec;
   final int? timeLimitSec;
   final Duration elapsed;
@@ -123,83 +21,121 @@ class TimerPauseChip extends StatelessWidget {
     this.emphasizeResume = false,
   });
 
+  @override
+  State<TimerPauseChip> createState() => _TimerPauseChipState();
+}
+
+class _TimerPauseChipState extends State<TimerPauseChip> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 450),
+    );
+    final frac = widget.timeLimitSec != null && widget.timeLimitSec! > 0
+        ? (widget.timeLeftSec ?? 0) / widget.timeLimitSec!
+        : 1.0;
+    if (frac < 0.22 && widget.timeLimitSec != null) {
+      _pulse.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant TimerPauseChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final frac = widget.timeLimitSec != null && widget.timeLimitSec! > 0
+        ? (widget.timeLeftSec ?? 0) / widget.timeLimitSec!
+        : 1.0;
+    final urgent = frac < 0.22 && widget.timeLimitSec != null;
+    if (urgent && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!urgent && _pulse.isAnimating) {
+      _pulse.stop();
+      _pulse.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
   static String _fmtElapsed(Duration d) {
     final m = d.inMinutes.remainder(60);
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     return '$m:$s';
   }
 
+  static String _fmtSeconds(int secs) {
+    final m = (secs ~/ 60).toString();
+    final s = (secs % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hasCountdown = timeLimitSec != null && timeLeftSec != null;
-    final hint = emphasizeResume ? 'TAP TO RESUME' : 'TAP TO PAUSE';
-    final tooltip = emphasizeResume
-        ? 'Resume game'
-        : (hasCountdown ? 'Pause — tap the timer' : 'Pause — tap the clock');
+    final hasCountdown = widget.timeLimitSec != null && widget.timeLeftSec != null;
+    final frac = hasCountdown && widget.timeLimitSec! > 0
+        ? widget.timeLeftSec! / widget.timeLimitSec!
+        : 1.0;
+    final urgent = frac < 0.22 && hasCountdown;
 
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            child: Semantics(
-              button: true,
-              label: hasCountdown
-                  ? 'Timer, tap to pause or resume'
-                  : 'Elapsed time clock, tap to pause or resume',
-              child: Column(
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        final scale = urgent ? 1.0 + _pulse.value * 0.05 : 1.0;
+        final bgColor = urgent ? Colors.redAccent.withValues(alpha: 0.1) : AppColors.surface;
+        final borderColor = urgent ? Colors.redAccent.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.1);
+        final iconColor = urgent ? Colors.redAccent : Colors.white70;
+        final textColor = urgent ? Colors.redAccent : Colors.white;
+
+        return Transform.scale(
+          scale: scale,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  if (hasCountdown)
-                    _TimerBadge(
-                      timeLeftSec: timeLeftSec!,
-                      timeLimitSec: timeLimitSec!,
-                      color: color,
-                    )
-                  else
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.schedule_rounded,
-                          size: 14,
-                          color: color.withValues(alpha: 0.9),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _fmtElapsed(elapsed),
-                          style: TextStyle(
-                            color: color.withValues(alpha: 0.95),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 3),
+                  Icon(Icons.schedule_rounded, size: 14, color: iconColor),
+                  const SizedBox(width: 6),
                   Text(
-                    hint,
-                    style: TextStyle(
-                      color: Colors.white.withValues(
-                        alpha: emphasizeResume ? 0.75 : 0.42,
-                      ),
-                      fontSize: 8,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.9,
+                    hasCountdown ? _fmtSeconds(widget.timeLeftSec!) : _fmtElapsed(widget.elapsed),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
                     ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    width: 1,
+                    height: 12,
+                    color: Colors.white24,
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    widget.emphasizeResume ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                    size: 14,
+                    color: Colors.white54,
                   ),
                 ],
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

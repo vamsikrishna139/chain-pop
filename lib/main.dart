@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -10,8 +11,7 @@ import 'bootstrap/firebase_bootstrap.dart';
 import 'dev/autoplay_harness.dart';
 import 'screens/main_menu_screen.dart';
 import 'screens/splash_screen.dart';
-import 'services/achievements/achievement_tracker.dart';
-import 'services/achievements/achievements_locator.dart';
+import 'services/achievements/play_games_bootstrap.dart';
 import 'services/ads/ad_debug_log.dart';
 import 'services/ads/admob_config.dart';
 import 'services/ads/ad_service_factory.dart';
@@ -30,6 +30,12 @@ import 'theme/app_colors.dart';
 /// pumping [ChainPopApp] (e.g. integration tests).
 Future<void> bootstrapChainPop() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  GoogleFonts.config.allowRuntimeFetching = false;
+  LicenseRegistry.addLicense(() async* {
+    final license = await rootBundle.loadString('assets/google_fonts/OFL.txt');
+    yield LicenseEntryWithLineBreaks(['google_fonts'], license);
+  });
 
   await initFirebaseChainPop();
 
@@ -52,9 +58,9 @@ Future<void> bootstrapChainPop() async {
   await StorageService.init();
 
   // After storage: the tracker reads Hive on construction of its first
-  // snapshot. Its default sink is a no-op, so this is inert until Play Games
-  // is wired up — progress still accrues locally from the first level won.
-  AchievementsLocator.install(AchievementTracker());
+  // snapshot. Installs the Play Games sink on Android and kicks off sign-in
+  // without blocking; everywhere else this is a local-only tracker.
+  PlayGamesBootstrap.install();
 
   await _bootstrapThirdPartySdks();
 }
@@ -134,7 +140,7 @@ class _ChainPopAppState extends State<ChainPopApp> {
         theme: ThemeData(
           brightness: Brightness.dark,
           scaffoldBackgroundColor: AppColors.background,
-          textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+          textTheme: GoogleFonts.rajdhaniTextTheme(ThemeData.dark().textTheme),
           useMaterial3: true,
         ),
         home: const SplashScreen(nextScreen: MainMenuScreen()),
