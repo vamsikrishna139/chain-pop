@@ -1,3 +1,6 @@
+@Tags(['slow'])
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';

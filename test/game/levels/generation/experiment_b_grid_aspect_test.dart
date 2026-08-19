@@ -9,6 +9,9 @@
 //   flutter test test/game/levels/generation/experiment_b_grid_aspect_test.dart
 // ignore_for_file: avoid_print
 
+@Tags(['report'])
+library;
+
 import 'dart:math';
 
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';

@@ -318,17 +318,16 @@ class ChoiceRhythm {
       (longestForcedRun / 5.0).clamp(0.0, 2.0);
 }
 
-/// Longest prerequisite chain in the dependency graph. A node `m` is a
-/// prerequisite of `n` iff `m` sits on `n`'s initial ray (and therefore must
-/// be removed before `n` becomes extractable).
+/// Ray-prerequisite map for [level]: `id -> every node that sits on that
+/// node's initial ray` (following portal teleports), and therefore must be
+/// removed before it becomes extractable.
 ///
-/// Because the level's `id` ordering is a valid removal order, every
-/// prerequisite of `n` has a smaller `id` — so the depth DP is a single
-/// in-order sweep without recursion or cycle handling.
-int computeCriticalUnlockDepth(LevelData level) {
-  if (level.nodes.isEmpty) return 0;
-
-  final byId = <int, NodeData>{for (final n in level.nodes) n.id: n};
+/// Single source of truth for the prerequisite relation. Both
+/// [computeCriticalUnlockDepth] and `CoreMetrics.compute` read it, so the two
+/// can never drift apart on what "prerequisite" means.
+///
+/// The `hops < 50` bound is a portal-cycle guard, not a board-size limit.
+Map<int, List<int>> computeRayPrerequisites(LevelData level) {
   final positionToId = <int, int>{
     for (final n in level.nodes) gridCellKey(n.x, n.y): n.id,
   };
@@ -375,10 +374,16 @@ int computeCriticalUnlockDepth(LevelData level) {
     }
     prereqs[n.id] = list;
   }
+  return prereqs;
+}
 
-  final ids = byId.keys.toList()..sort();
+/// Per-node longest prerequisite chain, in the `id` order that is itself a
+/// valid removal order — so the DP is a single in-order sweep without
+/// recursion or cycle handling. A leaf (no prerequisites) has depth 1.
+Map<int, int> computeChainDepths(LevelData level) {
+  final prereqs = computeRayPrerequisites(level);
+  final ids = level.nodes.map((n) => n.id).toList()..sort();
   final depth = <int, int>{};
-  var maxDepth = 0;
   for (final id in ids) {
     final pre = prereqs[id] ?? const <int>[];
     var d = 1;
@@ -387,6 +392,21 @@ int computeCriticalUnlockDepth(LevelData level) {
       if (pd != null && pd + 1 > d) d = pd + 1;
     }
     depth[id] = d;
+  }
+  return depth;
+}
+
+/// Longest prerequisite chain in the dependency graph. A node `m` is a
+/// prerequisite of `n` iff `m` sits on `n`'s initial ray (and therefore must
+/// be removed before `n` becomes extractable).
+///
+/// Because the level's `id` ordering is a valid removal order, every
+/// prerequisite of `n` has a smaller `id` — so the depth DP is a single
+/// in-order sweep without recursion or cycle handling.
+int computeCriticalUnlockDepth(LevelData level) {
+  if (level.nodes.isEmpty) return 0;
+  var maxDepth = 0;
+  for (final d in computeChainDepths(level).values) {
     if (d > maxDepth) maxDepth = d;
   }
   return maxDepth;

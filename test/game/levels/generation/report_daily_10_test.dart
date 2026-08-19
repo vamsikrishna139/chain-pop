@@ -6,6 +6,7 @@
 // stall on one date key in a 10-day sample. The run now asserts the p100.
 // ignore_for_file: avoid_print
 
+import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:chain_pop/game/levels/level_manager.dart';
 import 'package:chain_pop/screens/game/game_time_limit.dart';
@@ -75,6 +76,10 @@ void main() {
         level,
         label: key,
         levelId: int.parse(key),
+        // The daily's underlying config is built from Hard
+        // (`LevelConfiguration.forDailyChallenge`), so the content identity
+        // must say `hard` to match what the generator itself stamps.
+        mode: DifficultyMode.hard,
         // Dailies are generated against the Expert band (UI labels them Medium).
         profile: DifficultyProfile.expert,
         directive: 'DAILY',

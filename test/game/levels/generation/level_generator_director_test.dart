@@ -57,7 +57,7 @@ void main() {
                 'archetype=$arch observed=${observed.toStringAsFixed(3)} '
                 'expected=$expected over $total emissions');
       });
-    });
+    }, tags: 'slow');
 
     test('Hard/Expert generations succeed without shipping sub-min openings',
         () {

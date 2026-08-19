@@ -9,14 +9,18 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:chain_pop/game/board_layout.dart';
+import 'package:chain_pop/game/levels/generation/core_metrics.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
+import 'package:chain_pop/game/levels/generation/generation_version.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/metrics.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_directive.dart';
 import 'package:chain_pop/game/world_registry.dart';
 import 'package:chain_pop/screens/game/game_time_limit.dart';
+
+import 'corpus_version.dart';
 
 /// Fixed reference canvas for cell-space emptiness. Every board observed in
 /// these samples fits inside 10×10 (dailies clamp at 8, campaign grids peak at
@@ -219,6 +223,8 @@ class CompositionMetrics {
     required this.largestEmptyRegion,
     required this.isolatedNodeCount,
     required this.meanLocalDensity,
+    required this.components,
+    required this.enclosedHoles,
   });
 
   /// Longest run of consecutive grid rows containing no node.
@@ -237,6 +243,15 @@ class CompositionMetrics {
   /// reads locally, independent of overall grid size.
   final double meanLocalDensity;
 
+  /// 4-connected components of occupied cells. 1 = one solid island,
+  /// higher = archipelago. First term of [BoardRow.topologyClass].
+  final int components;
+
+  /// 4-connected empty regions fully enclosed by nodes — i.e. that do not
+  /// touch the grid border. "Donut holes". Second term of
+  /// [BoardRow.topologyClass].
+  final int enclosedHoles;
+
   static CompositionMetrics compute(LevelData level) {
     final w = level.gridWidth;
     final h = level.gridHeight;
@@ -247,6 +262,8 @@ class CompositionMetrics {
         largestEmptyRegion: 0,
         isolatedNodeCount: 0,
         meanLocalDensity: 0,
+        components: 0,
+        enclosedHoles: 0,
       );
     }
     final occupied = <int>{for (final n in level.nodes) n.y * w + n.x};
@@ -273,14 +290,17 @@ class CompositionMetrics {
       bestColRun = max(bestColRun, colRun);
     }
 
-    // Largest 4-connected empty region (flood fill).
+    // Largest 4-connected empty region (flood fill). The same sweep counts
+    // *enclosed* empty regions — those that never touch the grid border.
     final seen = <int>{};
     var bestRegion = 0;
+    var enclosedHoles = 0;
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         final key = y * w + x;
         if (occupied.contains(key) || seen.contains(key)) continue;
         var size = 0;
+        var touchesBorder = false;
         final stack = <int>[key];
         seen.add(key);
         while (stack.isNotEmpty) {
@@ -288,6 +308,9 @@ class CompositionMetrics {
           size++;
           final kx = k % w;
           final ky = k ~/ w;
+          if (kx == 0 || ky == 0 || kx == w - 1 || ky == h - 1) {
+            touchesBorder = true;
+          }
           for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
             final nx = kx + dx;
             final ny = ky + dy;
@@ -299,6 +322,31 @@ class CompositionMetrics {
           }
         }
         bestRegion = max(bestRegion, size);
+        if (!touchesBorder) enclosedHoles++;
+      }
+    }
+
+    // 4-connected components of the OCCUPIED cells.
+    final seenNodes = <int>{};
+    var components = 0;
+    for (final key in occupied) {
+      if (seenNodes.contains(key)) continue;
+      components++;
+      final stack = <int>[key];
+      seenNodes.add(key);
+      while (stack.isNotEmpty) {
+        final k = stack.removeLast();
+        final kx = k % w;
+        final ky = k ~/ w;
+        for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+          final nx = kx + dx;
+          final ny = ky + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          final nk = ny * w + nx;
+          if (!occupied.contains(nk) || seenNodes.contains(nk)) continue;
+          seenNodes.add(nk);
+          stack.add(nk);
+        }
       }
     }
 
@@ -326,6 +374,8 @@ class CompositionMetrics {
       largestEmptyRegion: bestRegion,
       isolatedNodeCount: isolated,
       meanLocalDensity: densitySum / level.nodes.length,
+      components: components,
+      enclosedHoles: enclosedHoles,
     );
   }
 }
@@ -354,6 +404,7 @@ class BoardRow {
   BoardRow({
     required this.label,
     required this.levelId,
+    required this.contentIdentity,
     required this.sector,
     required this.worldName,
     required this.gridW,
@@ -363,6 +414,7 @@ class BoardRow {
     required this.bboxH,
     required this.metrics,
     required this.topo,
+    required this.core,
     required this.cores,
     required this.locks,
     required this.relays,
@@ -380,6 +432,10 @@ class BoardRow {
 
   final String label; // "L742" or "20260813"
   final int levelId;
+
+  /// T0.0c content identity — `levelId/mode/vN/recipeId`. Stamped on every
+  /// CSV row so an offline measurement is traceable to its exact inputs.
+  final String contentIdentity;
   final int sector;
   final String worldName;
   final int gridW;
@@ -392,6 +448,11 @@ class BoardRow {
 
   final LevelMetrics metrics;
   final LevelTopologyMetrics topo;
+
+  /// T0.1 tap-depth core quality, measured on the ENRICHED board — the
+  /// sequential quantity `CoreWaveRatio` was standing in for. Evidence only
+  /// at P0; the gates that read it live in `core_triviality_test.dart`.
+  final CoreMetrics core;
 
   final int cores;
   final int locks;
@@ -462,6 +523,23 @@ class BoardRow {
   /// Nodes per bounding-box cell — "how solid does the cluster read".
   double get bboxOccupancy => bboxCells == 0 ? 0 : nodes / bboxCells;
 
+  /// Coarse fill bucket — [bboxOccupancy] in quartiles, 0..3
+  /// (sparse / open / dense / solid). Deliberately blunt: the point of
+  /// [topologyClass] is that boards a player would call "the same kind of
+  /// shape" collapse onto one class.
+  ///
+  /// Quartiles were chosen by measurement, not taste — see
+  /// `docs/playtests/topology_class_calibration.md`, which also records why
+  /// this measure does **not** reproduce the 30/18/14 quoted in
+  /// `MASTER_PLAN_V2.md` and what that means for P2's DoD.
+  int get bboxFillBucket => (bboxOccupancy * 4).floor().clamp(0, 3);
+
+  /// The coarse perceptual shape class — `(components, enclosedHoles,
+  /// bboxFillBucket)`. Counting distinct values of this triple over a corpus
+  /// is the F4 measure.
+  String get topologyClass =>
+      '${composition.components}/${composition.enclosedHoles}/$bboxFillBucket';
+
   // ── re-measurement under alternative devices / fitters ───────────────────
 
   /// Cell edge this board would render at on [device] under [variant].
@@ -492,6 +570,7 @@ BoardRow measure(
   LevelData level, {
   required String label,
   required int levelId,
+  required DifficultyMode mode,
   required DifficultyProfile profile,
   required String directive,
   required int timeLimitSec,
@@ -533,6 +612,7 @@ BoardRow measure(
   return BoardRow(
     label: label,
     levelId: levelId,
+    contentIdentity: contentIdentityFor(levelId: levelId, mode: mode),
     sector: sector,
     worldName: worldName,
     gridW: level.gridWidth,
@@ -542,6 +622,7 @@ BoardRow measure(
     bboxH: bboxH,
     metrics: m,
     topo: topo,
+    core: CoreMetrics.compute(level),
     cores: level.nodes.where((n) => n.isCore).length,
     locks: level.nodes.where((n) => n.kind == NodeKind.locked).length,
     relays: level.nodes.where((n) => n.kind == NodeKind.relay).length,
@@ -585,6 +666,7 @@ List<BoardRow> runCampaignBatch({
       level,
       label: 'L$id',
       levelId: id,
+      mode: mode,
       profile: profile,
       directive: directiveFor(levelId: id, mode: mode).label,
       timeLimitSec: computeGameTimeLimit(mode, level.nodes.length, id) ?? 0,
@@ -631,6 +713,11 @@ void printRow(BoardRow r) {
     '| chokes=${m.chokePointCount} hub=${m.maxHubInDegree} '
     'antichain=${m.maxAntichainWidth} chainMax=${r.topo.chainDepthMax} '
     'fanout=${r.topo.avgUnlockFanout.toStringAsFixed(1)} '
+    '| topo=${r.topologyClass} '
+    'tapDepth=${r.core.coreTapDepth.toString().padLeft(2)} '
+    'tapFrac=${r.core.coreTapFraction.toStringAsFixed(2)} '
+    'coreCrit=${r.core.coreCriticalDepth} '
+    'cascade=${r.core.maxSingleTapCascade} '
     '| cores=${r.cores} lock=${r.locks} relay=${r.relays} '
     'phase=${r.phases} portal=${r.portals} '
     '| ${r.directive} t=${r.timeLimitSec}s inBand=${r.inBand ? "Y" : "n"} '
@@ -719,6 +806,23 @@ void printSummary(String label, List<BoardRow> rows, List<int> failures) {
     _Stat('antichain', [
       for (final r in rows) r.metrics.maxAntichainWidth.toDouble()
     ]),
+    _Stat('components', [
+      for (final r in rows) r.composition.components.toDouble()
+    ]),
+    _Stat('enclosedHoles', [
+      for (final r in rows) r.composition.enclosedHoles.toDouble()
+    ]),
+    _Stat('coreTapDepth', [
+      for (final r in rows) r.core.coreTapDepth.toDouble()
+    ]),
+    _Stat('coreTapFrac', [for (final r in rows) r.core.coreTapFraction]),
+    _Stat('coreIsolation', [for (final r in rows) r.core.coreIsolation]),
+    _Stat('coreCritDepth', [
+      for (final r in rows) r.core.coreCriticalDepth.toDouble()
+    ]),
+    _Stat('tapCascade', [
+      for (final r in rows) r.core.maxSingleTapCascade.toDouble()
+    ]),
     _Stat('timeLimitSec', [for (final r in rows) r.timeLimitSec.toDouble()]),
     _Stat('genMs', [for (final r in rows) r.genMs.toDouble()]),
   ];
@@ -767,6 +871,23 @@ void printSummary(String label, List<BoardRow> rows, List<int> failures) {
       [20, 30, 40, 50, 60, 70]);
   _histBucket(
       'FSR %', rows, (r) => r.metrics.forcedSequenceRatio * 100, [30, 40, 50, 60, 70]);
+
+  _histBucket('core tap depth', rows, (r) => r.core.coreTapDepth.toDouble(),
+      [3, 5, 7, 9, 12, 15, 20]);
+  _histBucket('core tap fraction', rows, (r) => r.core.coreTapFraction,
+      [0.15, 0.25, 0.35, 0.5, 0.65, 0.8]);
+
+  // F4 headline: how many coarse shape classes did this corpus actually
+  // produce? Diagnostic only — the gate lives elsewhere.
+  final classCounts = <String, int>{};
+  for (final r in rows) {
+    classCounts[r.topologyClass] = (classCounts[r.topologyClass] ?? 0) + 1;
+  }
+  final ranked = classCounts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  print('  topology classes: ${ranked.length} distinct '
+      '(components/enclosedHoles/fillBucket)');
+  print('    commonest: ${ranked.take(5).map((e) => "${e.key}=${e.value}").join("  ")}');
 
   final slow = List<BoardRow>.from(rows)
     ..sort((a, b) => b.genMs.compareTo(a.genMs));
@@ -877,18 +998,24 @@ void writeCsv(String path, List<BoardRow> rows) {
   final f = File(path);
   f.parent.createSync(recursive: true);
   final b = StringBuffer()
-    ..writeln('label,levelId,sector,world,gridW,gridH,gridCells,maskCells,'
+    ..write(kCorpusVersionHeader)
+    ..writeln('label,levelId,contentIdentity,sector,world,gridW,gridH,'
+        'gridCells,maskCells,'
         'nodes,screenEmptyPct,boardCoverPct,cellPx,tapPx,spritePx,'
         'canvasEmptyPct,gridEmptyPct,bboxW,bboxH,bboxEmptyPct,bboxOccupancy,'
         'emptyRowRun,emptyColRun,emptyRegion,isolatedNodes,meanLocalDensity,'
+        'components,enclosedHoles,topologyClass,'
         'opening,waveZero,waves,cud,fsrPct,bf,frontierVar,paths,pathsCapped,'
         'effort,chokes,maxHub,antichain,chainDepthMax,avgFanout,'
+        'coreTapDepth,coreTapFraction,coreIsolation,maxSingleTapCascade,'
+        'coreCriticalDepth,'
         'cores,locks,relays,phases,portals,directive,timeLimitSec,inBand,genMs');
   for (final r in rows) {
     final m = r.metrics;
     b.writeln([
       r.label,
       r.levelId,
+      r.contentIdentity,
       r.sector,
       '"${r.worldName}"',
       r.gridW,
@@ -912,6 +1039,9 @@ void writeCsv(String path, List<BoardRow> rows) {
       r.composition.largestEmptyRegion,
       r.composition.isolatedNodeCount,
       r.composition.meanLocalDensity.toStringAsFixed(3),
+      r.composition.components,
+      r.composition.enclosedHoles,
+      r.topologyClass,
       m.firstLegalMoveCount,
       m.waveZeroWidth,
       m.waveDepth,
@@ -927,6 +1057,11 @@ void writeCsv(String path, List<BoardRow> rows) {
       m.maxAntichainWidth,
       r.topo.chainDepthMax,
       r.topo.avgUnlockFanout.toStringAsFixed(2),
+      r.core.coreTapDepth,
+      r.core.coreTapFraction.toStringAsFixed(3),
+      r.core.coreIsolation.toStringAsFixed(3),
+      r.core.maxSingleTapCascade,
+      r.core.coreCriticalDepth,
       r.cores,
       r.locks,
       r.relays,

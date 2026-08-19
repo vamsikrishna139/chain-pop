@@ -1,3 +1,6 @@
+@Tags(['report'])
+library;
+
 import 'dart:math';
 
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';

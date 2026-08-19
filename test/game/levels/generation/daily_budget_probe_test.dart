@@ -4,6 +4,9 @@
 //   flutter test test/game/levels/generation/daily_budget_probe_test.dart
 // ignore_for_file: avoid_print
 
+@Tags(['report'])
+library;
+
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -3,6 +3,9 @@
 //   flutter test test/game/levels/generation/report_hard_100_test.dart
 // ignore_for_file: avoid_print
 
+@Tags(['report'])
+library;
+
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:flutter_test/flutter_test.dart';

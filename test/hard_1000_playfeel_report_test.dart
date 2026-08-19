@@ -3,6 +3,9 @@
 // and how much of each board is a free-tap mop-up.
 // ignore_for_file: avoid_print
 
+@Tags(['report'])
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';

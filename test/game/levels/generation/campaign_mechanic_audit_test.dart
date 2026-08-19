@@ -53,7 +53,7 @@ void main() {
         }
       }
     }
-  });
+  }, tags: 'slow');
 
   test('Medium campaign variable core-count regression guard', () {
     final gen = LevelGenerator(enableDiversityGating: false);

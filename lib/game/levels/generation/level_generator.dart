@@ -11,6 +11,7 @@ import 'difficulty_profile.dart';
 import 'director.dart';
 import 'diversity_ledger.dart';
 import 'generation_error.dart';
+import 'generation_version.dart';
 import 'difficulty_parameters.dart';
 import 'level_configuration.dart';
 import 'level_validator.dart';
@@ -60,9 +61,18 @@ class LevelGenerator {
   final SilhouetteSessionTracker _silhouetteSessionTracker;
 
   /// When false, the diversity ledger never rejects a candidate (it is still
-  /// updated for telemetry). Set to false in tests that expect strict
-  /// determinism across multiple `generate()` calls on the same generator;
-  /// production callers should leave it at the default `true`.
+  /// updated for telemetry). Production callers should leave it at the
+  /// default `true`.
+  ///
+  /// **This does NOT make a shared generator deterministic**, despite what
+  /// this comment used to claim. The flag is honoured in exactly one place —
+  /// the `isNovel` check in the K-loop — while `_silhouetteSessionTracker`
+  /// keeps scoring candidates by `streakPenalty`/`diversityBoost` regardless,
+  /// so two `generate(id)` calls on the same instance can still diverge.
+  ///
+  /// For byte-identity, construct a fresh [LevelGenerator.neutral] per call.
+  /// See the T0.0b probes in
+  /// `test/game/levels/generation/determinism_contract_test.dart`.
   final bool enableDiversityGating;
 
   /// Phase 6 §9 — analytics sink. Defaults to a no-op so the
@@ -137,6 +147,29 @@ class LevelGenerator {
         _silhouetteSessionTracker =
             silhouetteSessionTracker ?? SilhouetteSessionTracker(),
         analyticsSink = analyticsSink ?? noopAnalyticsSink;
+
+  /// Named construction guaranteeing an empty ledger and silhouette
+  /// tracker, for tests and reproduction.
+  ///
+  /// Functionally equivalent to `LevelGenerator()` today, since the default
+  /// constructor also creates fresh session state when none is injected. It
+  /// exists so byte-identity call sites *declare* that they depend on neutral
+  /// state rather than relying on that default staying true.
+  factory LevelGenerator.neutral({
+    LevelValidator? validator,
+    Director? director,
+    bool enableDiversityGating = true,
+    GenerationAnalyticsSink? analyticsSink,
+  }) {
+    return LevelGenerator(
+      validator: validator,
+      director: director,
+      diversityLedger: DiversityLedger(),
+      silhouetteSessionTracker: SilhouetteSessionTracker(),
+      enableDiversityGating: enableDiversityGating,
+      analyticsSink: analyticsSink,
+    );
+  }
 
   /// Index (0=0.72, 1=0.45, 2=0.25) from the most recent successful retrograde build.
   int? get lastWinningBlockingRetryIndex => _lastWinningBlockingRetryIndex;
@@ -349,6 +382,11 @@ class LevelGenerator {
     Duration? timeBudget,
     bool allowMechanicShortFallback = false,
   }) {
+    // T0.0c: fold generationVersion into seed derivation (identity at v1)
+    if (kGenerationVersion > 1) {
+      primarySeed = primarySeed ^ ((kGenerationVersion - 1) * 73856093);
+    }
+
     final validation = config.validate();
     if (!validation.isValid) {
       return Result.error(
@@ -846,6 +884,7 @@ class LevelGenerator {
       _retrogradeSuccessCount++;
       _diversityLedger.record(best.fingerprint);
       _recordEmissionTelemetry(
+        config: config,
         plan: best.plan,
         level: best.result.value,
         metrics: best.metrics,
@@ -881,6 +920,7 @@ class LevelGenerator {
       _retrogradeSuccessCount++;
       _diversityLedger.record(novelOutOfBandFp!);
       _recordEmissionTelemetry(
+        config: config,
         plan: novelOutOfBandPlan!,
         level: novelOutOfBand.value,
         metrics: novelOutOfBandMetrics!,
@@ -914,6 +954,7 @@ class LevelGenerator {
       _retrogradeSuccessCount++;
       _diversityLedger.record(nonNovelFp!);
       _recordEmissionTelemetry(
+        config: config,
         plan: nonNovelPlan!,
         level: nonNovelFallback.value,
         metrics: nonNovelMetrics!,
@@ -936,6 +977,7 @@ class LevelGenerator {
   /// Stages an emission record. Counters + analytics fire only when the
   /// outer caller commits via [_commitPendingEmission].
   void _recordEmissionTelemetry({
+    required LevelConfiguration config,
     required GenerationPlan plan,
     required LevelData level,
     required LevelMetrics metrics,
@@ -944,6 +986,7 @@ class LevelGenerator {
     required bool novel,
     required LevelSeed? seed,
     required int renegotiations,
+    String recipeId = 'neutral',
     List<MotifId> visibleMotifs = const [],
     ConstructionTelemetry construction = ConstructionTelemetry.zero,
   }) {
@@ -961,6 +1004,11 @@ class LevelGenerator {
       construction: construction,
       event: buildEmissionEvent(
         level: level,
+        contentIdentity: contentIdentityFor(
+          levelId: level.levelId,
+          mode: config.difficulty.mode,
+          recipeId: recipeId,
+        ),
         archetype: plan.archetype,
         silhouette: plan.silhouette,
         seed: seed,

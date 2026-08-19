@@ -6,6 +6,9 @@
 // emitted board used, via a recording SilhouetteSessionTracker.
 // ignore_for_file: avoid_print
 
+@Tags(['report'])
+library;
+
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
@@ -74,6 +77,7 @@ void _runMode({
       level,
       label: 'L$id',
       levelId: id,
+      mode: mode,
       profile: profile,
       directive: directiveFor(levelId: id, mode: mode).label,
       timeLimitSec: computeGameTimeLimit(mode, level.nodes.length, id) ?? 0,

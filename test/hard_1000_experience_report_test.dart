@@ -2,6 +2,9 @@
 // 1000 Hard campaign levels. Not production code, not an assertion suite.
 // ignore_for_file: avoid_print
 
+@Tags(['report'])
+library;
+
 import 'dart:io';
 import 'dart:math';
 

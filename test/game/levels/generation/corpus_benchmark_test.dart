@@ -34,7 +34,7 @@ void main() {
       // Dense Strategy Phase 1C: Hard silhouette bias demotes Archipelago and
       // Organic Blob, so we no longer expect non-zero counts for all families.
       _runSequentialCorpusHard(levels: 500, expectArchipelago: false);
-    });
+    }, tags: 'slow');
   });
 
   group('Milestone telemetry seed annotations', () {
@@ -135,6 +135,8 @@ void _runSequentialCorpusHard({
     expect(macros[SilhouetteVisualFamily.corridor], greaterThan(0));
     expect(macros[SilhouetteVisualFamily.organic], greaterThan(0));
   }
+
+  printCorpusVersionBanner('CORPUS BENCHMARK');
 
   // ignore: avoid_print
   print('Silhouette histogram (counts): ${_pretty(ids)}');

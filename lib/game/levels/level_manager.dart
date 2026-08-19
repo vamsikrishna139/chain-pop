@@ -9,7 +9,7 @@ import 'generation/generation.dart';
 /// The manager resolves generation results and always returns a valid
 /// [LevelData] — either the generated level or a safe fallback.
 class LevelManager {
-  static final LevelGenerator _generator = LevelGenerator();
+  static LevelGenerator generator = LevelGenerator();
 
   /// Latency budget for on-load campaign generation. A small tail of seeds
   /// otherwise burn the full attempt budget (~1s) chasing the ideal
@@ -36,7 +36,7 @@ class LevelManager {
   /// fails for any reason (e.g. invalid configuration), a guaranteed-solvable
   /// fallback is returned rather than throwing.
   static LevelData getLevel(int levelId, {DifficultyMode? mode}) {
-    final result = _generator.generate(
+    final result = generator.generate(
       levelId,
       mode: mode,
       timeBudget: generationBudget,
@@ -60,7 +60,7 @@ class LevelManager {
   static LevelData getDailyChallenge([DateTime? date]) {
     final when = date ?? DateTime.now();
     final dayKey = DailyChallenge.dateKeyLocal(when);
-    final result = _generator.generateDailyChallenge(
+    final result = generator.generateDailyChallenge(
       dayKey,
       timeBudget: dailyGenerationBudget,
     );

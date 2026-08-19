@@ -24,6 +24,9 @@ class GenerationEmissionEvent {
   /// Stable id for the emitted level (the [LevelData.levelId]).
   final int levelId;
 
+  /// T0.0c Content Identity: '$levelId/$mode/v$generationVersion/$recipeId'
+  final String contentIdentity;
+
   /// Archetype that produced this level.
   final GenerationArchetype archetype;
 
@@ -72,6 +75,7 @@ class GenerationEmissionEvent {
 
   const GenerationEmissionEvent({
     required this.levelId,
+    required this.contentIdentity,
     required this.archetype,
     required this.silhouette,
     required this.seedId,
@@ -98,6 +102,7 @@ class GenerationEmissionEvent {
   /// Analytics, Amplitude, an in-process collector, etc.).
   Map<String, Object?> toMap() => <String, Object?>{
         'levelId': levelId,
+        'contentIdentity': contentIdentity,
         'archetype': archetype.name,
         'silhouette': silhouette.name,
         'seedId': seedId,
@@ -307,6 +312,7 @@ class InMemoryAnalyticsSink implements GenerationAnalyticsSink {
 /// formatting details.
 GenerationEmissionEvent buildEmissionEvent({
   required LevelData level,
+  required String contentIdentity,
   required GenerationArchetype archetype,
   required SilhouetteId silhouette,
   required LevelSeed? seed,
@@ -327,6 +333,7 @@ GenerationEmissionEvent buildEmissionEvent({
   final lockCluster = visibleMotifs.contains(MotifId.lockCluster);
   return GenerationEmissionEvent(
     levelId: level.levelId,
+    contentIdentity: contentIdentity,
     archetype: archetype,
     silhouette: silhouette,
     seedId: seed?.id,
