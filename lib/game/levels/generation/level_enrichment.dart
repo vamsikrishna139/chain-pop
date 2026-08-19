@@ -376,6 +376,42 @@ List<NodeData> _markSpecialNodes(
         )
         .toList()
       ..shuffle(rng);
+    if (candidates.length < budget.lockCount) {
+      // Dense silhouettes (rectangle, diamond) starve the interior-only rule
+      // *structurally*, not by chance: the constructor seeds its frontier from
+      // the silhouette's boundary and every later placement lands next to an
+      // already-placed cell, so on a solid mask each node except the very
+      // first has a higher-id orthogonal neighbour — and that first node sits
+      // on the boundary, where [_hasFourNeighbors] rejects it. The pool is
+      // then empty on *every* attempt, so retrying cannot help: milestone
+      // slots on those silhouettes could never seat their lock budget and
+      // burned all 40 seeded attempts before silently shipping an ordinary
+      // procedural board (see `milestone_seeds.dart`, L150/L725).
+      //
+      // Top up from a relaxed pool that keeps the part of the rule that
+      // matters — every occupied orthogonal neighbour must pop first, so the
+      // canonical id-order solution still clears the board — and drops only
+      // the geometric "interior cell" requirement, in exchange for demanding
+      // that the lock actually *starts* locked (≥ 1 occupied neighbour). A
+      // boundary node with three neighbours is a real lock; an interior node
+      // with none is the decorative case the old rule already allowed.
+      //
+      // Appended after the strict pool, so any board that can satisfy the
+      // strict rule picks exactly what it picked before.
+      final strictIds = {for (final n in candidates) n.id};
+      candidates.addAll(
+        result
+            .where(
+              (n) =>
+                  n.kind == NodeKind.normal &&
+                  !n.isCore &&
+                  !strictIds.contains(n.id) &&
+                  _canSafelyLockRelaxed(n, result),
+            )
+            .toList()
+          ..shuffle(rng),
+      );
+    }
     final lockedIds =
         candidates.take(budget.lockCount).map((n) => n.id).toSet();
     result = [
@@ -600,16 +636,37 @@ List<int> _rayCellKeys(NodeData n, LevelData level) {
 
 bool _canSafelyLock(NodeData node, List<NodeData> nodes, LevelData level) {
   if (!_hasFourNeighbors(node, level)) return false;
+  return _neighboursAllPopFirst(node, nodes).canLock;
+}
+
+/// Boundary-tolerant variant of [_canSafelyLock] used only to top up a starved
+/// lock pool: same id-order safety, but the node may sit on the grid edge and
+/// must have at least one occupied orthogonal neighbour so the lock is live at
+/// the start of the level rather than decorative.
+bool _canSafelyLockRelaxed(NodeData node, List<NodeData> nodes) {
+  final (:canLock, :neighbourCount) = _neighboursAllPopFirst(node, nodes);
+  return canLock && neighbourCount > 0;
+}
+
+/// Whether every node orthogonally adjacent to [node] is removed before it in
+/// the canonical id order — the condition that keeps a locked node clearable —
+/// plus how many such neighbours there are.
+({bool canLock, int neighbourCount}) _neighboursAllPopFirst(
+  NodeData node,
+  List<NodeData> nodes,
+) {
+  var neighbourCount = 0;
   for (final (dx, dy) in [(0, -1), (0, 1), (-1, 0), (1, 0)]) {
     final nx = node.x + dx;
     final ny = node.y + dy;
     for (final other in nodes) {
-      if (other.x == nx && other.y == ny && other.id >= node.id) {
-        return false;
+      if (other.x == nx && other.y == ny) {
+        if (other.id >= node.id) return (canLock: false, neighbourCount: 0);
+        neighbourCount++;
       }
     }
   }
-  return true;
+  return (canLock: true, neighbourCount: neighbourCount);
 }
 
 bool _hasFourNeighbors(NodeData node, LevelData level) {
