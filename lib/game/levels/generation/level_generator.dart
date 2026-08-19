@@ -397,13 +397,36 @@ class LevelGenerator {
           }
         }
         final seedSalt = seed.seedRng ?? 0;
+        // Latency bound for the seeded path. Kept on its own stopwatch rather
+        // than shared with the main pipeline below: it must not hand the
+        // fall-through pipeline a clock that is already spent (that regressed
+        // deadlock_test — the regular path then starts over budget and
+        // exhausts its attempts). It only ever *shortens* the seeded search,
+        // and only once there is a retained board to ship.
+        final seedWatch = timeBudget != null ? (Stopwatch()..start()) : null;
+        /// Valid + solvable seeded board that could not seat the level's full
+        /// lock/relay budget. Shipping it keeps the milestone's pinned identity
+        /// (silhouette, archetype, telemetry seed id); the alternative —
+        /// falling through to the procedural pipeline — silently turns the
+        /// milestone into an ordinary board, which is how L150 stopped
+        /// emitting as `milestone-overload`.
+        LevelData? seedMechanicShort;
+        _PendingDirectorEmission? seedMechanicShortEmission;
         for (int i = 0; i < maxAttempts; i++) {
+          if (seedWatch != null &&
+              seedMechanicShort != null &&
+              seedWatch.elapsed >= timeBudget!) {
+            break;
+          }
           final rng = Random(primarySeed * 31337 + seedSalt + i);
           final seedResult = _attemptDirectorDrivenGeneration(
             seedConfig,
             rng,
             targetTier: targetTier,
             seed: seed,
+            overBudget: seedWatch == null
+                ? null
+                : () => seedWatch.elapsed >= timeBudget!,
           );
           if (seedResult.isSuccess) {
             final enriched = _enrichLevel(
@@ -422,6 +445,14 @@ class LevelGenerator {
                   enriched.nodes.where((n) => n.kind == NodeKind.relay).length;
               if (lockCount < budget.lockCount ||
                   relayCount < budget.relayCount) {
+                // Retry while there are attempts left — a board that seats the
+                // full budget is the better milestone — but retain this one so
+                // exhaustion ships the *seed* rather than dropping to the
+                // procedural pipeline.
+                if (seedMechanicShort == null) {
+                  seedMechanicShort = enriched;
+                  seedMechanicShortEmission = _pendingEmission;
+                }
                 _discardPendingEmission();
                 continue;
               }
@@ -434,8 +465,19 @@ class LevelGenerator {
             }
           }
         }
-        // Seed path failed (e.g. silhouette starvation on a tiny grid):
-        // fall through to the regular pipeline so the level still ships.
+        // Attempts exhausted (or the latency budget ran out) with no board
+        // that seated the full mechanic budget. Ship the retained seeded board
+        // if there is one: a milestone that is one lock short still reads as
+        // the milestone, whereas a procedural board does not.
+        if (seedMechanicShort != null) {
+          _seedEmissionCounts[seed.id] = (_seedEmissionCounts[seed.id] ?? 0) + 1;
+          _assertGeneratedLayout(seedMechanicShort);
+          _pendingEmission = seedMechanicShortEmission;
+          _commitPendingEmission();
+          return Result.success(seedMechanicShort);
+        }
+        // Seed path failed outright (e.g. silhouette starvation on a tiny
+        // grid): fall through to the regular pipeline so the level still ships.
         _discardPendingEmission();
       }
     }
@@ -454,13 +496,11 @@ class LevelGenerator {
     // wave-band *preference* — solvability/layout are still enforced. Off by
     // default → behaviour is byte-identical for the generation test suites.
     //
-    // NOTE: this clock deliberately does NOT cover the seeded path above. That
-    // path is unbounded, and a seed with a high pinned node count can send it
-    // into a multi-minute search (see milestone_seeds.dart). Extending this
-    // watch to cover it was tried and regressed deadlock_test — the regular
-    // pipeline then starts already over budget and exhausts its attempts.
-    // Bounding the seeded path needs a deadline inside the Director, not a
-    // shared stopwatch here.
+    // NOTE: this clock deliberately does NOT cover the seeded path above —
+    // sharing it regressed deadlock_test, because the regular pipeline then
+    // starts already over budget and exhausts its attempts. The seeded path
+    // runs the same [timeBudget] on its own stopwatch instead, so a fall-
+    // through arrives here with a full clock.
     final budgetWatch = timeBudget != null ? (Stopwatch()..start()) : null;
     /// Valid + solvable, but missed the ideal removal-wave band.
     LevelData? budgetFallback;
