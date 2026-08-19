@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import '../../theme/app_colors.dart';
 import '../daily_challenge.dart';
 import 'level.dart';
@@ -57,9 +59,61 @@ class LevelManager {
 
   /// One solvable board per local calendar day; same layout for every player
   /// on that date. Star progress uses [StorageService.saveDailyStars].
+  ///
+  /// **Prefer [getDailyChallengeAsync] from UI code.** This runs on the calling
+  /// isolate, and [dailyGenerationBudget] cannot preempt a single retrograde
+  /// construction — so on a pathological date key it blocks for seconds. Called
+  /// from a tap handler that is exactly an ANR. See [getDailyChallengeAsync].
   static LevelData getDailyChallenge([DateTime? date]) {
     final when = date ?? DateTime.now();
+    return _generateDaily(DailyChallenge.dateKeyLocal(when));
+  }
+
+  /// [getDailyChallenge] off the calling isolate.
+  ///
+  /// **Why this exists.** `dailyGenerationBudget` is a `Stopwatch` living
+  /// *outside* the retrograde constructor, so it bounds outer attempts but
+  /// cannot interrupt one construction once started. Measured on key
+  /// `20260819`: 4.3 s at a 200 ms budget and 4.4 s at 400 ms — identical, and
+  /// only three attempts, so the whole cost is inside a single construction.
+  /// On a Pixel 8a that produced a real ANR:
+  ///
+  /// ```
+  /// am_anr: com.adbkv.chainpop — Input dispatching timed out
+  ///         (MainActivity is not responding. Waited 5001ms for MotionEvent)
+  /// ```
+  ///
+  /// Moving the work to a worker isolate fixes the freeze for *every* date
+  /// without touching generation itself, and stays correct when the in-
+  /// constructor deadline is eventually added — that work makes this faster,
+  /// not redundant, because a 400 ms main-thread block is still a dropped
+  /// frame budget.
+  ///
+  /// **A second bug this closes.** [generator] is static, so the synchronous
+  /// path generates the Daily from whatever session state campaign play left in
+  /// the diversity ledger and silhouette tracker. Those are *inputs* (see the
+  /// T0.0a closure audit), so the Daily was never actually "the same layout for
+  /// every player on that date" — it depended on how much the player had
+  /// played first. A worker isolate starts from fresh statics, which makes the
+  /// board a pure function of `dayKey` and the doc comment above true. Today's
+  /// board for a given date may therefore differ from the previous build's;
+  /// nothing is keyed to board bytes (stars are stored per `dayKey`), so this
+  /// is a one-time, invisible shift.
+  ///
+  /// Falls back to generating in place if the isolate cannot be spawned, so a
+  /// platform without isolate support degrades to the old behaviour rather than
+  /// to no Daily at all.
+  static Future<LevelData> getDailyChallengeAsync([DateTime? date]) async {
+    final when = date ?? DateTime.now();
     final dayKey = DailyChallenge.dateKeyLocal(when);
+    try {
+      return await Isolate.run(() => _generateDaily(dayKey));
+    } catch (_) {
+      return _generateDaily(dayKey);
+    }
+  }
+
+  static LevelData _generateDaily(int dayKey) {
     final result = generator.generateDailyChallenge(
       dayKey,
       timeBudget: dailyGenerationBudget,

@@ -2,7 +2,6 @@
 // on-device play. Driven by --dart-define=SOLVE_SPEC="mode:id,mode:id,…".
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chain_pop/game/daily_challenge.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_manager.dart';

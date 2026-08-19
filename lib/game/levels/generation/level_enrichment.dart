@@ -43,6 +43,100 @@ const double _kCoreBandHi = 0.65;
 const double _kCoreBandLoRelaxed = 0.25;
 const double _kCoreBandHiRelaxed = 0.78;
 
+/// Which of `_climaxBandCoreIds`'s escape hatches actually produced the cores.
+///
+/// T0.4's optional telemetry, and the only part of it that touches `lib/`.
+/// **Inert by default and behaviour-free**: nothing here is read by generation,
+/// no RNG is drawn, and with [CoreSelectionTelemetry.sink] null (its production
+/// value) the only cost is a handful of integer increments.
+///
+/// It exists because T1.2 has to choose where to put a quality floor, and T1.3's
+/// balance note asks for the relaxation rate before tuning further. Without it
+/// both are designed blind to how often the hatches actually fire — a board
+/// whose cores came from `legacyFallback` was never in the climax band at all,
+/// and no amount of band tuning will help it.
+enum CoreSelectionPath {
+  /// Pass 1 alone: one core drawn from each third of the strict band, giving
+  /// the intended reach-1 -> reach-2 -> climax arc.
+  strictBandArc,
+
+  /// Pass 2: topped up from the full strict band after the arc came up short.
+  strictBandTopUp,
+
+  /// Pass 3: the widened band. The first real signal that the strict band is
+  /// too narrow for this board.
+  relaxedBand,
+
+  /// No wave depth at all — every node exits immediately, so percentile bands
+  /// are meaningless and the original last-popped behaviour stands.
+  legacyNoWaveDepth,
+
+  /// Every band failed and the selection fell back to the highest-id
+  /// (last-popped) nodes. This is F1 in its purest form: the cores *are* the
+  /// end of the board.
+  legacyFallback,
+}
+
+/// One core-selection decision, as reported to [CoreSelectionTelemetry.sink].
+class CoreSelectionRecord {
+  const CoreSelectionRecord({
+    required this.levelId,
+    required this.mode,
+    required this.path,
+    required this.requested,
+    required this.selected,
+    required this.fromStrictBand,
+    required this.fromRelaxedBand,
+    required this.coreIds,
+  });
+
+  final int levelId;
+  final DifficultyMode mode;
+
+  /// The furthest hatch that had to be reached.
+  final CoreSelectionPath path;
+
+  /// `budget.coreCount` for this level.
+  final int requested;
+
+  /// Cores actually marked.
+  final int selected;
+
+  /// Picks that came from the strict `[0.35, 0.65]` band (passes 1 and 2).
+  final int fromStrictBand;
+
+  /// Additional picks that needed the widened `[0.25, 0.78]` band.
+  final int fromRelaxedBand;
+
+  /// The chosen core ids, ascending.
+  ///
+  /// `enrichLevel` runs once per *candidate*, not once per emitted board, so a
+  /// single `generate` call produces several records and only one of them
+  /// describes the level that shipped. Carrying the ids lets an offline harness
+  /// identify that one by matching against the emitted board's cores, instead
+  /// of guessing that the last record wins — which is false whenever the
+  /// generator prefers an earlier candidate.
+  final List<int> coreIds;
+
+  @override
+  String toString() => 'L$levelId/${mode.name} ${path.name} '
+      '$selected/$requested strict=$fromStrictBand relaxed=$fromRelaxedBand';
+}
+
+/// Opt-in sink for [CoreSelectionRecord]s. Null in production and in every test
+/// that does not explicitly set it; set it, run a batch, and clear it.
+///
+/// Deliberately not an analytics event: this is offline instrumentation for the
+/// corpus harness, and routing it through the analytics sink would put it on a
+/// path that ships.
+class CoreSelectionTelemetry {
+  CoreSelectionTelemetry._();
+
+  static void Function(CoreSelectionRecord record)? sink;
+
+  static void _emit(CoreSelectionRecord record) => sink?.call(record);
+}
+
 /// Rebuilds a [LevelData] with [nodes] but [level]'s geometry — used to query
 /// the solver against a working node list.
 LevelData _withNodes(LevelData level, List<NodeData> nodes) => LevelData(
@@ -75,16 +169,59 @@ List<NodeData> _markCoreNodes(
 
   // No wave depth (every node exits immediately) ⇒ percentile bands are
   // meaningless; keep the original last-node behaviour.
-  var coreIds = maxWave <= 0
-      ? _legacyCoreIds(nodes, budget.coreCount)
-      : _climaxBandCoreIds(nodes, probe, waves, maxWave, budget.coreCount);
+  _BandSelection selection;
+  if (maxWave <= 0) {
+    selection = _BandSelection(
+      ids: _legacyCoreIds(nodes, budget.coreCount),
+      path: CoreSelectionPath.legacyNoWaveDepth,
+    );
+  } else {
+    selection =
+        _climaxBandCoreIds(nodes, probe, waves, maxWave, budget.coreCount);
+  }
+  var coreIds = selection.ids;
   if (coreIds.length < budget.coreCount) {
     coreIds = _legacyCoreIds(nodes, budget.coreCount);
+    selection = _BandSelection(
+      ids: coreIds,
+      path: CoreSelectionPath.legacyFallback,
+    );
   }
+
+  CoreSelectionTelemetry._emit(
+    CoreSelectionRecord(
+      levelId: level.levelId,
+      mode: mode,
+      path: selection.path,
+      requested: budget.coreCount,
+      selected: coreIds.length,
+      fromStrictBand: selection.fromStrictBand,
+      fromRelaxedBand: selection.fromRelaxedBand,
+      coreIds: coreIds.toList()..sort(),
+    ),
+  );
 
   return [
     for (final n in nodes) n.copyWith(isCore: coreIds.contains(n.id)),
   ];
+}
+
+/// A core selection plus the provenance [CoreSelectionTelemetry] reports.
+/// Carrying it in a record rather than out-params keeps `_markCoreNodes` a
+/// single expression per branch, so the telemetry cannot drift out of step with
+/// the selection it describes.
+class _BandSelection {
+  const _BandSelection({
+    required this.ids,
+    required this.path,
+    this.fromStrictBand = 0,
+    this.fromRelaxedBand = 0,
+  });
+
+  final Set<int> ids;
+  final CoreSelectionPath path;
+  final int fromStrictBand;
+  final int fromRelaxedBand;
 }
 
 /// Picks up to three guarded, mid-route, spread-out, central nodes as cores by
@@ -92,7 +229,7 @@ List<NodeData> _markCoreNodes(
 /// possible (a reach-1 → reach-2 → climax arc), then the selection tops up from
 /// the whole band and, if still short, a widened band. Fully deterministic — no
 /// RNG, a pure function of [probe].
-Set<int> _climaxBandCoreIds(
+_BandSelection _climaxBandCoreIds(
   List<NodeData> nodes,
   LevelData probe,
   Map<int, int> waves,
@@ -149,6 +286,8 @@ Set<int> _climaxBandCoreIds(
       }
     }
   }
+  final afterArc = picks.length;
+
   // Pass 2: top up from the full strict band.
   if (picks.length < count) {
     for (final n in qualifying(_kCoreBandLo, _kCoreBandHi)) {
@@ -157,6 +296,8 @@ Set<int> _climaxBandCoreIds(
       if (spreadOk(n)) picks.add(n);
     }
   }
+  final afterStrictBand = picks.length;
+
   // Pass 3: relax the band once before giving up to the legacy fallback.
   if (picks.length < count) {
     for (final n in qualifying(_kCoreBandLoRelaxed, _kCoreBandHiRelaxed)) {
@@ -166,12 +307,26 @@ Set<int> _climaxBandCoreIds(
     }
   }
 
-  if (picks.length >= count) return picks.take(count).map((n) => n.id).toSet();
+  if (picks.length >= count) {
+    return _BandSelection(
+      ids: picks.take(count).map((n) => n.id).toSet(),
+      path: picks.length > afterStrictBand
+          ? CoreSelectionPath.relaxedBand
+          : (afterArc >= count
+              ? CoreSelectionPath.strictBandArc
+              : CoreSelectionPath.strictBandTopUp),
+      fromStrictBand: afterStrictBand,
+      fromRelaxedBand: picks.length - afterStrictBand,
+    );
+  }
 
   picks.clear();
   final allCandidates = List<NodeData>.from(nodes);
   allCandidates.sort((a, b) => b.id.compareTo(a.id));
-  return allCandidates.take(count).map((n) => n.id).toSet();
+  return _BandSelection(
+    ids: allCandidates.take(count).map((n) => n.id).toSet(),
+    path: CoreSelectionPath.legacyFallback,
+  );
 }
 
 /// Original highest-id (last-popped) core picks. Retained only as the last-resort
