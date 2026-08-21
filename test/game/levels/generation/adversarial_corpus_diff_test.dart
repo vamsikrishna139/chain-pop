@@ -27,7 +27,19 @@ import 'adversarial_corpus.dart';
 import 'adversarial_corpus_report.dart';
 import 'corpus_version.dart';
 
-/// The archived capture to diff against. `genv1_pre_p1/` is pre-P1 Gen V1.
+/// The archived capture to diff against.
+///
+/// `genv1_pre_p1/` is pre-P1 Gen V1 and is the default because this file's job
+/// is P1's definition of done. The other archives are legitimate targets for a
+/// one-off comparison — `p1_final/` is the post-P1 / pre-P2-bundle capture, and
+/// diffing against it is how the P2 bundle's effect on tap depth was measured.
+///
+/// **The §e classification is only meaningful against `genv1_pre_p1/`.** It
+/// reports `violation` for any board whose geometry, solution or node count
+/// moved, because P1's contract was "cores only". P2 is a re-baselining event
+/// that moves geometry deliberately, so against `p1_final/` that column counts
+/// intended changes and means nothing. Read the tapsToWin and captureRate
+/// distributions instead.
 const String _kBeforeDir = 'docs/playtests/adversarial_baseline/genv1_pre_p1';
 
 const List<String> _kBaselineFiles = [

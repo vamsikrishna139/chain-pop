@@ -93,10 +93,26 @@ import 'package:chain_pop/game/levels/generation/generation_version.dart';
 /// ── Why this is a list and not a relaxed assertion ──────────────────────────
 ///
 /// Turning the drift check off would retire the instrument. Naming the boards
-/// keeps it: any board **not** in this set that ever moves is still a failure,
-/// and this set is expected to shrink to nothing rather than grow — P2's
-/// re-baselining will move geometry deliberately and wholesale, at which point
-/// the corpus is re-frozen and this list is deleted, not extended.
+/// keeps it: any board **not** in this set that ever moves is still a failure.
+///
+/// ── Status after P2's bundle, 2026-08-21: HISTORICAL ────────────────────────
+///
+/// This list said what should happen at this moment, before anyone knew what
+/// P2 would move: *"P2's re-baselining will move geometry deliberately and
+/// wholesale, at which point the corpus is re-frozen and this list is deleted,
+/// not extended."* It has not been extended, and its use as a live exemption
+/// is gone — `adversarial_corpus_baseline_test.dart` no longer consults it,
+/// having replaced the freeze-vs-measured drift check with a direct
+/// forward-vs-reverse order-independence sweep that needs no exemptions at all.
+///
+/// **It is not deleted, and that is a deliberate departure from the sentence
+/// above.** `adversarial_corpus_diff_test.dart` still reads it, and that file's
+/// job is to re-derive P1's definition of done against `genv1_pre_p1/` — the
+/// §e classification calls any geometry movement a VIOLATION, so without this
+/// list P1's published result stops being reproducible from the repository.
+/// Deleting it would destroy evidence to satisfy a note written before the
+/// diff harness existed. It is therefore **historical**: read by the P1 diff,
+/// consulted by no gate, and never to be extended for P2 or anything after it.
 ///
 /// Keyed `levelId/mode` to match `CorpusEntry.key`.
 const Set<String> kP1GeometryMovers = {

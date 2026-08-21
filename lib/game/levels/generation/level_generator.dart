@@ -106,6 +106,21 @@ class LevelGenerator {
   int _rejectSingletonCount = 0;
   int _rejectBlobVsGridCount = 0;
 
+  // ── Candidate telemetry (the bundle, per plan §T2.0) ──────────────────────
+  //
+  // The open question T2.1 raised and could not answer while it was parked:
+  // when repeated `generate(44)` stopped producing different boards, did the
+  // diversity ledger stop *influencing* selection, or did the generator stop
+  // *producing* eligible alternatives for it to choose between? Those have
+  // opposite fixes, and no counter in the session snapshot separated them.
+  //
+  // Write-only, like every counter here (T0.0c asserts as much): nothing reads
+  // these during generation, so they cannot move a board.
+  int _candidateCount = 0;
+  int _novelCandidateCount = 0;
+  int _acceptedNovelCandidateCount = 0;
+  final Map<String, int> _fallbackReasonCounts = <String, int>{};
+
   // Per-archetype emission counts, used by Phase 3's "distribution matches
   // §5 within ±3%" acceptance test.
   final Map<GenerationArchetype, int> _archetypeEmissionCounts = {
@@ -359,6 +374,10 @@ class LevelGenerator {
     _rejectComponentsCount = 0;
     _rejectSingletonCount = 0;
     _rejectBlobVsGridCount = 0;
+    _candidateCount = 0;
+    _novelCandidateCount = 0;
+    _acceptedNovelCandidateCount = 0;
+    _fallbackReasonCounts.clear();
     for (final a in GenerationArchetype.values) {
       _archetypeEmissionCounts[a] = 0;
     }
@@ -391,6 +410,29 @@ class LevelGenerator {
   /// discarded inside the K-loop and never reach a CSV.
   List<double> get visualScoresRejected =>
       List.unmodifiable(_visualScoresRejected);
+
+  /// Candidates that survived construction, the FSR cap and composition
+  /// admission, i.e. everything the diversity ledger was actually offered.
+  int get candidateCount => _candidateCount;
+
+  /// Of those, how many the ledger judged novel.
+  int get novelCandidateCount => _novelCandidateCount;
+
+  /// Of the novel ones, how many were retained as in-band candidates — the
+  /// pool the comparator then ranks.
+  int get acceptedNovelCandidateCount => _acceptedNovelCandidateCount;
+
+  /// Which exit path each shipped level took, by name. A generator whose
+  /// boards have stopped varying reads very differently here depending on the
+  /// cause: `in-band` with `candidateCount == 1` means nothing else was
+  /// produced; `in-band` with a healthy candidate count and
+  /// `novelCandidateCount == candidateCount` means the ledger saw plenty and
+  /// simply had no reason to prefer a different one.
+  Map<String, int> get fallbackReasonCounts =>
+      Map<String, int>.unmodifiable(_fallbackReasonCounts);
+
+  void _noteFallbackReason(String reason) =>
+      _fallbackReasonCounts[reason] = (_fallbackReasonCounts[reason] ?? 0) + 1;
 
   void _recordVisualScore(VisualCompositionResult visual,
       {required bool accepted}) {
@@ -956,6 +998,18 @@ class LevelGenerator {
     GenerationPlan? novelOutOfBandPlan;
     int novelOutOfBandRenegotiations = 0;
     ConstructionTelemetry? novelOutOfBandTelemetry;
+    // T2.4c — the composition score of each retained fallback.
+    //
+    // Before T2.4c, a candidate violating `components` / `singleton` /
+    // `occupancy` / `blobVsGrid` never reached these slots at all: it was
+    // discarded in the K-loop. Now it can, so "first one found" would let a
+    // badly-composed board become the shipped fallback where previously an
+    // error or a later attempt would have. Keeping the best-composed instead
+    // is what makes softening the rules safe on the paths that have no
+    // comparator — it is the same ranking decision the in-band pool gets, and
+    // without it T2.4c's p10 floor would be defended on the in-band path only.
+    double novelOutOfBandComposition = -1;
+    double nonNovelComposition = -1;
     Result<LevelData, GenerationError>? nonNovelFallback;
     LevelMetrics? nonNovelMetrics;
     LevelFingerprint? nonNovelFp;
@@ -1038,14 +1092,21 @@ class LevelGenerator {
       // the decision below is untouched, this only observes. T2.4b needs the
       // *rejected* distribution as much as the accepted one, and the generator
       // is the only place a rejected candidate is ever visible.
-      _recordVisualScore(visual, accepted: visual.passes);
+      // Recorded against "no rule failed", NOT against "was admitted".
+      // T2.4c widens admission; keeping the split on rule violation is what
+      // lets the accepted / rejected distributions in
+      // `docs/playtests/composition_calibration.md` stay the same measurement
+      // before and after the bundle.
+      _recordVisualScore(visual, accepted: visual.reason == null);
+      // Per-rule volumes likewise count violations, hard or soft, so the T2.4b
+      // reject-reason table remains a like-for-like series.
+      _incrementVisualRejectCounter(visual.reason);
       if (!visual.passes) {
         _evaluatorRejectionCount++;
-        _incrementVisualRejectCounter(visual.reason);
         continue;
       }
 
-      final inBand = evaluatorProfile.passes(metrics) && visual.passes;
+      final inBand = evaluatorProfile.passes(metrics) && !visual.softFailed;
       if (!inBand) {
         _evaluatorRejectionCount++;
         if (metrics.criticalUnlockDepth < cudFloor) {
@@ -1053,6 +1114,7 @@ class LevelGenerator {
         }
       }
 
+      _candidateCount++;
       final visible = _visibleMotifsIn(plan, level);
       final dominantMotif = visible.isEmpty ? MotifId.none : visible.first;
       final fingerprint = computeLevelFingerprint(
@@ -1063,18 +1125,29 @@ class LevelGenerator {
       );
       final novel =
           !enableDiversityGating || _diversityLedger.isNovel(fingerprint);
+      if (novel) _novelCandidateCount++;
       if (!novel) {
         _diversityRejectionCount++;
-        nonNovelFallback ??= once;
-        nonNovelPlan ??= plan;
-        nonNovelMetrics ??= metrics;
-        nonNovelFp ??= fingerprint;
-        nonNovelRenegotiations = renegotiationsForThisAttempt;
-        nonNovelTelemetry = runTelemetry ?? ConstructionTelemetry.zero;
+        // Strictly-better only, so the first candidate still wins ties and the
+        // pre-T2.4c "first found" behaviour is preserved whenever composition
+        // does not separate them. Note this also fixes an existing
+        // inconsistency: `renegotiations` and `telemetry` used `=` while the
+        // rest used `??=`, so they described a different candidate than the
+        // one retained. The whole record now updates together.
+        if (nonNovelFallback == null || visual.score > nonNovelComposition) {
+          nonNovelFallback = once;
+          nonNovelPlan = plan;
+          nonNovelMetrics = metrics;
+          nonNovelFp = fingerprint;
+          nonNovelRenegotiations = renegotiationsForThisAttempt;
+          nonNovelTelemetry = runTelemetry ?? ConstructionTelemetry.zero;
+          nonNovelComposition = visual.score;
+        }
         continue;
       }
 
       if (inBand) {
+        _acceptedNovelCandidateCount++;
         inBandCandidates.add(_InBandCandidate(
           result: once,
           plan: plan,
@@ -1083,15 +1156,19 @@ class LevelGenerator {
           visibleMotifs: visible,
           renegotiations: renegotiationsForThisAttempt,
           constructionTelemetry: runTelemetry ?? ConstructionTelemetry.zero,
+          compositionScore: visual.score,
         ));
         continue;
       }
-      novelOutOfBand ??= once;
-      novelOutOfBandFp ??= fingerprint;
-      novelOutOfBandMetrics ??= metrics;
-      novelOutOfBandPlan ??= plan;
-      novelOutOfBandRenegotiations = renegotiationsForThisAttempt;
-      novelOutOfBandTelemetry ??= runTelemetry ?? ConstructionTelemetry.zero;
+      if (novelOutOfBand == null || visual.score > novelOutOfBandComposition) {
+        novelOutOfBand = once;
+        novelOutOfBandFp = fingerprint;
+        novelOutOfBandMetrics = metrics;
+        novelOutOfBandPlan = plan;
+        novelOutOfBandRenegotiations = renegotiationsForThisAttempt;
+        novelOutOfBandTelemetry = runTelemetry ?? ConstructionTelemetry.zero;
+        novelOutOfBandComposition = visual.score;
+      }
     }
 
     if (inBandCandidates.isNotEmpty) {
@@ -1107,6 +1184,7 @@ class LevelGenerator {
       }
       _retrogradeInBandSuccessCount++;
       _retrogradeSuccessCount++;
+      _noteFallbackReason('in-band');
       _diversityLedger.record(best.fingerprint);
       _recordEmissionTelemetry(
         config: config,
@@ -1143,6 +1221,7 @@ class LevelGenerator {
       }
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
+      _noteFallbackReason('novel-out-of-band');
       _diversityLedger.record(novelOutOfBandFp!);
       _recordEmissionTelemetry(
         config: config,
@@ -1177,6 +1256,7 @@ class LevelGenerator {
       }
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
+      _noteFallbackReason('non-novel');
       _diversityLedger.record(nonNovelFp!);
       _recordEmissionTelemetry(
         config: config,
@@ -1192,6 +1272,7 @@ class LevelGenerator {
       );
       return nonNovelFallback;
     }
+    _noteFallbackReason('exhausted');
     return Result.error(
       GenerationError.noValidDirections(
         'Director exhausted retries; no candidate produced',
@@ -1275,6 +1356,7 @@ class LevelGenerator {
             visibleMotifs: c.visibleMotifs,
             renegotiations: c.renegotiations,
             constructionTelemetry: c.constructionTelemetry,
+            compositionScore: c.compositionScore,
           );
         }
       }
@@ -1290,6 +1372,23 @@ class LevelGenerator {
     final silhouetteScore =
         _silhouetteRankingScore(b).compareTo(_silhouetteRankingScore(a));
     if (silhouetteScore != 0) return silhouetteScore;
+
+    // T2.4c — composition, second only to silhouette diversity.
+    //
+    // Placed high on purpose. This is the term that replaces four hard
+    // rejections, and it can only do that job if a well-composed candidate
+    // still beats a scattered one when both exist; buried under the Hard
+    // metric keys it would almost never break a tie and softening the rules
+    // would be a pure loss of quality control.
+    //
+    // Banded rather than compared raw. The score is an unweighted mean of five
+    // continuous terms, so almost every pair separates by *something* at full
+    // precision — comparing raw would make composition the de-facto sole sort
+    // key and silently retire the tempo, CUD and topology ordering below.
+    // [kCompositionRankBand] is the granularity at which two boards genuinely
+    // look differently composed; inside one band the existing order decides.
+    final compositionBand = _compositionBand(b).compareTo(_compositionBand(a));
+    if (compositionBand != 0) return compositionBand;
 
     final profile = DifficultyProfile.forTier(tier);
     if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
@@ -1349,6 +1448,9 @@ class LevelGenerator {
     return b.metrics.firstLegalMoveCount
         .compareTo(a.metrics.firstLegalMoveCount);
   }
+
+  int _compositionBand(_InBandCandidate c) =>
+      (c.compositionScore / kCompositionRankBand).floor();
 
   double _spatialDensity(LevelData level) {
     final area = level.gridWidth * level.gridHeight;
@@ -2043,6 +2145,17 @@ class _PendingDirectorEmission {
   });
 }
 
+/// T2.4c — the granularity at which composition scores are treated as
+/// different when ranking in-band candidates.
+///
+/// 0.05 of a 0..1 unweighted mean of five terms, i.e. two candidates must
+/// differ by a quarter of a point on one rule (or a spread across several)
+/// before composition outranks tempo, CUD and topology. Chosen against the
+/// T2.4b distributions: shipped-vs-rejected p50 separation is 0.30 on Medium
+/// and 0.24 on Hard, so a real composition difference clears several bands
+/// while measurement-level jitter clears none.
+const double kCompositionRankBand = 0.05;
+
 class _InBandCandidate {
   final Result<LevelData, GenerationError> result;
   final GenerationPlan plan;
@@ -2052,6 +2165,9 @@ class _InBandCandidate {
   final int renegotiations;
   final ConstructionTelemetry constructionTelemetry;
 
+  /// T2.4c — `VisualCompositionResult.score`, 0..1, higher is better.
+  final double compositionScore;
+
   const _InBandCandidate({
     required this.result,
     required this.plan,
@@ -2060,5 +2176,6 @@ class _InBandCandidate {
     required this.visibleMotifs,
     required this.renegotiations,
     required this.constructionTelemetry,
+    required this.compositionScore,
   });
 }

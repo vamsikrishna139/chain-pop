@@ -38,8 +38,16 @@
 //
 // The baseline was therefore **re-captured after P1**, and the pre-P1 Gen V1
 // CSVs are archived beside it under `genv1_pre_p1/` so the before/after diff
-// survives. From here the guards protect P1's result exactly as they protected
-// its predecessor: any board that moves without a deliberate re-baseline is a
+// survives.
+//
+// **Re-captured again after P2's bundle, 2026-08-21.** T2.1 + T2.3 + T2.4c
+// moved 209 of the 300 boards' geometry, 106 node counts and 192 ceilings —
+// wholesale and by design, which is what a re-baselining event is. The
+// post-P1 / pre-P2 CSVs are archived under `p1_final/`. The guards' wording
+// below still speaks of P1 because P1 is what taught them to distrust a
+// "cores only" claim; the contract they enforce is unchanged and applies to
+// whatever landed last. From here the guards protect P2's result exactly as
+// they protected P1's: any board that moves without a deliberate re-baseline is a
 // failure.
 //
 // **T1.4 was measured and dropped, so Easy is unchanged.** The note that used

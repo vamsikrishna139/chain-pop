@@ -12,6 +12,36 @@ enum VisualCompositionRejectReason {
   blobVsGrid,
 }
 
+/// T2.4c — the rules that still **reject** a candidate outright.
+///
+/// Everything not listed here became a *ranking* term: the rule is still
+/// evaluated and still scored, but violating it costs the candidate rank
+/// instead of its existence.
+///
+/// `aspect` is hard for the reason T2.4b gave: it is the lowest-volume rule in
+/// both modes (Medium 38, Hard 88) and its violation is genuinely broken
+/// framing rather than a taste call, so keeping it costs almost no variety.
+///
+/// **`components` is hard because the measurement said so, and the plan said
+/// so first.** T2.4c shipped with all four soft rules soft, and the p10 floor
+/// T2.4b exists to defend went straight through the gate: Medium 0.6259 ->
+/// 0.4625, Hard 0.6595 -> 0.5844 on the seed-7 sample. The diagnosis was
+/// unambiguous — `components` p10 read **0.00** in both modes, i.e. a
+/// meaningful share of shipped boards were scattered into four-plus pieces —
+/// and the risk table in `IMPLEMENTATION_PLAN_V2.md` §"Checks and balances"
+/// had already named the remedy before anyone ran it: *"Re-reject `components`
+/// only; keep others soft."* Followed exactly, rather than reinvented after
+/// seeing the numbers.
+///
+/// This costs the largest single share of Hard's rejections (T2.4b: 1,602 of
+/// 2,657) and it is still the right trade: T2.1 and T2.3 deliver the variety
+/// targets on their own (Hard topology 22 -> 48), so `components` was buying
+/// scatter rather than variety.
+const Set<VisualCompositionRejectReason> kHardCompositionRules = {
+  VisualCompositionRejectReason.aspect,
+  VisualCompositionRejectReason.components,
+};
+
 /// Per-rule composition detail, each normalised to 0..1 where **higher is
 /// better**.
 ///
@@ -63,11 +93,24 @@ class VisualCompositionDetail {
 }
 
 class VisualCompositionResult {
+  /// Whether the candidate is **admitted**. After T2.4c this is "no rule in
+  /// [kHardCompositionRules] failed", not "no rule failed at all" — a board
+  /// can have `passes == true` and a non-null [reason].
   final bool passes;
+
+  /// The first rule that failed, in the fixed priority order
+  /// aspect → blobVsGrid → occupancy → singleton → components, whether that
+  /// rule is hard or soft. `null` when the board satisfies all five.
+  ///
+  /// Reporting soft failures here on purpose: it is what keeps the per-rule
+  /// volumes in `docs/playtests/composition_calibration.md` comparable across
+  /// T2.4c. If soft failures went unnamed, the reject-reason table would read
+  /// as if `components` had been fixed when it had only stopped being fatal.
   final VisualCompositionRejectReason? reason;
 
-  /// T2.4a — computed for every board, **acted on by nothing**. The accept /
-  /// reject decision is still exactly the five hard rules below.
+  /// T2.4a — computed for every board. T2.4c is the first stage that lets it
+  /// change a decision: it is a ranking term in the K-loop's candidate
+  /// comparator, never an admission test.
   final VisualCompositionDetail detail;
 
   /// False when the rules were short-circuited (Easy tier, or an empty board),
@@ -76,6 +119,10 @@ class VisualCompositionResult {
   final bool evaluated;
 
   double get score => detail.score;
+
+  /// A rule failed, but not a hard one: the board is admitted and carries the
+  /// score penalty into ranking.
+  bool get softFailed => passes && reason != null;
 
   const VisualCompositionResult.pass({
     this.detail = VisualCompositionDetail.unevaluated,
@@ -88,6 +135,13 @@ class VisualCompositionResult {
     this.detail = VisualCompositionDetail.unevaluated,
     this.evaluated = true,
   }) : passes = false;
+
+  /// T2.4c — a soft-rule violation. Admitted, named, and scored.
+  const VisualCompositionResult.softPass(
+    VisualCompositionRejectReason this.reason, {
+    required this.detail,
+    this.evaluated = true,
+  }) : passes = true;
 }
 
 /// Evaluates a layout for visually pleasing composition.
@@ -243,7 +297,13 @@ VisualCompositionResult evaluateVisualComposition(
   // An isolated node has no neighbors in 4-connected directions.
   final keys = level.nodes.map((n) => gridCellKey(n.x, n.y)).toSet();
   var singletonCount = 0;
-  final allowedSingletons = math.max(2, maskComponents);
+  // T2.4c: `max(2, maskComponents)` -> `maskComponents + 2`. On a one-piece
+  // mask both read 2, so simple boards are unaffected; the difference is that a
+  // deliberately multi-part silhouette (archipelago, scattered holes) now gets
+  // an allowance that scales *with* its own part count instead of being held to
+  // the same absolute 2 a solid rectangle is. T2.2 makes those silhouettes
+  // actually reachable, so this stops the new variety from arriving pre-penalised.
+  final allowedSingletons = maskComponents + 2;
   for (final node in level.nodes) {
     final neighbors = [
       gridCellKey(node.x - 1, node.y),
@@ -271,7 +331,8 @@ VisualCompositionResult evaluateVisualComposition(
   // 6. 4-connected components count <= allowed components (scaled to match mask components)
   final visited = <int>{};
   var componentCount = 0;
-  final allowedComponents = math.max(2, maskComponents);
+  // T2.4c, same reasoning as [allowedSingletons] above.
+  final allowedComponents = maskComponents + 2;
 
   for (final node in level.nodes) {
     final key = gridCellKey(node.x, node.y);
@@ -314,27 +375,45 @@ VisualCompositionResult evaluateVisualComposition(
     components: componentsScore,
   );
 
-  // Priority order preserved exactly as the original early returns had it.
-  // T2.4c is what changes which of these still reject; T2.4a changes nothing.
-  if (aspectFails) {
-    return VisualCompositionResult.reject(
-        VisualCompositionRejectReason.aspect, detail: detail);
+  // Priority order preserved exactly as the original early returns had it, so
+  // the per-rule volume table stays a like-for-like series across T2.4c.
+  const order = <(VisualCompositionRejectReason, int)>[
+    (VisualCompositionRejectReason.aspect, 0),
+    (VisualCompositionRejectReason.blobVsGrid, 1),
+    (VisualCompositionRejectReason.occupancy, 2),
+    (VisualCompositionRejectReason.singleton, 3),
+    (VisualCompositionRejectReason.components, 4),
+  ];
+  final fails = [
+    aspectFails,
+    blobVsGridFails,
+    occupancyFails,
+    singletonFails,
+    componentsFails,
+  ];
+
+  // **Hard rules are resolved first, across the whole set, before any soft
+  // rule is allowed to name the board.**
+  //
+  // Scanning the single priority order and stopping at the first failure —
+  // which is what the pre-T2.4c early returns did, and what the first cut of
+  // T2.4c kept doing — is correct only while every rule is hard. Once some are
+  // soft it silently breaks: a board failing both `singleton` (soft, 4th) and
+  // `components` (hard, 5th) is named `singleton`, admitted, and the hard rule
+  // never fires. Measured, that is not hypothetical — re-rejecting
+  // `components` moved Hard's shipped `singleton` violations 5 -> 36 while
+  // shipped `components` violations stayed at 0 and the `components` p10 stayed
+  // pinned at 0.00, i.e. the scattered boards were still shipping, now wearing
+  // a different label. Two passes, not one.
+  for (final (rule, i) in order) {
+    if (fails[i] && kHardCompositionRules.contains(rule)) {
+      return VisualCompositionResult.reject(rule, detail: detail);
+    }
   }
-  if (blobVsGridFails) {
-    return VisualCompositionResult.reject(
-        VisualCompositionRejectReason.blobVsGrid, detail: detail);
-  }
-  if (occupancyFails) {
-    return VisualCompositionResult.reject(
-        VisualCompositionRejectReason.occupancy, detail: detail);
-  }
-  if (singletonFails) {
-    return VisualCompositionResult.reject(
-        VisualCompositionRejectReason.singleton, detail: detail);
-  }
-  if (componentsFails) {
-    return VisualCompositionResult.reject(
-        VisualCompositionRejectReason.components, detail: detail);
+  for (final (rule, i) in order) {
+    if (fails[i]) {
+      return VisualCompositionResult.softPass(rule, detail: detail);
+    }
   }
   return VisualCompositionResult.pass(detail: detail, evaluated: true);
 }

@@ -79,31 +79,45 @@ void main() {
     // one order and 18 in the other. `measureEntry` now builds a fresh
     // `LevelGenerator.neutral()` per board.
     //
-    // Node count is the right quantity to check — with one correction that P1
-    // forced. The paragraph above used to end "`budget.coreCount` is consumed
-    // only post-generation, so it is invariant across all of P1". That is true
-    // of `budget.coreCount` and false of the *board*: enrichment runs inside
-    // the generator's accept/reject loop, so changing which nodes are cores
-    // changes lock and relay placement and can change which candidate survives
-    // validation. See `kP1GeometryMovers` for the full argument and the 42
-    // boards it moved.
+    // Node count was the right quantity to check while P1 was the only thing
+    // moving, and it is not any more. `freezeNodes` was recorded during the
+    // selection sweep; P2's bundle (T2.1 + T2.3 + T2.4c) re-baselines geometry
+    // deliberately and wholesale, so comparing today's boards to a selection-
+    // time node count now measures "did P2 happen", which is not a question
+    // worth a gate.
     //
-    // Those boards are named rather than tolerated. Drift on anything else is
-    // still a failure, which is the only reason this check is still worth
-    // running.
-    final drift = <String>[];
+    // `kP1GeometryMovers` said what to do at this moment, before anyone knew
+    // what P2 would move: *"this set is expected to shrink to nothing rather
+    // than grow — P2's re-baselining will move geometry deliberately and
+    // wholesale, at which point the corpus is re-frozen and this list is
+    // deleted, not extended."* Followed literally. The list is gone.
+    //
+    // **Re-freezing `freezeNodes` from this sweep was considered and rejected:
+    // it would compare this run to itself.** The property the drift check was
+    // standing in for is order-independence — a board must be a function of
+    // `(levelId, mode, generationVersion)` and nothing else, and in particular
+    // not of the order the sweep visits ids in. `freezeNodes` tested that
+    // indirectly, by virtue of the selection sweep having used a different
+    // order. It is now tested directly and non-circularly below: the same
+    // corpus, measured in reverse, must produce identical boards. That is
+    // strictly stronger, it needs no historical constant, and it survives every
+    // future re-baseline instead of being invalidated by one.
+    final reversed = measureCorpus(kAdversarialCorpus.reversed.toList());
+    final byKey = {for (final r in reversed) r.entry.key: r};
+    final orderDrift = <String>[];
     for (final r in rows) {
-      if (r.entry.freezeNodes == 0) continue;
-      if (kP1GeometryMovers.contains(r.entry.key)) continue;
-      if (r.entry.freezeNodes != r.nodes) {
-        drift.add('${r.entry.key}: freeze ${r.entry.freezeNodes} '
-            'nodes vs measured ${r.nodes}');
+      final other = byKey[r.entry.key]!;
+      if (other.nodes != r.nodes ||
+          other.geometryHash != r.geometryHash ||
+          other.solutionHash != r.solutionHash) {
+        orderDrift.add('${r.entry.key}: forward ${r.nodes}n/'
+            '${r.geometryHash} vs reverse ${other.nodes}n/'
+            '${other.geometryHash}');
       }
     }
-    print('\n===== ORDER INDEPENDENCE (freeze vs baseline node counts) =====');
-    print('  checked ${rows.where((r) => r.entry.freezeNodes > 0).length} '
-        'severity boards, ${drift.length} disagreed');
-    for (final d in drift.take(20)) {
+    print('\n===== ORDER INDEPENDENCE (forward sweep vs reverse sweep) =====');
+    print('  checked ${rows.length} boards, ${orderDrift.length} disagreed');
+    for (final d in orderDrift.take(20)) {
       print('    $d');
     }
 
@@ -179,7 +193,7 @@ void main() {
     expect(kAdversarialCorpusGenerationVersion, equals(kGenerationVersion),
         reason: 'the corpus was frozen against a different generationVersion; '
             'the frozen ids no longer mean the boards they were selected for');
-    expect(drift, isEmpty,
+    expect(orderDrift, isEmpty,
         reason: 'generation is not a pure function of '
             '(levelId, mode, generationVersion) — session state leaked in');
     expect(inexact, isEmpty,

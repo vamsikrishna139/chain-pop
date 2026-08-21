@@ -11,6 +11,69 @@ import 'motifs.dart';
 import 'sightline_table.dart';
 import 'silhouettes.dart';
 
+/// T2.2 — the mask cell floor, as a fraction of the tier's node-band floor.
+///
+/// **Held at 1.0. T2.2's specified change is a no-go, on measurement — but the
+/// base it multiplies did change; see `_buildOrFallbackMask`.**
+///
+/// The plan proposed `max(8, (minNodes * 0.6).round())` — 15 on Hard — on the
+/// grounds that "the mask only needs room for the target, and
+/// `_pickTargetNodeCount` already clamps `hi = min(profile.nodeCount.max,
+/// mask.length)`". The premise is true and the conclusion does not follow, for
+/// the third time in this plan: that clamp does not *reject* an undersized
+/// mask, it silently lowers the target through the floor. `lo` is
+/// `max(profile.nodeCount.min, minNodes) = 25` on Hard, and when `hi <= lo` the
+/// routine returns `hi` — the mask size — not `lo`.
+///
+/// Measured over Hard L1-200 at 0.6: **34 of 200 levels shipped under the
+/// 25-node floor**, down to 15 nodes, on masks as small as 16 cells. At 1.0 it
+/// is 200/200 at 25 or above. Hard's node floor is load-bearing for the
+/// evaluator's FSR-vs-nodeCount cap and the per-level perf budget, so this is
+/// not a floor a mask-geometry task gets to move as a side effect.
+///
+/// The variety 0.6 bought was real but small next to that: lattice share
+/// 72.2% -> 69.2%, Hard L45-56 rect boards 4 -> 2, Hard topology classes
+/// 38 -> 33 (i.e. *worse*), all measured with T2.1 and T2.3 already in.
+/// T2.1 and T2.3 deliver the P2 variety targets without it.
+///
+/// **The underlying complaint is still valid** — `diamond` and `hollowDiamond`
+/// genuinely lose rolls to this floor (measured medians at 8x8: diamond 29,
+/// hollowDiamond 24, against a floor of 25). The fix that does not touch the
+/// node floor is to bias those two builders' jitter ranges toward area
+/// preservation, exactly as T2.1 already did for `_pentagonCells` and
+/// `_spiralCells`. That is a separate, seed-moving task; it is not this one.
+///
+/// Kept as a named constant rather than reverted to a bare expression so the
+/// experiment is re-runnable: set it to 0.6 and the report in
+/// `p2_variety_report_test.dart` reproduces the numbers above.
+const double kMaskCellFloorRatio = 1.0;
+
+/// T2.3 — how much larger than the target node count a silhouette mask may be
+/// before [Director._refinePlanMaskDensity] swaps it for a dense one.
+///
+/// Was a bare `1.15` literal. At that value a Hard board targeting 25 nodes was
+/// allowed a 29-cell mask, which almost nothing except a rectangle, a ring or a
+/// cross can be at 8x8 — so the clamp fired constantly and substituted, and it
+/// is the direct cause of the 73% geometric-lattice share measured in
+/// `docs/playtests/p2_variety_pre_bundle.md`.
+///
+/// Named rather than inlined **so it can be bisected**: it is the single knob
+/// that trades silhouette variety against the Dense Strategy Phase 1C symptom
+/// (sparse Hard boards with large voids), and if `bboxOccupancy` /
+/// `largestEmptyRegion` regress this is the first value to walk back.
+const double kMaskAreaSlack = 1.5;
+
+/// T2.3 — archetypes whose whole point is an irregular outline, and which the
+/// density clamp therefore must not silhouette-substitute.
+///
+/// Substituting here is self-defeating: the archetype was *chosen* to produce
+/// an organic or sparse board, and swapping its mask for a ring or a rectangle
+/// discards the choice while keeping the archetype's scorer weights, which
+/// yields the worst of both. The clamp still applies to every other archetype.
+const Set<GenerationArchetype> _organicArchetypes = {
+  GenerationArchetype.organicMessy,
+};
+
 /// Dense silhouettes favoured by the Phase 1C bias for Hard/Expert tiers.
 /// These shapes produce tight boards with minimal dead canvas space.
 const List<SilhouetteId> _denseSilhouettes = [
@@ -156,6 +219,7 @@ class Director {
       silhouette: silhouette,
       config: config,
       random: random,
+      minCells: _proceduralMaskFloor(tier, config),
     );
     final profile = DifficultyProfile.forTier(tier);
     final target = _pickTargetNodeCount(
@@ -208,6 +272,21 @@ class Director {
       silhouette: seed.silhouetteId,
       config: config,
       random: random,
+      // Deliberately the OLD floor, not [_proceduralMaskFloor].
+      //
+      // A seed carries its own `difficultyTier` for showcase purposes and it
+      // need not match the mode the slot ships on: `milestone-diamond` is a
+      // Hard-tier seed emitted on Medium campaign slots. Flooring by the seed's
+      // tier would demand 25 cells of a Medium 8x8 diamond that has ~24, and
+      // measured, that is not hypothetical — it collapsed slots 325, 625, 825
+      // and 925 to the rectangle fallback and took `milestone_identity_test`
+      // red.
+      //
+      // The seeded path also does not have the defect the procedural floor was
+      // raised to fix: it clamps `target.clamp(1, mask.length)` itself a few
+      // lines below, so an undersized mask cannot push a board out of band
+      // here. Milestone boards must not move, and this keeps them still.
+      minCells: config.difficulty.minNodes,
       varied: false,
     );
     final profile = DifficultyProfile.forTier(seed.difficultyTier);
@@ -271,6 +350,7 @@ class Director {
           silhouette: nextSilhouette,
           config: config,
           random: random,
+          minCells: _proceduralMaskFloor(previous.tier, config),
         );
       }
     }
@@ -327,6 +407,7 @@ class Director {
           silhouette: nextSilhouette,
           config: config,
           random: random,
+          minCells: _proceduralMaskFloor(previous.tier, config),
         );
         downscaled = downscaled.clamp(1, nextMask.length);
       }
@@ -335,6 +416,11 @@ class Director {
         silhouette: nextSilhouette,
         config: config,
         random: random,
+        // A pinned silhouette means this renegotiation is continuing a seeded
+        // plan, so it inherits that path's floor rather than the procedural one.
+        minCells: previous.pinnedSilhouette
+            ? config.difficulty.minNodes
+            : _proceduralMaskFloor(previous.tier, config),
         // Seeds pin the canonical rendering (`choosePlanFromSeed` builds with
         // `varied: false`); re-rolling shape variety here would drift the
         // authored look and the seed's RNG stream along with it.
@@ -436,8 +522,13 @@ class Director {
     return placed;
   }
 
-  /// Phase 1C — when mask area exceeds 1.15× target, prefer a tighter dense
-  /// silhouette so Hard/Expert boards avoid large voids.
+  /// Phase 1C — when mask area exceeds [kMaskAreaSlack]x target, prefer a
+  /// tighter dense silhouette so Hard/Expert boards avoid large voids.
+  ///
+  /// T2.3 loosened the slack from a hardcoded 1.15 and exempted the organic
+  /// archetypes. Both halves attack the same thing: this routine silently
+  /// discards the silhouette the Director just chose, and at 1.15 it did so
+  /// often enough to be the dominant source of Hard's lattice share.
   GenerationPlan _refinePlanMaskDensity(
     GenerationPlan plan,
     LevelConfiguration config,
@@ -447,7 +538,8 @@ class Director {
         plan.tier != DifficultyTier.expert) {
       return plan;
     }
-    final maxArea = (plan.targetNodeCount * 1.15).ceil();
+    if (_organicArchetypes.contains(plan.archetype)) return plan;
+    final maxArea = (plan.targetNodeCount * kMaskAreaSlack).ceil();
     if (plan.silhouetteMask.length <= maxArea) return plan;
 
     for (final sid in _denseSilhouettes) {
@@ -456,6 +548,7 @@ class Director {
         silhouette: sid,
         config: config,
         random: random,
+        minCells: _proceduralMaskFloor(plan.tier, config),
       );
       if (mask.length <= maxArea && mask.length >= plan.targetNodeCount) {
         final remapped = _reserveMotifs(
@@ -526,13 +619,51 @@ class Director {
     );
   }
 
+  /// Cells a procedural mask must have to seat the tier's node band.
+  ///
+  /// T2.2, as the measurements actually left it — and note the correction runs
+  /// **opposite** to the direction the plan proposed.
+  ///
+  /// The floor used to be `config.difficulty.minNodes`. That is not what a
+  /// board needs: `_pickTargetNodeCount` floors the target at
+  /// `lo = max(profile.nodeCount.min, difficulty.minNodes)`, and on Medium
+  /// those differ — `minNodes` is 10 while the profile band starts at 14. A
+  /// mask of 10..13 cells therefore passed the floor and then produced a board
+  /// *below its own difficulty band*, because when `hi <= lo` that routine
+  /// returns `hi`, i.e. the mask size.
+  ///
+  /// Latent until T2.1: masks that small were barely reachable before jitter
+  /// reached the nine builders that had been dropping it. Afterwards
+  /// **L194/medium shipped 13 nodes and was won in 3 taps**, taking
+  /// `core_triviality_test`'s F1 gate red — the gate P1 exists to hold, and the
+  /// only P1 result this bundle disturbed.
+  ///
+  /// Flooring at the same `lo` the target computation uses closes it by
+  /// construction. Medium's floor rises 10 -> 14 and Easy's 4 -> 8; Hard is
+  /// unchanged at 25.
+  ///
+  /// This is the honest version of "decouple `minCells` from `minNodes`": the
+  /// plan wanted the floor *lowered* to buy silhouette variety, and measurement
+  /// says the coupling was wrong in the other direction. Lowering it further
+  /// (`kMaskCellFloorRatio: 0.6`) broke Hard's node floor on 34 of 200 levels.
+  ///
+  /// **Seeded plans do not use this** — see the call site in
+  /// `choosePlanFromSeed`.
+  int _proceduralMaskFloor(DifficultyTier tier, LevelConfiguration config) {
+    final tierFloor = max(
+      DifficultyProfile.forTier(tier).nodeCount.min,
+      config.difficulty.minNodes,
+    );
+    return max(8, (tierFloor * kMaskCellFloorRatio).round());
+  }
+
   Set<int> _buildOrFallbackMask({
     required SilhouetteId silhouette,
     required LevelConfiguration config,
     required Random random,
+    required int minCells,
     bool varied = true,
   }) {
-    final minCells = config.difficulty.minNodes;
     final mask = buildSilhouetteMask(
       id: silhouette,
       gridWidth: config.gridWidth,

@@ -50,43 +50,48 @@ import 'corpus_identity.dart';
 /// The move is a re-layout, not a re-scale: header is `50/medium/9x9/28`
 /// before and after — same grid, same node count — and only node coordinates
 /// differ. The 7-byte drop is coordinate digit widths.
-const String kGenV1CorpusHash = '6a19bb9b24d846e3';
+const String kGenV1CorpusHash = '52f44d1b347398a1';
 const int kGenV1CorpusBoards = 360;
-const int kGenV1CorpusBytes = 164846;
+const int kGenV1CorpusBytes = 165623;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GREEN today, and EXPECTED RED the moment T2.1 is un-parked.
+// RE-PINNED BY P2'S BUNDLE, 2026-08-21. The canary went red once, as designed.
 //
-// T2.1 (jitter propagation to the nine builders that dropped it) is
-// implemented and measured but currently PARKED as
-// docs/playtests/T2.1_parked.patch, because it cannot be validated on its own
-// (see below). Applying that patch moves
-// **134 of these 360 boards** — 49 Easy, 39 Medium, 46 Hard; bytes
-// 164846 -> 164511, hash -5ad773fce4e6666e. That was measured, not assumed:
-// the plan classified T2.1 as "zero seed impact" on the grounds that jitter
-// never draws from the main RNG stream, which is true and is asserted in
-// layout_mask_test.dart -- but the mask *shape* feeds node placement, so the
-// boards move anyway. Same reasoning error as plan §0.1.
+// T2.1 (jitter propagation) + T2.3 (mask-density slack + organic exemption) +
+// T2.4c (composition rules as ranking terms) landed together as the plan's
+// single re-baselining event. Pins moved
+// `6a19bb9b24d846e3` / 164846 bytes -> `52f44d1b347398a1` / **165623**.
 //
-// The pins below are DELIBERATELY NOT UPDATED. Per the plan's "one
-// re-baselining event" rule, T2.1 re-pins together with T2.2/T2.3/T2.4c, so
-// this canary goes red once and green once — not twice. Do NOT re-pin it to
-// make the suite green in the meantime; that would spend the instrument on an
-// intermediate state that never ships.
+// The mask cell floor moved with them, and that part was not in the plan: it
+// now floors at `max(profile.nodeCount.min, difficulty.minNodes)` rather than
+// `minNodes` alone, so Medium's floor is 14 instead of 10 and Easy's is 8
+// instead of 4. That was forced by a real regression the bundle caused and the
+// gates caught — L194/medium shipped a 13-node board won in 3 taps, taking
+// `core_triviality_test`'s F1 gate red. See `_buildOrFallbackMask`.
 //
-// Why T2.1 is parked rather than merged-and-red: standing alone it also drove
-// Daily key 20260905 to a 873,856 ms generation (the known in-constructor
-// deadline, hit by relocated geometry) and flattened the diversity ledger on
-// some ids -- both symptoms of downstream rejection pressure that T2.2's
-// minCells 25->15 and T2.4c's composition-as-score exist to relieve. Keeping
-// it in-tree would have made every subsequent suite run a 15-minute, 5-red
-// slog for an intermediate state.
+// T2.2 is deliberately absent from that list: its specified `minCells`
+// 25 -> 15 was measured and rejected — 34 of 200 Hard levels shipped under the
+// 25-node floor at 0.6 — so `kMaskCellFloorRatio` ships at 1.0 and moves no
+// board. See its doc comment in `director.dart`.
+//
+// The previous note here predicted T2.1 alone would move 134 of 360 boards to
+// hash `-5ad773fce4e6666e` / 164511 bytes. The bundle's actual figure is
+// larger and the prediction is left above deliberately: it was measured on
+// T2.1 in isolation and is the "before" half of this event's record.
 //
 // Seeded and milestone boards are NOT affected (varied:false => jitter null);
-// level_seed_test and milestone_identity_test must stay green throughout. If
-// either of those goes red, that is a real regression, not this canary.
+// `level_seed_test` and `milestone_identity_test` stayed green throughout, and
+// that is what makes this a re-baseline rather than a regression. If either of
+// those goes red, that is a real defect, not this canary.
 //
-// See docs/IMPLEMENTATION_PLAN_V2.md §T2.1 (CORRECTED 2026-08-21).
+// WHAT THE NEXT REDNESS MEANS. P2 was the plan's last sanctioned board-moving
+// phase before the Gen V1 freeze. After the freeze, no change may move a board
+// under `(levelId, mode, generationVersion=1, recipeId=neutral)` — generator
+// changes bump `generationVersion` instead. So from here this canary going red
+// is a defect report, not a re-baselining prompt, unless the commit that turns
+// it red also bumps `kGenerationVersion`.
+//
+// See docs/IMPLEMENTATION_PLAN_V2.md §T2.1-T2.4c.
 // ═══════════════════════════════════════════════════════════════════════════
 
 void main() {
