@@ -66,12 +66,29 @@ import 'package:chain_pop/game/levels/generation/generation_version.dart';
 /// lock and relay placement, which means a candidate that used to be accepted
 /// can now be rejected — and the next attempt produces different geometry.
 ///
-/// Measured over the frozen corpus, P1 moved 42 of 300 boards this way: 34
-/// Medium and 8 Hard. Node-count deltas run in **both** directions with a
-/// median of 0 and a mean of +0.2, and every Hard board kept its node count
-/// exactly, which is what rules out the "node counts inflated so `tapsToWin`
-/// rose while cores stayed last-popped" impostor the corpus exists to catch.
-/// `captureRate` p50 went 0.58 -> 1.00 over the same population.
+/// Measured over the frozen corpus against the pre-P1 Gen V1 baseline in
+/// `genv1_pre_p1/`, P1 moved **61 of 300** boards this way: 22 Hard and 39
+/// Medium. Node counts moved on 30 of them, in **both** directions, with a
+/// median of 0 and a mean of **+0.03**, and every one of the 100 Hard boards
+/// kept its node count exactly at 25 — which is what rules out the "node
+/// counts inflated so `tapsToWin` rose while the cores stayed last-popped"
+/// impostor this corpus exists to catch.
+///
+/// ── This list was wrong once, and how it was wrong is worth keeping ─────────
+///
+/// It first shipped with 42 entries, computed against a baseline captured on
+/// 2026-08-20 — part-way through P1, after T1.1/T1.2/T1.3 first landed in the
+/// working tree but before the core selector's final revision, which was still
+/// uncommitted and shipped in `ff54cf0` a day later. Measured against the
+/// shipped tree that baseline was stale on 40 boards and the three T0.4 guards
+/// were red. Recomputed against `genv1_pre_p1/` — the real "before" — the true
+/// mover set is the 61 below.
+///
+/// Seven ids that were named in the 42 are **not** here (`326`, `548`, `713`,
+/// `762`, `942`, `1206`, `1411`, all Medium): the intermediate selector moved
+/// them and the final one moved them back to their pre-P1 geometry. That is
+/// evidence the list is computed, not curated. The stale CSVs and the full
+/// attribution are archived under `p1_mid_selector/`.
 ///
 /// ── Why this is a list and not a relaxed assertion ──────────────────────────
 ///
@@ -83,22 +100,24 @@ import 'package:chain_pop/game/levels/generation/generation_version.dart';
 ///
 /// Keyed `levelId/mode` to match `CorpusEntry.key`.
 const Set<String> kP1GeometryMovers = {
-  // Hard control — all eight kept their node count exactly; only the shipped
-  // candidate changed.
-  '189/hard', '479/hard', '494/hard', '788/hard',
-  '808/hard', '891/hard', '947/hard', '1174/hard',
-  // Medium — severity and representative views.
-  '268/medium', '303/medium', '304/medium', '319/medium',
-  '323/medium', '326/medium', '391/medium', '403/medium',
-  '443/medium', '482/medium', '489/medium', '503/medium',
-  '521/medium', '531/medium', '548/medium', '550/medium',
-  '556/medium', '572/medium', '580/medium', '581/medium',
-  '593/medium', '632/medium', '713/medium', '762/medium',
-  '861/medium', '882/medium', '886/medium', '942/medium',
-  '998/medium', '1206/medium', '1274/medium', '1365/medium',
-  '1411/medium', '1493/medium',
+  // Hard control — all 100 Hard boards kept their node count exactly; only the
+  // shipped candidate changed.
+  '131/hard', '144/hard', '189/hard', '341/hard', '346/hard', '347/hard',
+  '354/hard', '479/hard', '494/hard', '698/hard', '772/hard', '788/hard',
+  '805/hard', '808/hard', '891/hard', '902/hard', '947/hard', '950/hard',
+  '1174/hard', '1202/hard', '1436/hard', '1498/hard',
+  // Medium — severity view.
+  '132/medium', '134/medium', '268/medium', '283/medium', '303/medium',
+  '304/medium', '323/medium', '391/medium', '403/medium', '443/medium',
+  '503/medium', '521/medium', '550/medium', '556/medium', '572/medium',
+  '580/medium', '605/medium',
+  // Medium — representative view.
+  '319/medium', '421/medium', '482/medium', '489/medium', '530/medium',
+  '531/medium', '581/medium', '593/medium', '632/medium', '770/medium',
+  '777/medium', '861/medium', '882/medium', '886/medium', '931/medium',
+  '990/medium', '998/medium', '1160/medium', '1225/medium', '1274/medium',
+  '1365/medium', '1493/medium',
 };
-
 /// Boards the milestone-seed fix moved, 2026-08-20. Same contract as
 /// [kP1GeometryMovers]: named, not exempted by a relaxed assertion, and any
 /// board outside this set that moves is still a failure.
@@ -115,6 +134,12 @@ const Set<String> kP1GeometryMovers = {
 /// is a different board, not a re-scored one.
 ///
 /// **1225/medium — 23 -> 21 nodes.** The diamond milestone, same mechanism.
+///
+/// **Shipped values, re-measured 2026-08-21.** The node/ceiling figures above
+/// are the milestone fix's own before/after, taken mid-P1. On the shipped tree
+/// 550 measures 26 nodes / ceiling 19 and 1225 measures 21 nodes; both are
+/// inside [kP1GeometryMovers] because P1's final core selector moved them
+/// again on top of the seed fix.
 ///
 /// The other nine milestone ids in the corpus were already emitting their seed
 /// (sector 1, or slots whose budget seats on the first attempt) and did not
