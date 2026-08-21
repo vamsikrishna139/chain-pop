@@ -54,6 +54,41 @@ const String kGenV1CorpusHash = '6a19bb9b24d846e3';
 const int kGenV1CorpusBoards = 360;
 const int kGenV1CorpusBytes = 164846;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// GREEN today, and EXPECTED RED the moment T2.1 is un-parked.
+//
+// T2.1 (jitter propagation to the nine builders that dropped it) is
+// implemented and measured but currently PARKED as
+// docs/playtests/T2.1_parked.patch, because it cannot be validated on its own
+// (see below). Applying that patch moves
+// **134 of these 360 boards** — 49 Easy, 39 Medium, 46 Hard; bytes
+// 164846 -> 164511, hash -5ad773fce4e6666e. That was measured, not assumed:
+// the plan classified T2.1 as "zero seed impact" on the grounds that jitter
+// never draws from the main RNG stream, which is true and is asserted in
+// layout_mask_test.dart -- but the mask *shape* feeds node placement, so the
+// boards move anyway. Same reasoning error as plan §0.1.
+//
+// The pins below are DELIBERATELY NOT UPDATED. Per the plan's "one
+// re-baselining event" rule, T2.1 re-pins together with T2.2/T2.3/T2.4c, so
+// this canary goes red once and green once — not twice. Do NOT re-pin it to
+// make the suite green in the meantime; that would spend the instrument on an
+// intermediate state that never ships.
+//
+// Why T2.1 is parked rather than merged-and-red: standing alone it also drove
+// Daily key 20260905 to a 873,856 ms generation (the known in-constructor
+// deadline, hit by relocated geometry) and flattened the diversity ledger on
+// some ids -- both symptoms of downstream rejection pressure that T2.2's
+// minCells 25->15 and T2.4c's composition-as-score exist to relieve. Keeping
+// it in-tree would have made every subsequent suite run a 15-minute, 5-red
+// slog for an intermediate state.
+//
+// Seeded and milestone boards are NOT affected (varied:false => jitter null);
+// level_seed_test and milestone_identity_test must stay green throughout. If
+// either of those goes red, that is a real regression, not this canary.
+//
+// See docs/IMPLEMENTATION_PLAN_V2.md §T2.1 (CORRECTED 2026-08-21).
+// ═══════════════════════════════════════════════════════════════════════════
+
 void main() {
   test('Gen V1 corpus is byte-identical (360 boards)', () {
     final fp = CorpusFingerprint.generate(
