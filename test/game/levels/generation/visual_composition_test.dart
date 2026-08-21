@@ -1,5 +1,7 @@
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
+import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/visual_composition.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -134,6 +136,92 @@ void main() {
       );
       final result = evaluateVisualComposition(level, DifficultyTier.medium);
       expect(result.passes, isTrue);
+    });
+  });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // T2.4a — observe. The score is computed for every board and acted on by
+  // NOTHING. These tests exist to prove the "shadow mode" claim rather than
+  // assert it, because T2.4c's whole design depends on T2.4b calibrating
+  // against a distribution gathered while the rules were still the old ones.
+  //
+  // See docs/IMPLEMENTATION_PLAN_V2.md §T2.4a.
+  // ═════════════════════════════════════════════════════════════════════════
+  group('T2.4a composition score (shadow mode)', () {
+    test('every rejection still names the same reason, in the same priority '
+        'order', () {
+      // The restructure replaced five early returns with compute-all +
+      // resolve-at-the-end. Priority must be identical: a board failing both
+      // aspect and components must still report `aspect`.
+      final level = LevelData(
+        levelId: 0,
+        gridWidth: 8,
+        gridHeight: 8,
+        // A 1x8 sliver: aspect is extreme AND it is a single component.
+        nodes: [
+          for (var y = 0; y < 8; y++)
+            NodeData(id: y, x: 0, y: y, dir: Direction.up),
+        ],
+      );
+      final r = evaluateVisualComposition(level, DifficultyTier.medium);
+      expect(r.passes, isFalse);
+      expect(r.reason, equals(VisualCompositionRejectReason.aspect),
+          reason: 'aspect must win the priority order, as it did before T2.4a');
+    });
+
+    test('a rejected board still reports a usable score and detail', () {
+      final level = LevelData(
+        levelId: 0,
+        gridWidth: 8,
+        gridHeight: 8,
+        nodes: [
+          for (var y = 0; y < 8; y++)
+            NodeData(id: y, x: 0, y: y, dir: Direction.up),
+        ],
+      );
+      final r = evaluateVisualComposition(level, DifficultyTier.medium);
+      expect(r.evaluated, isTrue,
+          reason: 'T2.4b needs the rejected population, so rejects must carry '
+              'a real measurement, not filler');
+      expect(r.score, inInclusiveRange(0.0, 1.0));
+      expect(r.detail.aspect, lessThan(0.5),
+          reason: 'a 1x8 sliver should score badly on the aspect term');
+    });
+
+    test('Easy is short-circuited and flagged unevaluated', () {
+      // Easy never runs the rules (plan §T1.4). Its filler detail must not be
+      // read as a perfect composition, or it would skew T2.4b's calibration.
+      final level = LevelData(
+        levelId: 0,
+        gridWidth: 6,
+        gridHeight: 6,
+        nodes: [
+          for (var y = 0; y < 6; y++)
+            NodeData(id: y, x: 0, y: y, dir: Direction.up),
+        ],
+      );
+      final r = evaluateVisualComposition(level, DifficultyTier.easy);
+      expect(r.passes, isTrue);
+      expect(r.evaluated, isFalse);
+    });
+
+    test('the generator records both populations and still ships the same '
+        'board', () {
+      final g = LevelGenerator.neutral();
+      final a = g.generate(42, mode: DifficultyMode.hard).value;
+
+      // Shadow-mode observation must not perturb generation at all.
+      final b = LevelGenerator.neutral()
+          .generate(42, mode: DifficultyMode.hard)
+          .value;
+      expect(a.nodes.length, equals(b.nodes.length));
+
+      // Both populations are captured; the rejected one is the half no CSV
+      // can otherwise see.
+      expect(g.visualScoresAccepted, isNotEmpty);
+      for (final v in [...g.visualScoresAccepted, ...g.visualScoresRejected]) {
+        expect(v, inInclusiveRange(0.0, 1.0));
+      }
     });
   });
 }

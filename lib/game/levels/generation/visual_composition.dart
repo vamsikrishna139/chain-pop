@@ -12,16 +12,82 @@ enum VisualCompositionRejectReason {
   blobVsGrid,
 }
 
+/// Per-rule composition detail, each normalised to 0..1 where **higher is
+/// better**.
+///
+/// T2.4a records these; nothing acts on them. T2.4b calibrates a threshold
+/// from their distribution, and only T2.4c turns the soft rules into ranking
+/// terms. Splitting it that way is deliberate: converting the measurement and
+/// the decision in one commit leaves no baseline to judge the new gate
+/// against (plan §T2.4, correction 5).
+class VisualCompositionDetail {
+  const VisualCompositionDetail({
+    required this.aspect,
+    required this.blobVsGrid,
+    required this.occupancy,
+    required this.singleton,
+    required this.components,
+  });
+
+  /// All-ones: what a short-circuited board reports. Paired with
+  /// `evaluated: false` so calibration can drop these rows.
+  static const unevaluated = VisualCompositionDetail(
+    aspect: 1,
+    blobVsGrid: 1,
+    occupancy: 1,
+    singleton: 1,
+    components: 1,
+  );
+
+  /// Node-bbox aspect, 1.0 at square, 0.0 at the 0.55/1.75 reject edges.
+  final double aspect;
+
+  /// Occupied bbox area as a share of grid area (the rule rejects < 0.50).
+  final double blobVsGrid;
+
+  /// Nodes per bbox cell (the rule rejects < 0.35, or < 0.22 under 15 nodes).
+  final double occupancy;
+
+  /// 1.0 with no isolated nodes, falling as singletons approach the allowance.
+  final double singleton;
+
+  /// 1.0 when the board is one connected piece, falling toward the allowance.
+  final double components;
+
+  /// Provisional composite: the unweighted mean of the five.
+  ///
+  /// Unweighted **on purpose** — weighting the terms before seeing their
+  /// distributions would bake in exactly the assumption T2.4b exists to test.
+  double get score =>
+      (aspect + blobVsGrid + occupancy + singleton + components) / 5.0;
+}
+
 class VisualCompositionResult {
   final bool passes;
   final VisualCompositionRejectReason? reason;
 
-  const VisualCompositionResult.pass()
-      : passes = true,
+  /// T2.4a — computed for every board, **acted on by nothing**. The accept /
+  /// reject decision is still exactly the five hard rules below.
+  final VisualCompositionDetail detail;
+
+  /// False when the rules were short-circuited (Easy tier, or an empty board),
+  /// so [detail] is filler rather than a measurement. Calibration must exclude
+  /// these rows instead of reading them as perfect scores.
+  final bool evaluated;
+
+  double get score => detail.score;
+
+  const VisualCompositionResult.pass({
+    this.detail = VisualCompositionDetail.unevaluated,
+    this.evaluated = false,
+  })  : passes = true,
         reason = null;
 
-  const VisualCompositionResult.reject(VisualCompositionRejectReason this.reason)
-      : passes = false;
+  const VisualCompositionResult.reject(
+    VisualCompositionRejectReason this.reason, {
+    this.detail = VisualCompositionDetail.unevaluated,
+    this.evaluated = true,
+  }) : passes = false;
 }
 
 /// Evaluates a layout for visually pleasing composition.
@@ -89,30 +155,46 @@ VisualCompositionResult evaluateVisualComposition(
       skipBlobVsGridCheck = true;
     }
   }
-  if (!skipAspectCheck && logicalAspect >= 0.7 && logicalAspect <= 1.4) {
-    final bboxAspect = bboxWidth / bboxHeight;
-    if (bboxAspect < 0.55 || bboxAspect > 1.75) {
-      return const VisualCompositionResult.reject(VisualCompositionRejectReason.aspect);
-    }
-  }
+  // T2.4a restructure: every rule is now evaluated and scored, and the reject
+  // reason is resolved at the end in the SAME priority order the early returns
+  // used (aspect → blobVsGrid → occupancy → singleton → components). Behaviour
+  // is unchanged; only the bookkeeping is new.
+  final bboxAspect = bboxHeight == 0 ? 1.0 : bboxWidth / bboxHeight;
+  final aspectApplies =
+      !skipAspectCheck && logicalAspect >= 0.7 && logicalAspect <= 1.4;
+  final aspectFails =
+      aspectApplies && (bboxAspect < 0.55 || bboxAspect > 1.75);
+  // 1.0 at square, 0.0 at whichever reject edge the board is heading for.
+  //
+  // An exempted board scores 1.0 rather than being measured. `skipAspectCheck`
+  // and the 0.7..1.4 logical-aspect window exist because a deliberate corridor
+  // is not a badly-framed square — scoring it against a squareness ideal the
+  // rule explicitly declined to apply would penalise intent. Measured
+  // 2026-08-21: without this, p10 AND p25 of shipped Medium aspect were both
+  // 0.0000, i.e. a quarter of shipped boards looked maximally broken on a rule
+  // that never ran for them.
+  final aspectScore = !aspectApplies
+      ? 1.0
+      : bboxAspect >= 1.0
+          ? (1.0 - (bboxAspect - 1.0) / (1.75 - 1.0)).clamp(0.0, 1.0)
+          : (1.0 - (1.0 - bboxAspect) / (1.0 - 0.55)).clamp(0.0, 1.0);
 
   // 3. Blob vs Grid: bboxArea / gridArea >= 0.50
   final bboxArea = bboxWidth * bboxHeight;
-  if (!skipBlobVsGridCheck && gridArea > 0) {
-    final blobVsGrid = bboxArea / gridArea;
-    if (blobVsGrid < 0.50) {
-      return const VisualCompositionResult.reject(VisualCompositionRejectReason.blobVsGrid);
-    }
-  }
+  final blobVsGrid = gridArea > 0 ? bboxArea / gridArea : 1.0;
+  final blobVsGridFails =
+      !skipBlobVsGridCheck && gridArea > 0 && blobVsGrid < 0.50;
+  // Same exemption logic: `skipBlobVsGridCheck` marks masks whose bbox is
+  // *meant* to be a small share of the grid, so they are not scored on it.
+  final blobVsGridScore = (skipBlobVsGridCheck || gridArea <= 0)
+      ? 1.0
+      : blobVsGrid.clamp(0.0, 1.0);
 
   // 4. Bbox Occupancy: node count / bbox area >= 0.35 (relax to 0.22 if nodes < 15 to allow sparse configurations without skewing archetypes)
-  if (bboxArea > 0) {
-    final occupancy = level.nodes.length / bboxArea;
-    final minOccupancy = level.nodes.length < 15 ? 0.22 : 0.35;
-    if (occupancy < minOccupancy) {
-      return const VisualCompositionResult.reject(VisualCompositionRejectReason.occupancy);
-    }
-  }
+  final occupancy = bboxArea > 0 ? level.nodes.length / bboxArea : 1.0;
+  final minOccupancy = level.nodes.length < 15 ? 0.22 : 0.35;
+  final occupancyFails = bboxArea > 0 && occupancy < minOccupancy;
+  final occupancyScore = occupancy.clamp(0.0, 1.0);
 
   // Calculate connected components of the mask to dynamically scale constraints
   var maskComponents = 1;
@@ -178,11 +260,13 @@ VisualCompositionResult evaluateVisualComposition(
     }
     if (!hasNeighbor) {
       singletonCount++;
-      if (singletonCount > allowedSingletons) {
-        return const VisualCompositionResult.reject(VisualCompositionRejectReason.singleton);
-      }
     }
   }
+  // Counting all singletons instead of bailing at the first excess yields the
+  // same predicate (`> allowedSingletons`) and costs O(n) on n <= 42.
+  final singletonFails = singletonCount > allowedSingletons;
+  final singletonScore =
+      (1.0 - singletonCount / (allowedSingletons + 1)).clamp(0.0, 1.0);
 
   // 6. 4-connected components count <= allowed components (scaled to match mask components)
   final visited = <int>{};
@@ -193,9 +277,6 @@ VisualCompositionResult evaluateVisualComposition(
     final key = gridCellKey(node.x, node.y);
     if (!visited.contains(key)) {
       componentCount++;
-      if (componentCount > allowedComponents) {
-        return const VisualCompositionResult.reject(VisualCompositionRejectReason.components);
-      }
       // BFS to find connected components
       final queue = [node];
       visited.add(key);
@@ -220,5 +301,40 @@ VisualCompositionResult evaluateVisualComposition(
     }
   }
 
-  return const VisualCompositionResult.pass();
+  final componentsFails = componentCount > allowedComponents;
+  final componentsScore =
+      (1.0 - (componentCount - 1) / math.max(1, allowedComponents))
+          .clamp(0.0, 1.0);
+
+  final detail = VisualCompositionDetail(
+    aspect: aspectScore,
+    blobVsGrid: blobVsGridScore,
+    occupancy: occupancyScore,
+    singleton: singletonScore,
+    components: componentsScore,
+  );
+
+  // Priority order preserved exactly as the original early returns had it.
+  // T2.4c is what changes which of these still reject; T2.4a changes nothing.
+  if (aspectFails) {
+    return VisualCompositionResult.reject(
+        VisualCompositionRejectReason.aspect, detail: detail);
+  }
+  if (blobVsGridFails) {
+    return VisualCompositionResult.reject(
+        VisualCompositionRejectReason.blobVsGrid, detail: detail);
+  }
+  if (occupancyFails) {
+    return VisualCompositionResult.reject(
+        VisualCompositionRejectReason.occupancy, detail: detail);
+  }
+  if (singletonFails) {
+    return VisualCompositionResult.reject(
+        VisualCompositionRejectReason.singleton, detail: detail);
+  }
+  if (componentsFails) {
+    return VisualCompositionResult.reject(
+        VisualCompositionRejectReason.components, detail: detail);
+  }
+  return VisualCompositionResult.pass(detail: detail, evaluated: true);
 }

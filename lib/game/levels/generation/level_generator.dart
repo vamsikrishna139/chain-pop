@@ -375,6 +375,33 @@ class LevelGenerator {
     _seedFallthroughCounts.clear();
   }
 
+  /// T2.4a shadow-mode score samples. Capped so a long session cannot grow
+  /// them without bound; the cap is far above any single corpus sweep.
+  static const int _kVisualScoreSampleCap = 50000;
+  final List<double> _visualScoresAccepted = [];
+  final List<double> _visualScoresRejected = [];
+
+  /// Composition scores of candidates that passed the composition rules.
+  List<double> get visualScoresAccepted =>
+      List.unmodifiable(_visualScoresAccepted);
+
+  /// Composition scores of candidates the composition rules rejected.
+  ///
+  /// This is the population T2.4b cannot obtain any other way: these boards are
+  /// discarded inside the K-loop and never reach a CSV.
+  List<double> get visualScoresRejected =>
+      List.unmodifiable(_visualScoresRejected);
+
+  void _recordVisualScore(VisualCompositionResult visual,
+      {required bool accepted}) {
+    // Easy short-circuits to pass() without evaluating the rules, so its
+    // filler detail must not be mistaken for a perfect composition.
+    if (!visual.evaluated) return;
+    final target = accepted ? _visualScoresAccepted : _visualScoresRejected;
+    if (target.length >= _kVisualScoreSampleCap) return;
+    target.add(visual.score);
+  }
+
   void _incrementVisualRejectCounter(VisualCompositionRejectReason? reason) {
     if (reason == null) return;
     switch (reason) {
@@ -1007,6 +1034,11 @@ class LevelGenerator {
       }
 
       final visual = evaluateVisualComposition(level, evaluatorTier);
+      // T2.4a — record the composition score for BOTH populations. Shadow mode:
+      // the decision below is untouched, this only observes. T2.4b needs the
+      // *rejected* distribution as much as the accepted one, and the generator
+      // is the only place a rejected candidate is ever visible.
+      _recordVisualScore(visual, accepted: visual.passes);
       if (!visual.passes) {
         _evaluatorRejectionCount++;
         _incrementVisualRejectCounter(visual.reason);

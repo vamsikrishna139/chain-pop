@@ -15,6 +15,7 @@ import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:chain_pop/game/levels/generation/generation_version.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/metrics.dart';
+import 'package:chain_pop/game/levels/generation/visual_composition.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_directive.dart';
 import 'package:chain_pop/game/world_registry.dart';
@@ -415,6 +416,7 @@ class BoardRow {
     required this.metrics,
     required this.topo,
     required this.core,
+    required this.visual,
     required this.cores,
     required this.locks,
     required this.relays,
@@ -453,6 +455,11 @@ class BoardRow {
   /// sequential quantity `CoreWaveRatio` was standing in for. Evidence only
   /// at P0; the gates that read it live in `core_triviality_test.dart`.
   final CoreMetrics core;
+
+  /// T2.4a — composition score of the **shipped** board. Observation only;
+  /// nothing in `lib/` reads it. Pairs with the generator's
+  /// `visualScoresRejected` to give T2.4b both populations.
+  final VisualCompositionResult visual;
 
   final int cores;
   final int locks;
@@ -625,6 +632,12 @@ BoardRow measure(
     heightFill: kBoardHeightFill,
   );
 
+  // T2.4a: the tier the generator's own evaluator would have used.
+  final visual = evaluateVisualComposition(
+    level,
+    DifficultyProfile.tierFromMode(mode),
+  );
+
   return BoardRow(
     label: label,
     levelId: levelId,
@@ -638,6 +651,7 @@ BoardRow measure(
     bboxH: bboxH,
     metrics: m,
     topo: topo,
+    visual: visual,
     core: CoreMetrics.compute(level),
     cores: level.nodes.where((n) => n.isCore).length,
     locks: level.nodes.where((n) => n.kind == NodeKind.locked).length,
@@ -1035,6 +1049,8 @@ const String kBoardCsvHeader =
     'effort,chokes,maxHub,antichain,chainDepthMax,avgFanout,'
     'coreTapDepth,coreTapFraction,coreIsolation,maxSingleTapCascade,'
     'coreCriticalDepth,'
+    'compScore,compEvaluated,compAspect,compBlobVsGrid,compOccupancy,'
+    'compSingleton,compComponents,'
     'cores,locks,relays,phases,portals,directive,timeLimitSec,inBand,genMs';
 
 /// One board as a CSV line matching [kBoardCsvHeader], without a trailing
@@ -1091,6 +1107,13 @@ String boardCsvRow(BoardRow r) {
     r.core.coreIsolation.toStringAsFixed(3),
     r.core.maxSingleTapCascade,
     r.core.coreCriticalDepth,
+    r.visual.score.toStringAsFixed(4),
+    r.visual.evaluated,
+    r.visual.detail.aspect.toStringAsFixed(4),
+    r.visual.detail.blobVsGrid.toStringAsFixed(4),
+    r.visual.detail.occupancy.toStringAsFixed(4),
+    r.visual.detail.singleton.toStringAsFixed(4),
+    r.visual.detail.components.toStringAsFixed(4),
     r.cores,
     r.locks,
     r.relays,
