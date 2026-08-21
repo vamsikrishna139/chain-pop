@@ -123,6 +123,45 @@ class LevelGenerator {
   // Phase 5 — seed-driven emission counter (by seed id).
   final Map<String, int> _seedEmissionCounts = <String, int>{};
 
+  // Seeded-path *failure* telemetry, by seed id.
+  //
+  // [_seedEmissionCounts] counts only the seeded attempts that shipped, which
+  // is why the milestone-fallthrough defect survived for so long: a milestone
+  // that burned all its attempts and quietly shipped as an ordinary procedural
+  // board was indistinguishable, from the outside, from one that never had a
+  // seed at all. Nothing counted the failure, so nothing could alert on it.
+  //
+  // These five are that missing half. They are pure counters — no behaviour
+  // depends on them — but between them they say exactly *why* a milestone did
+  // not ship as itself:
+  //
+  //   attempts             seeded iterations entered
+  //   constructionFailures the Director could not build the pinned silhouette
+  //   validationFailures   it built, but the enriched board was invalid
+  //   mechanicShortfalls   it built and validated, but could not seat the
+  //                        lock/relay budget
+  //   fallthroughs         the seeded path gave up and the level shipped as a
+  //                        procedural board — the landmark is gone
+  final Map<String, int> _seedAttemptCounts = <String, int>{};
+  final Map<String, int> _seedConstructionFailureCounts = <String, int>{};
+  final Map<String, int> _seedValidationFailureCounts = <String, int>{};
+  final Map<String, int> _seedMechanicShortfallCounts = <String, int>{};
+  final Map<String, int> _seedFallthroughCounts = <String, int>{};
+
+  void _bumpSeed(Map<String, int> counter, String id) =>
+      counter[id] = (counter[id] ?? 0) + 1;
+
+  /// How many seeded attempts may be spent chasing a board that seats its
+  /// *full* lock/relay budget before the path ships a mechanic-short one.
+  ///
+  /// The audit (`milestone_seed_audit_test`) measured the trade directly: on
+  /// every slot that lost its landmark, 30-39 of the 40 attempts ended in a
+  /// shortfall and none ever seated the full budget. Retrying is close to free
+  /// of upside there and costs the whole 40-attempt burn, so the cap is small.
+  /// It is not zero because the cheap slots *do* recover within an attempt or
+  /// two (225, 325, 825 all emit after one shortfall).
+  static const int _kSeedMechanicShortfallRetries = 3;
+
   // Phase 6 — staged emission record. Filled inside
   // `_attemptDirectorDrivenGeneration`; committed (= counters incremented +
   // analytics sink fired) or discarded by `generateFromConfiguration` once
@@ -227,6 +266,30 @@ class LevelGenerator {
   Map<String, int> get seedEmissionCounts =>
       Map<String, int>.unmodifiable(_seedEmissionCounts);
 
+  /// Seeded iterations entered, by seed id.
+  Map<String, int> get seedAttemptCounts =>
+      Map<String, int>.unmodifiable(_seedAttemptCounts);
+
+  /// Seeded iterations where the Director could not build the pinned
+  /// silhouette at all.
+  Map<String, int> get seedConstructionFailureCounts =>
+      Map<String, int>.unmodifiable(_seedConstructionFailureCounts);
+
+  /// Seeded iterations that built a board whose enrichment failed validation.
+  Map<String, int> get seedValidationFailureCounts =>
+      Map<String, int>.unmodifiable(_seedValidationFailureCounts);
+
+  /// Seeded iterations discarded because the enriched board could not seat its
+  /// full lock/relay budget.
+  Map<String, int> get seedMechanicShortfallCounts =>
+      Map<String, int>.unmodifiable(_seedMechanicShortfallCounts);
+
+  /// Seeds that gave up and let the level ship as an ordinary procedural
+  /// board. **Any non-zero entry here is a lost milestone**, and the whole
+  /// point of this counter is that it can no longer happen silently.
+  Map<String, int> get seedFallthroughCounts =>
+      Map<String, int>.unmodifiable(_seedFallthroughCounts);
+
   /// Phase 6 §9 — returns a cumulative session snapshot suitable for the
   /// weekly QA-by-archetype report (the host app calls this every N levels
   /// and forwards the result to its sink).
@@ -242,6 +305,14 @@ class LevelGenerator {
       archetypeEmissions:
           Map<GenerationArchetype, int>.from(_archetypeEmissionCounts),
       seedEmissions: Map<String, int>.from(_seedEmissionCounts),
+      seedAttempts: Map<String, int>.from(_seedAttemptCounts),
+      seedConstructionFailures:
+          Map<String, int>.from(_seedConstructionFailureCounts),
+      seedValidationFailures:
+          Map<String, int>.from(_seedValidationFailureCounts),
+      seedMechanicShortfalls:
+          Map<String, int>.from(_seedMechanicShortfallCounts),
+      seedFallthroughs: Map<String, int>.from(_seedFallthroughCounts),
       strongMotifEmissions: _strongMotifEmissionCount,
       strongMotifEmissionsWithMotif: _strongMotifEmissionsWithMotifCount,
       blockingDirCandidatesOffered: _blockingDirCandidatesOffered,
@@ -297,6 +368,11 @@ class LevelGenerator {
       _motifEmissionCounts[m] = 0;
     }
     _seedEmissionCounts.clear();
+    _seedAttemptCounts.clear();
+    _seedConstructionFailureCounts.clear();
+    _seedValidationFailureCounts.clear();
+    _seedMechanicShortfallCounts.clear();
+    _seedFallthroughCounts.clear();
   }
 
   void _incrementVisualRejectCounter(VisualCompositionRejectReason? reason) {
@@ -434,6 +510,18 @@ class LevelGenerator {
                 GenerationError.invalidConfiguration(validation.message));
           }
         }
+        // On [maxAttempts] here, rather than a smaller seeded-specific cap:
+        // a tight cap looks like the obvious way to bound this path, and the
+        // measurement says otherwise. Sniper slots fail construction
+        // repeatedly and then *succeed*, at attempt 14 (L100), 15 (L400), 18
+        // (L1000) and 19 (L600); an 8-attempt cap would trade six landmarks
+        // for latency that is no longer the problem. The multi-second stalls
+        // (L725 Hard: 42.5s) came from the shortfall burn below, and capping
+        // that at [_kSeedMechanicShortfallRetries] took the same slot to
+        // ~2.4s. Anything left here is bounded by attempts that are
+        // individually cheap, and [_seedFallthroughCounts] now makes a give-up
+        // visible instead of silent. Re-measure with
+        // `milestone_seed_audit_test` before bounding this further.
         final seedSalt = seed.seedRng ?? 0;
         // Latency bound for the seeded path. Kept on its own stopwatch rather
         // than shared with the main pipeline below: it must not hand the
@@ -450,12 +538,14 @@ class LevelGenerator {
         /// emitting as `milestone-overload`.
         LevelData? seedMechanicShort;
         _PendingDirectorEmission? seedMechanicShortEmission;
+        var shortfalls = 0;
         for (int i = 0; i < maxAttempts; i++) {
           if (seedWatch != null &&
               seedMechanicShort != null &&
               seedWatch.elapsed >= timeBudget!) {
             break;
           }
+          _bumpSeed(_seedAttemptCounts, seed.id);
           final rng = Random(primarySeed * 31337 + seedSalt + i);
           final seedResult = _attemptDirectorDrivenGeneration(
             seedConfig,
@@ -466,6 +556,9 @@ class LevelGenerator {
                 ? null
                 : () => seedWatch.elapsed >= timeBudget!,
           );
+          if (seedResult.isError) {
+            _bumpSeed(_seedConstructionFailureCounts, seed.id);
+          }
           if (seedResult.isSuccess) {
             final enriched = _enrichLevel(
                 seedResult.value, seedConfig, targetTier,
@@ -483,16 +576,36 @@ class LevelGenerator {
                   enriched.nodes.where((n) => n.kind == NodeKind.relay).length;
               if (lockCount < budget.lockCount ||
                   relayCount < budget.relayCount) {
-                // Retry while there are attempts left — a board that seats the
-                // full budget is the better milestone — but retain this one so
-                // exhaustion ships the *seed* rather than dropping to the
-                // procedural pipeline.
-                if (seedMechanicShort == null) {
-                  seedMechanicShort = enriched;
-                  seedMechanicShortEmission = _pendingEmission;
+                _bumpSeed(_seedMechanicShortfallCounts, seed.id);
+                shortfalls++;
+                if (shortfalls < _kSeedMechanicShortfallRetries) {
+                  // Retry while retries are left — a board that seats the full
+                  // budget is the better milestone — but retain the first
+                  // shortfall so an exit that never reaches the cap (the
+                  // `seedWatch` break, or construction/validation failures for
+                  // the remaining attempts) still ships the *seed* rather than
+                  // dropping to the procedural pipeline.
+                  if (seedMechanicShort == null) {
+                    seedMechanicShort = enriched;
+                    seedMechanicShortEmission = _pendingEmission;
+                  }
+                  _discardPendingEmission();
+                  continue;
                 }
-                _discardPendingEmission();
-                continue;
+                // Out of retries: ship this board rather than the seed. The
+                // discard-and-retry above used to be unconditional, and after
+                // `maxAttempts` the whole seeded path fell through to the
+                // procedural pipeline — so a milestone that could not seat one
+                // lock silently stopped being a milestone at all. A landmark
+                // missing a mechanic is a far smaller loss than a landmark that
+                // is not there, and `campaign_mechanic_audit_test` only ever
+                // asserts `locks <= budget.lockCount`, so a short board is
+                // legal by the campaign's own rules.
+                //
+                // Shipped from *this* attempt while its staged emission is
+                // still live, so the seed's telemetry cannot go dark. (The
+                // post-loop path ships the retained board instead, and has to
+                // restore `_pendingEmission` by hand to get the same effect.)
               }
 
               _seedEmissionCounts[seed.id] =
@@ -501,12 +614,13 @@ class LevelGenerator {
               _commitPendingEmission();
               return Result.success(enriched);
             }
+            _bumpSeed(_seedValidationFailureCounts, seed.id);
           }
         }
-        // Attempts exhausted (or the latency budget ran out) with no board
-        // that seated the full mechanic budget. Ship the retained seeded board
-        // if there is one: a milestone that is one lock short still reads as
-        // the milestone, whereas a procedural board does not.
+        // Attempts exhausted (or the latency budget ran out) without ever
+        // reaching the shortfall cap. Ship the retained seeded board if there
+        // is one: a milestone that is one lock short still reads as the
+        // milestone, whereas a procedural board does not.
         if (seedMechanicShort != null) {
           _seedEmissionCounts[seed.id] = (_seedEmissionCounts[seed.id] ?? 0) + 1;
           _assertGeneratedLayout(seedMechanicShort);
@@ -516,6 +630,11 @@ class LevelGenerator {
         }
         // Seed path failed outright (e.g. silhouette starvation on a tiny
         // grid): fall through to the regular pipeline so the level still ships.
+        //
+        // This is the silent milestone loss: the level generates, the player
+        // gets a playable board, and nothing anywhere says the landmark is
+        // gone. The counter is what makes it sayable.
+        _bumpSeed(_seedFallthroughCounts, seed.id);
         _discardPendingEmission();
       }
     }
@@ -549,7 +668,8 @@ class LevelGenerator {
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
       final overBudgetNow =
           budgetWatch != null && budgetWatch.elapsed >= timeBudget!;
-      final overBudgetShippable = budgetFallback ?? mechanicShortFallback;
+      final overBudgetShippable = budgetFallback ??
+          (allowMechanicShortFallback ? mechanicShortFallback : null);
       if (overBudgetNow && overBudgetShippable != null) {
         _discardPendingEmission();
         return Result.success(overBudgetShippable);
@@ -635,9 +755,14 @@ class LevelGenerator {
           // levels their locked nodes and their silhouette mask, and broke the
           // L150 milestone emission. Only Daily — where the alternative was a
           // 40-attempt burn — opts in.
-          if (budgetWatch != null && allowMechanicShortFallback) {
-            mechanicShortFallback ??= enriched;
-          }
+          //
+          // Recorded unconditionally; *consumed* conditionally. The opt-in
+          // above governs the over-budget escape only — that is the path whose
+          // cost the paragraph above measured. The attempt-exhaustion path at
+          // the bottom of this method consumes it for every caller, because
+          // there the alternative is not a slightly worse level, it is
+          // `Result.error` and a level the player cannot play at all.
+          mechanicShortFallback ??= enriched;
           _discardPendingEmission();
           continue;
         }
@@ -675,6 +800,34 @@ class LevelGenerator {
         budgetFallback ??= enriched;
         _discardPendingEmission();
       }
+    }
+
+    // Attempts exhausted. Before surfacing an error, ship anything valid that
+    // was retained along the way, ranked worst-acceptable-last:
+    //
+    //   budgetFallback        — valid, solvable, wave count outside the ideal
+    //                           band. A slightly-off level.
+    //   mechanicShortFallback — valid, solvable, but could not seat its full
+    //                           lock/relay budget. A level missing a mechanic.
+    //
+    // Both are strictly better than the alternative. This branch used to return
+    // `Result.error` outright, and P1 turned that from theoretical into real:
+    // raising Medium sector 3+ from two cores to three (T1.3) starves relay
+    // placement on the odd cramped board, because `_markSpecialNodes` keeps
+    // relays out of *core rows* and three cores occupy three of them. Exactly
+    // one level in 1..1500 hit it — **L427 Medium** — and it went from
+    // generating fine to not generating at all. A campaign level that cannot be
+    // produced is a level the player cannot play, which is a worse defect than
+    // any of the ones P1 set out to fix.
+    //
+    // The typed error is retained for the case where genuinely nothing valid
+    // was ever built, so callers can still distinguish "we tried and got
+    // something imperfect" from "we got nothing".
+    final exhaustedFallback = budgetFallback ?? mechanicShortFallback;
+    if (exhaustedFallback != null) {
+      _discardPendingEmission();
+      _maxAttemptsExhaustedCount++;
+      return Result.success(exhaustedFallback);
     }
 
     // Phase 3: no monotone fallback any more. The Director Renegotiation

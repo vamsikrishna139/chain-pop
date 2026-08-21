@@ -18,19 +18,37 @@
 //
 // All three produce the same improved number. Only these guards separate them.
 //
-// **Why node-count equality is exact, not a tolerance.** `budget.coreCount` is
-// consumed only in `level_enrichment.dart`, post-generation, and `directiveFor`
-// is read only by star grading and the UI — never by the generator. So across
-// all of P1 (T1.1 band, T1.2 floor, T1.3 count 2->3, T1.4 Easy core) node count
-// and geometry must be **bit-identical**. A "<=10% median increase" guardrail
-// would be far too loose; the assertion is equality, and any delta means P1
-// leaked into geometry.
+// **Why node-count equality is exact, not a tolerance.** Whatever the baseline
+// says a board is, the board must still be exactly that. The guards compare
+// against the committed baseline CSVs, so equality is the only assertion that
+// can distinguish "the cores moved" from "the board moved".
 //
-// **One intended side effect, pre-recorded so it is not mistaken for a
-// regression.** T1.4 moves Easy sector 3+ from `coreCount: 0` to `1`, which
-// stops `directiveFor` falling back from `cascade` to `swift`
-// (`level_directive.dart`). Star goals change on those levels. That is correct,
-// and no guard here watches `directive`.
+// ── CORRECTION, P1, 2026-08-19: the premise these guards shipped with was
+//    wrong, and the guards are what proved it ────────────────────────────────
+//
+// This header used to argue that node count and geometry "must be bit-identical
+// across all of P1", because `budget.coreCount` is consumed only in
+// `level_enrichment.dart`, post-generation. The premise is true; the conclusion
+// is not. `enrichLevel` runs INSIDE the generator's accept/reject loop and the
+// generator re-validates the enriched board, so a different core set produces
+// different lock and relay placement and can flip a candidate from accepted to
+// rejected. P1 moved 42 of the 300 boards that way. The full argument, the
+// measurements and the named boards are in `kP1GeometryMovers`
+// (`adversarial_corpus.dart`).
+//
+// The baseline was therefore **re-captured after P1**, and the pre-P1 Gen V1
+// CSVs are archived beside it under `genv1_pre_p1/` so the before/after diff
+// survives. From here the guards protect P1's result exactly as they protected
+// its predecessor: any board that moves without a deliberate re-baseline is a
+// failure.
+//
+// **T1.4 was measured and dropped, so Easy is unchanged.** The note that used
+// to sit here — "T1.4 moves Easy sector 3+ from `coreCount: 0` to `1`, so star
+// goals change on those levels" — describes something that did not happen.
+// Easy geometry cannot hold a core deep enough to satisfy Easy's own tap floor
+// (best achievable: p50 3 taps with one core), so Easy stays coreless and
+// `directiveFor` still falls back from `cascade` to `swift` there. The reasoning
+// is recorded at the code site in `progression_profile.dart`.
 //
 // ignore_for_file: avoid_print
 

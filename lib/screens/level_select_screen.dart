@@ -552,7 +552,7 @@ class _ChapterGrid extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
               color: isFrontier ? const Color(0xFF1A1A26) : (isUnlocked ? AppColors.surface : AppColors.background),
               borderRadius: BorderRadius.circular(12),

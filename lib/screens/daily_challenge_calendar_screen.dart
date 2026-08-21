@@ -345,7 +345,7 @@ class _DayCell extends StatelessWidget {
           child: Opacity(
             opacity: dimmed ? 0.45 : 1,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 3),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

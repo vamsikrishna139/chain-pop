@@ -26,15 +26,19 @@ const LevelSeed diamondMilestoneSeed = LevelSeed(
 /// across all ten slots: overload avg 25.0 nodes vs ordinary neighbours 25.0.
 ///
 /// The planned fix (`targetNodeCount: 36`, optionally `gridWidth/Height: 9`)
-/// is NOT applied because it exposes a generator bug: the `timeBudget` does
-/// not bound the seeded Director path, and a high pinned count sends some
-/// slots into a pathological search — measured at 66s on slot 750 (with the
-/// 9x9 override) and 181s on slot 950 (count only), against a ~210ms baseline.
-/// A single attempt runs unbounded, so neither the between-attempts check nor
-/// the `overBudget` callback preempts it.
+/// was blocked on a generator bug: the `timeBudget` did not bound the seeded
+/// Director path, so a high pinned count sent some slots into a pathological
+/// search — measured at 66s on slot 750 (with the 9x9 override) and 181s on
+/// slot 950 (count only), against a ~210ms baseline.
 ///
-/// Fix the latency bound first, then pin the count. See
-/// `milestone_latency_test.dart`, which guards the ~2s ceiling.
+/// **That bound now exists** (2026-08-20): the seeded path runs `timeBudget`
+/// on its own stopwatch and passes its own `overBudget` callback into the
+/// Director. Pinning the count is therefore worth re-trying — but re-measure,
+/// do not assume: a single retrograde construction still cannot be preempted
+/// mid-flight, so the budget is a bound on *attempts*, not a hard wall-clock
+/// cap (milestone slots measure up to ~356ms against a 200ms budget today).
+/// See `milestone_latency_test.dart` (ceiling) and
+/// `milestone_seed_audit_test.dart` (funnel + per-slot cost).
 const LevelSeed milestoneOverloadSeed = LevelSeed(
   id: 'milestone-overload',
   silhouetteId: SilhouetteId.rectangle,

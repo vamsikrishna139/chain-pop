@@ -211,21 +211,38 @@ void main() {
       expect(LevelValidator().validate(enriched).isValid, isTrue);
     });
 
-    test('Medium sector 2 places exactly one core', () {
+    // Re-baselined by P1. Both of these asserted an exact core count, and both
+    // numbers changed for different reasons:
+    //
+    //   sector 3 — T1.3 raised Medium sector 3+ from two cores to three.
+    //   sector 2 — the nominal budget is still one, but T1.2's quality floor
+    //              escalates on boards too flat to reach the mode's tap floor
+    //              at their nominal count. `chainBoard` is an 18-node lattice
+    //              of three independent six-long chains, which is exactly that
+    //              kind of board, so this fixture escalates.
+    //
+    // The assertion that survives is the one the escape valve is bounded by:
+    // never fewer than the budget, never more than the three-core cap. The
+    // "exactly one core in sector 2" claim now lives in
+    // `progression_core_curve_test.dart`, where it belongs — it is a statement
+    // about `budgetFor`, not about a particular board.
+    test('Medium sector 2 places at least its budgeted core', () {
       final level = chainBoard(levelId: 126);
       final enriched =
           enrichLevel(level, _mediumConfig(126), DifficultyTier.medium);
 
-      expect(enriched.nodes.where((n) => n.isCore), hasLength(1));
+      final cores = enriched.nodes.where((n) => n.isCore);
+      expect(cores.length, greaterThanOrEqualTo(1));
+      expect(cores.length, lessThanOrEqualTo(3));
       expect(LevelValidator().validate(enriched).isValid, isTrue);
     });
 
-    test('Medium sector 3 places exactly two cores', () {
+    test('Medium sector 3 places three cores', () {
       final level = chainBoard(levelId: 251);
       final enriched =
           enrichLevel(level, _mediumConfig(251), DifficultyTier.medium);
 
-      expect(enriched.nodes.where((n) => n.isCore), hasLength(2));
+      expect(enriched.nodes.where((n) => n.isCore), hasLength(3));
       expect(LevelValidator().validate(enriched).isValid, isTrue);
     });
   });

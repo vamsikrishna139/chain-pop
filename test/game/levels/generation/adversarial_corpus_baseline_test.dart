@@ -79,12 +79,22 @@ void main() {
     // one order and 18 in the other. `measureEntry` now builds a fresh
     // `LevelGenerator.neutral()` per board.
     //
-    // Node count is the right quantity to check: `budget.coreCount` is consumed
-    // only post-generation, so it is invariant across all of P1 and this check
-    // stays meaningful after the fix lands.
+    // Node count is the right quantity to check — with one correction that P1
+    // forced. The paragraph above used to end "`budget.coreCount` is consumed
+    // only post-generation, so it is invariant across all of P1". That is true
+    // of `budget.coreCount` and false of the *board*: enrichment runs inside
+    // the generator's accept/reject loop, so changing which nodes are cores
+    // changes lock and relay placement and can change which candidate survives
+    // validation. See `kP1GeometryMovers` for the full argument and the 42
+    // boards it moved.
+    //
+    // Those boards are named rather than tolerated. Drift on anything else is
+    // still a failure, which is the only reason this check is still worth
+    // running.
     final drift = <String>[];
     for (final r in rows) {
       if (r.entry.freezeNodes == 0) continue;
+      if (kP1GeometryMovers.contains(r.entry.key)) continue;
       if (r.entry.freezeNodes != r.nodes) {
         drift.add('${r.entry.key}: freeze ${r.entry.freezeNodes} '
             'nodes vs measured ${r.nodes}');

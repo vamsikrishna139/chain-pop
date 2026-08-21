@@ -46,6 +46,16 @@ class GenerationPlan {
   /// place a motif on the silhouette.
   final List<MotifPlacement> motifs;
 
+  /// True when this plan came from a hand-authored [LevelSeed], whose whole
+  /// point is the silhouette it pins. [Director.renegotiate] swaps silhouette
+  /// on odd depths to escape starvation, which for a seeded plan quietly
+  /// destroys the thing the seed exists to deliver: a milestone could ship as
+  /// some other shape and still be counted as that seed's emission.
+  /// Renegotiation still runs for pinned plans — it just escapes by shrinking
+  /// the node count and re-rolling motifs, never by changing what the board
+  /// looks like.
+  final bool pinnedSilhouette;
+
   const GenerationPlan({
     required this.archetype,
     required this.spec,
@@ -57,6 +67,7 @@ class GenerationPlan {
     required this.useLegacyGreedyPath,
     this.renegotiationDepth = 0,
     this.motifs = const <MotifPlacement>[],
+    this.pinnedSilhouette = false,
   });
 
   /// Convenience: flattened list of all reservations from all motif blocks.
@@ -71,6 +82,7 @@ class GenerationPlan {
     bool? useLegacyGreedyPath,
     int? renegotiationDepth,
     List<MotifPlacement>? motifs,
+    bool? pinnedSilhouette,
   }) {
     return GenerationPlan(
       archetype: archetype,
@@ -83,6 +95,7 @@ class GenerationPlan {
       useLegacyGreedyPath: useLegacyGreedyPath ?? this.useLegacyGreedyPath,
       renegotiationDepth: renegotiationDepth ?? this.renegotiationDepth,
       motifs: motifs ?? this.motifs,
+      pinnedSilhouette: pinnedSilhouette ?? this.pinnedSilhouette,
     );
   }
 }
@@ -224,6 +237,7 @@ class Director {
       profile: profile,
       useLegacyGreedyPath: useLegacy,
       motifs: motifs,
+      pinnedSilhouette: true,
     );
   }
 
@@ -241,8 +255,13 @@ class Director {
     SilhouetteId nextSilhouette = previous.silhouette;
     Set<int> nextMask = previous.silhouetteMask;
     // Every other renegotiation, swap silhouette as well to escape silhouette
-    // starvation rather than just shrinking node count.
-    if (previous.renegotiationDepth.isOdd) {
+    // starvation rather than just shrinking node count. Seeded plans are
+    // exempt: the silhouette *is* the seed, so escaping starvation by
+    // abandoning it trades the milestone away to save the attempt. They keep
+    // the node-count downscale and the motif re-roll below, which are escapes
+    // that leave the landmark intact — and skipping the swap also spares a
+    // mask rebuild.
+    if (previous.renegotiationDepth.isOdd && !previous.pinnedSilhouette) {
       final candidates = previous.spec.preferredSilhouettes
           .where((s) => s != previous.silhouette)
           .toList();
@@ -296,8 +315,9 @@ class Director {
 
     SilhouetteId nextSilhouette = previous.silhouette;
     Set<int> nextMask = previous.silhouetteMask;
-    // After relaxing density, every other renegotiation swaps silhouette.
-    if (previous.renegotiationDepth.isOdd) {
+    // After relaxing density, every other renegotiation swaps silhouette —
+    // except for seeded plans, for the reason given in [renegotiate].
+    if (previous.renegotiationDepth.isOdd && !previous.pinnedSilhouette) {
       final candidates = previous.spec.preferredSilhouettes
           .where((s) => s != previous.silhouette)
           .toList();
@@ -315,6 +335,10 @@ class Director {
         silhouette: nextSilhouette,
         config: config,
         random: random,
+        // Seeds pin the canonical rendering (`choosePlanFromSeed` builds with
+        // `varied: false`); re-rolling shape variety here would drift the
+        // authored look and the seed's RNG stream along with it.
+        varied: !previous.pinnedSilhouette,
       );
       downscaled = downscaled.clamp(1, nextMask.length);
     }

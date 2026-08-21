@@ -47,6 +47,84 @@
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/generation_version.dart';
 
+/// Boards whose **geometry** P1 moved, declared explicitly.
+///
+/// ── The plan was wrong about this, and the guards are what proved it ────────
+///
+/// §0.1 of `docs/IMPLEMENTATION_PLAN_V2.md` argued that changing core selection
+/// cannot change a board, because `_climaxBandCoreIds` is a pure function of
+/// the solved board and draws no randomness. Both halves of that are true; the
+/// conclusion does not follow.
+///
+/// `enrichLevel` runs **inside** the generator's accept/reject loop, and the
+/// generator re-validates the *enriched* board before accepting a candidate
+/// (`level_generator.dart` — `final enriched = _enrichLevel(...)` immediately
+/// followed by `if (!validationResult.isValid) { _discardPendingEmission();
+/// continue; }`). Cores steer the mechanics placed around them: locked nodes
+/// exclude cores, and relays must avoid core *rows* because a relay can rotate
+/// a core into a permanent face-off. So a different core set means a different
+/// lock and relay placement, which means a candidate that used to be accepted
+/// can now be rejected — and the next attempt produces different geometry.
+///
+/// Measured over the frozen corpus, P1 moved 42 of 300 boards this way: 34
+/// Medium and 8 Hard. Node-count deltas run in **both** directions with a
+/// median of 0 and a mean of +0.2, and every Hard board kept its node count
+/// exactly, which is what rules out the "node counts inflated so `tapsToWin`
+/// rose while cores stayed last-popped" impostor the corpus exists to catch.
+/// `captureRate` p50 went 0.58 -> 1.00 over the same population.
+///
+/// ── Why this is a list and not a relaxed assertion ──────────────────────────
+///
+/// Turning the drift check off would retire the instrument. Naming the boards
+/// keeps it: any board **not** in this set that ever moves is still a failure,
+/// and this set is expected to shrink to nothing rather than grow — P2's
+/// re-baselining will move geometry deliberately and wholesale, at which point
+/// the corpus is re-frozen and this list is deleted, not extended.
+///
+/// Keyed `levelId/mode` to match `CorpusEntry.key`.
+const Set<String> kP1GeometryMovers = {
+  // Hard control — all eight kept their node count exactly; only the shipped
+  // candidate changed.
+  '189/hard', '479/hard', '494/hard', '788/hard',
+  '808/hard', '891/hard', '947/hard', '1174/hard',
+  // Medium — severity and representative views.
+  '268/medium', '303/medium', '304/medium', '319/medium',
+  '323/medium', '326/medium', '391/medium', '403/medium',
+  '443/medium', '482/medium', '489/medium', '503/medium',
+  '521/medium', '531/medium', '548/medium', '550/medium',
+  '556/medium', '572/medium', '580/medium', '581/medium',
+  '593/medium', '632/medium', '713/medium', '762/medium',
+  '861/medium', '882/medium', '886/medium', '942/medium',
+  '998/medium', '1206/medium', '1274/medium', '1365/medium',
+  '1411/medium', '1493/medium',
+};
+
+/// Boards the milestone-seed fix moved, 2026-08-20. Same contract as
+/// [kP1GeometryMovers]: named, not exempted by a relaxed assertion, and any
+/// board outside this set that moves is still a failure.
+///
+/// Eleven of the 300 frozen ids sit on milestone slots; two moved, and both are
+/// the fix doing exactly what it was written to do.
+///
+/// **550/medium — 16 -> 27 nodes.** The overload milestone. Its seeded path
+/// used to spend all 40 attempts failing to seat the full lock/relay budget and
+/// then fall through to the ordinary procedural pipeline, so the board measured
+/// here was never the milestone at all — it was whatever the fallback produced.
+/// The node count is the tell: 16 nodes is a procedural Medium board, 27 is the
+/// overload seed's own target. The ceiling moves with it (16 -> 24) because it
+/// is a different board, not a re-scored one.
+///
+/// **1225/medium — 23 -> 21 nodes.** The diamond milestone, same mechanism.
+///
+/// The other nine milestone ids in the corpus were already emitting their seed
+/// (sector 1, or slots whose budget seats on the first attempt) and did not
+/// move — including 950/medium, which was expected to and did not.
+///
+/// Keyed `levelId/mode` to match `CorpusEntry.key`.
+const Set<String> kMilestoneSeedFixMovers = {
+  '550/medium', '1225/medium',
+};
+
 /// Shape of this corpus definition — bump when the entry schema changes.
 const int kAdversarialCorpusVersion = 1;
 
