@@ -853,6 +853,33 @@ tap floor is the only thing standing between Easy and it.
 
 **Gate:** Easy's ≤6-tap share must stay at 0%.
 
+#### T2.4c outcome — 2026-08-21 · **SHIPPED, with `components` re-hardened**
+
+Two defects, both caught by controls written before the run.
+
+**1. The p10 floor fired.** All four rules soft put Medium at 0.4625 and Hard at
+0.5844 against gates of 0.63 / 0.65. The risk table below had already named the
+remedy — *"Re-reject `components` only; keep others soft"* — and it was applied
+as written. Shipped hard set is `{aspect, components}`.
+
+**2. A hard rule was unreachable.** Reject reasons resolve in a fixed priority
+order and `components` is last, so a board failing `singleton` (soft, 4th) *and*
+`components` (hard, 5th) was named `singleton` and admitted. The tell:
+re-hardening `components` left its p10 at 0.00 while Hard's shipped `singleton`
+violations went 5 → 36. Hard rules now resolve in their own pass across the
+whole set. Fixing this also cleared determinism probes 1/3/4 and a Daily in-band
+drop to 80%.
+
+**Final gate — passed, and improved on the pre-bundle tree:**
+
+| mode | gate | before | after |
+|---|---|---|---|
+| Medium | ≥ 0.63 | 0.6327 | **0.6514** |
+| Hard | ≥ 0.65 | 0.6595 | **0.6948** |
+
+Control (c), the 20-board on-device visual review, is **not done** — it needs a
+device and a human. It is the one T2.4c control still outstanding.
+
 ### Checks and balances
 
 | Risk | Control |
@@ -1152,6 +1179,13 @@ get there; both were tuned before anything shipped, so no seed moved on their ac
 > kind — including `diamond`, which is 60/60 short at 25 and so is *always* rejected today).
 > Pinned by the `PRE-EXISTING: hollowDiamond …` case in `layout_mask_test.dart`.
 
+#### T2.1 outcome — 2026-08-21 · **SHIPPED, in the bundle**
+
+Applied from `T2.1_parked.patch`. Contributed the bulk of P2's topology-class
+gain (Hard 22 → 38). It also **exposed a latent defect** — see T2.2's outcome:
+the new mask shapes made sub-band masks reachable on Medium and one board,
+L194, shipped 13 nodes and a 3-tap win. Caught by `core_triviality_test`.
+
 ### T2.2 — Decouple `minCells` from `minNodes`
 
 **File:** `director.dart:511`, `_buildOrFallbackMask`
@@ -1177,6 +1211,43 @@ floor today (24/60), and 0/60 under a floor of 15. The `PRE-EXISTING: hollowDiam
 guarantee. If it is *still* pathological after the decoupling, only then consider a shape-specific
 correction — do not pre-emptively patch the builder.
 
+#### T2.2 outcome — 2026-08-21 · **NO-GO as specified. An opposite correction shipped.**
+
+Full write-up in `docs/playtests/p2_bundle_result.md`.
+
+**The specified change is rejected on measurement.** The premise — "the mask
+only needs room for the target, and `_pickTargetNodeCount` already clamps
+`hi = min(profile.nodeCount.max, mask.length)`" — is true, and the conclusion
+does not follow. That clamp does not *reject* an undersized mask; it lowers the
+target through the floor, because `lo = max(profile.nodeCount.min, minNodes)`
+is 25 on Hard and the routine returns `hi` when `hi <= lo`. This is §0.1's
+error a third time.
+
+| `kMaskCellFloorRatio` | Hard L1–200 under the 25-node floor |
+|---|---|
+| 0.6 (as specified) | **34 / 200**, down to 15 nodes |
+| 1.0 (shipped) | **0 / 200** |
+
+What 0.6 bought did not pay for that: lattice 72.2% → 69.2%, L45–56 rect 4 → 2,
+**Hard topology classes 38 → 33 — worse on the DoD's headline measure.**
+
+**The floor was wrong in the other direction.** It read
+`config.difficulty.minNodes`; Medium's `minNodes` is 10 while its profile band
+starts at 14, so 10–13-cell masks produced boards below their own band. Latent
+until T2.1 made such masks reachable, at which point L194/medium shipped 13
+nodes and a 3-tap win and took F1 red. Now floored at
+`max(profile.nodeCount.min, difficulty.minNodes)` — Medium 10 → 14, Easy 4 → 8,
+Hard unchanged. **Seeded plans keep the old floor**: a seed's `difficultyTier`
+need not match the mode it ships on, and flooring by it collapsed milestone
+slots 325/625/825/925 to the rectangle fallback.
+
+**The `_hollowDiamond` assertion this task was required to close is NOT closed.**
+It was predicated on the floor dropping to 15, which is rejected. The complaint
+is still valid — measured 8×8 medians are diamond 29 and hollowDiamond 24
+against a floor of 25. The fix that does not touch the node floor is to bias
+those two builders' jitter ranges toward area preservation, exactly as T2.1 did
+for `_pentagonCells` and `_spiralCells`. **Separate seed-moving task; not done.**
+
 ### T2.3 — Loosen `_refinePlanMaskDensity`
 
 **File:** `director.dart:416-452`
@@ -1194,6 +1265,17 @@ cause of Hard's 68% lattice / 2% archipelago split.
 1C"). Relaxing it will lower fill%. Gate on `bboxOccupancy` and `largestEmptyRegion` from the
 report utils — the original symptom must not return. Make `kMaskAreaSlack` a named constant so it
 can be bisected.
+
+#### T2.3 outcome — 2026-08-21 · **SHIPPED, in the bundle**
+
+`kMaskAreaSlack` 1.15 → 1.5, and `organicMessy` exempted from substitution
+entirely. This is what removed the substitution pressure: attempt-level
+rectangle substitutions **6,067 → 2,460**, shipped mask fallback **0.0%**, Hard
+gen p95 186 ms → 126 ms.
+
+The `bboxOccupancy` / `largestEmptyRegion` guard was honoured — the Dense
+Strategy Phase 1C symptom did not return; `dense_strategy_snapshot_test` and
+`difficulty_quality_audit_test` are green.
 
 ### T2.4 — Composition validator: rejector → scorer, in **three stages**
 
@@ -1371,6 +1453,47 @@ before and after. Numbers cannot fully judge "looks good"; look at them.
 - [ ] T2.4b distributions committed and p10 threshold chosen **before** T2.4c landed.
 - [ ] Gen p95 not worse; device 600/600.
 - [ ] `level_seed_test` green — milestone boards unmoved.
+
+---
+
+### P2 outcome — 2026-08-21 · **PARTIAL. 5 of 9 DoD items met.**
+
+Scored in `docs/playtests/p2_variety_post_bundle.md` against
+`p2_variety_pre_bundle.md`, both measured by `p2_variety_report_test.dart` on
+the same machine.
+
+| DoD item | plan's "from" | measured before | after | verdict |
+|---|---|---|---|---|
+| Hard topology classes ≥ 30 | 23 | 22 | **38** | ✅ |
+| Hard lattice share < 50% | 68% | **73.0%** | 72.0% | ❌ |
+| Longest same-silhouette run ≤ 3 | 6 | 6 | 6 | ❌ |
+| Worst 5-level window ≥ 2 families | — | 1 | 1 | ❌ |
+| Rolling min-Hamming median ≥ 5 | 3.00 | 3.00 | 3.00 | ❌ |
+| Shipped mask fallback < 0.5% | 8% | **0.0%** | **0.0%** | ✅ (measurement corrected) |
+| Hard L45–56 not five full-rect | 5 | **9** | 4 | ✅ |
+| Gen p95 not worse | — | 186 ms | **126 ms** | ✅ |
+| `level_seed_test` green | — | green | green | ✅ |
+| T2.4b p10 floor | — | 0.6327 / 0.6595 | **0.6514 / 0.6948** | ✅ |
+| Device 600/600 | — | — | **not run** | ⏳ |
+
+**Three of the DoD's own "from" figures do not reproduce on the shipping tree**
+— lattice 68% vs 73.0%, fallback 8% vs 0.0%, L45–56 five vs nine. The two
+*sequence* measures (same-silhouette run 6, Hamming median 3.00) reproduce to
+the digit, which is what rules out "different corpus" as the explanation.
+
+**Why the four misses are not near-misses, and what would actually move them.**
+All four are properties of the emission *sequence*, and all four are dominated
+by two things this phase never touched: `_pickSilhouette`'s explicit **40%
+dense-silhouette bias** for Hard/Expert, which decides what is asked for before
+any mask is built, and the diversity ledger's **3-bit silhouette field**, which
+is what the Hamming median measures. T2.3 removed the *substitution* pressure
+and that is the ceiling of what a mask-geometry change can reach. Moving these
+means changing what the Director asks for — a `_pickSilhouette` / ledger task.
+It is not in P2 and has not been smuggled into it.
+
+**Outstanding before the freeze:** the 600-level device autoplay (also owed by
+T2.0), the 20-board visual review (T2.4c control c), and the pre-existing
+`relay_softlock_property_test` failure.
 
 ---
 
