@@ -24,6 +24,9 @@ class GenerationEmissionEvent {
   /// Stable id for the emitted level (the [LevelData.levelId]).
   final int levelId;
 
+  /// T0.0c Content Identity: '$levelId/$mode/v$generationVersion/$recipeId'
+  final String contentIdentity;
+
   /// Archetype that produced this level.
   final GenerationArchetype archetype;
 
@@ -72,6 +75,7 @@ class GenerationEmissionEvent {
 
   const GenerationEmissionEvent({
     required this.levelId,
+    required this.contentIdentity,
     required this.archetype,
     required this.silhouette,
     required this.seedId,
@@ -98,6 +102,7 @@ class GenerationEmissionEvent {
   /// Analytics, Amplitude, an in-process collector, etc.).
   Map<String, Object?> toMap() => <String, Object?>{
         'levelId': levelId,
+        'contentIdentity': contentIdentity,
         'archetype': archetype.name,
         'silhouette': silhouette.name,
         'seedId': seedId,
@@ -165,6 +170,18 @@ class GenerationSessionSnapshot {
   final int renegotiations;
   final Map<GenerationArchetype, int> archetypeEmissions;
   final Map<String, int> seedEmissions;
+
+  /// Seeded-path failure telemetry, by seed id — the other half of
+  /// [seedEmissions]. A milestone that burned all its attempts and shipped as
+  /// an ordinary procedural board used to be invisible here; these five say
+  /// how far it got and where it stopped. [seedFallthroughs] is the one to
+  /// alert on: every entry in it is a landmark the player never saw.
+  final Map<String, int> seedAttempts;
+  final Map<String, int> seedConstructionFailures;
+  final Map<String, int> seedValidationFailures;
+  final Map<String, int> seedMechanicShortfalls;
+  final Map<String, int> seedFallthroughs;
+
   final int strongMotifEmissions;
   final int strongMotifEmissionsWithMotif;
   final int blockingDirCandidatesOffered;
@@ -192,6 +209,11 @@ class GenerationSessionSnapshot {
     required this.renegotiations,
     required this.archetypeEmissions,
     required this.seedEmissions,
+    this.seedAttempts = const <String, int>{},
+    this.seedConstructionFailures = const <String, int>{},
+    this.seedValidationFailures = const <String, int>{},
+    this.seedMechanicShortfalls = const <String, int>{},
+    this.seedFallthroughs = const <String, int>{},
     required this.strongMotifEmissions,
     required this.strongMotifEmissionsWithMotif,
     this.blockingDirCandidatesOffered = 0,
@@ -234,6 +256,11 @@ class GenerationSessionSnapshot {
           for (final e in archetypeEmissions.entries) e.key.name: e.value,
         },
         'seedEmissions': seedEmissions,
+        'seedAttempts': seedAttempts,
+        'seedConstructionFailures': seedConstructionFailures,
+        'seedValidationFailures': seedValidationFailures,
+        'seedMechanicShortfalls': seedMechanicShortfalls,
+        'seedFallthroughs': seedFallthroughs,
         'strongMotifEmissions': strongMotifEmissions,
         'strongMotifEmissionsWithMotif': strongMotifEmissionsWithMotif,
         'strongMotifVisibilityRate': strongMotifVisibilityRate,
@@ -307,6 +334,7 @@ class InMemoryAnalyticsSink implements GenerationAnalyticsSink {
 /// formatting details.
 GenerationEmissionEvent buildEmissionEvent({
   required LevelData level,
+  required String contentIdentity,
   required GenerationArchetype archetype,
   required SilhouetteId silhouette,
   required LevelSeed? seed,
@@ -327,6 +355,7 @@ GenerationEmissionEvent buildEmissionEvent({
   final lockCluster = visibleMotifs.contains(MotifId.lockCluster);
   return GenerationEmissionEvent(
     levelId: level.levelId,
+    contentIdentity: contentIdentity,
     archetype: archetype,
     silhouette: silhouette,
     seedId: seed?.id,

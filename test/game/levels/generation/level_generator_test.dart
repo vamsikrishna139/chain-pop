@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:chain_pop/game/levels/analytics/generation_analytics.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/level_configuration.dart';
@@ -192,9 +193,9 @@ void main() {
     });
 
     group('deterministic generation', () {
-      test('same level ID produces identical levels', () {
-        final result1 = generator.generate(42);
-        final result2 = generator.generate(42);
+      test('same level ID produces identical levels on neutral generator', () {
+        final result1 = LevelGenerator.neutral().generate(42);
+        final result2 = LevelGenerator.neutral().generate(42);
 
         expect(result1.isSuccess, isTrue);
         expect(result2.isSuccess, isTrue);
@@ -221,9 +222,33 @@ void main() {
         }
       });
 
-      test('same level ID with same mode produces identical levels', () {
-        final result1 = generator.generate(10, mode: DifficultyMode.hard);
-        final result2 = generator.generate(10, mode: DifficultyMode.hard);
+      test('same level ID produces different levels on shared generator (ledger effect)', () {
+        final shared = LevelGenerator();
+        final result1 = shared.generate(44);
+        final result2 = shared.generate(44);
+
+        expect(result1.isSuccess, isTrue);
+        expect(result2.isSuccess, isTrue);
+
+        // They must differ because the ledger rejects the identical fingerprint
+        final level1 = result1.value;
+        final level2 = result2.value;
+        
+        bool isIdentical = level1.nodes.length == level2.nodes.length &&
+            level1.gridWidth == level2.gridWidth &&
+            level1.gridHeight == level2.gridHeight &&
+            level1.nodes.every((n1) {
+              final n2 = level2.nodes.firstWhere((n2) => n2.id == n1.id, 
+                orElse: () => NodeData(id: -1, x: -1, y: -1, dir: Direction.up, color: const Color(0xFF000000), colorSlot: 0));
+              return n2.x == n1.x && n2.y == n1.y && n2.dir == n1.dir;
+            });
+            
+        expect(isIdentical, isFalse, reason: 'Ledger should force diversity on same shared generator');
+      });
+
+      test('same level ID with same mode produces identical levels on neutral generator', () {
+        final result1 = LevelGenerator.neutral().generate(10, mode: DifficultyMode.hard);
+        final result2 = LevelGenerator.neutral().generate(10, mode: DifficultyMode.hard);
 
         expect(result1.isSuccess, isTrue);
         expect(result2.isSuccess, isTrue);

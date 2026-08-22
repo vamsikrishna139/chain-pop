@@ -1,3 +1,4 @@
+import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:chain_pop/game/levels/generation/diversity_ledger.dart';
 import 'package:chain_pop/game/levels/generation/metrics.dart';
 import 'package:chain_pop/game/levels/generation/silhouettes.dart';
@@ -55,6 +56,7 @@ void main() {
           level: level,
           metrics: m,
           silhouette: s,
+          tier: DifficultyTier.medium,
         );
         expect(fp.bits & 0x07, equals(s.index));
       }
@@ -85,6 +87,7 @@ void main() {
         level: level,
         metrics: m,
         silhouette: SilhouetteId.rectangle,
+        tier: DifficultyTier.medium,
       );
       // Up bit at offset 10 + Direction.up.index.
       final upBit = 1 << (10 + Direction.up.index);

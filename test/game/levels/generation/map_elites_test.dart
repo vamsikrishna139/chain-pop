@@ -151,7 +151,7 @@ void main() {
       expect(archive.coverage, greaterThanOrEqualTo(0.20),
           reason: 'coverage was ${(archive.coverage * 100).toStringAsFixed(1)}'
               '% over ${entries.length} samples');
-    });
+    }, tags: 'slow');
 
     test('LevelBank.empty is a usable safe-default', () {
       final bank = LevelBank.empty();

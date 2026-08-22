@@ -9,14 +9,19 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:chain_pop/game/board_layout.dart';
+import 'package:chain_pop/game/levels/generation/core_metrics.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
+import 'package:chain_pop/game/levels/generation/generation_version.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/generation/metrics.dart';
+import 'package:chain_pop/game/levels/generation/visual_composition.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_directive.dart';
 import 'package:chain_pop/game/world_registry.dart';
 import 'package:chain_pop/screens/game/game_time_limit.dart';
+
+import 'corpus_version.dart';
 
 /// Fixed reference canvas for cell-space emptiness. Every board observed in
 /// these samples fits inside 10×10 (dailies clamp at 8, campaign grids peak at
@@ -219,6 +224,8 @@ class CompositionMetrics {
     required this.largestEmptyRegion,
     required this.isolatedNodeCount,
     required this.meanLocalDensity,
+    required this.components,
+    required this.enclosedHoles,
   });
 
   /// Longest run of consecutive grid rows containing no node.
@@ -237,6 +244,15 @@ class CompositionMetrics {
   /// reads locally, independent of overall grid size.
   final double meanLocalDensity;
 
+  /// 4-connected components of occupied cells. 1 = one solid island,
+  /// higher = archipelago. First term of [BoardRow.topologyClass].
+  final int components;
+
+  /// 4-connected empty regions fully enclosed by nodes — i.e. that do not
+  /// touch the grid border. "Donut holes". Second term of
+  /// [BoardRow.topologyClass].
+  final int enclosedHoles;
+
   static CompositionMetrics compute(LevelData level) {
     final w = level.gridWidth;
     final h = level.gridHeight;
@@ -247,6 +263,8 @@ class CompositionMetrics {
         largestEmptyRegion: 0,
         isolatedNodeCount: 0,
         meanLocalDensity: 0,
+        components: 0,
+        enclosedHoles: 0,
       );
     }
     final occupied = <int>{for (final n in level.nodes) n.y * w + n.x};
@@ -273,14 +291,17 @@ class CompositionMetrics {
       bestColRun = max(bestColRun, colRun);
     }
 
-    // Largest 4-connected empty region (flood fill).
+    // Largest 4-connected empty region (flood fill). The same sweep counts
+    // *enclosed* empty regions — those that never touch the grid border.
     final seen = <int>{};
     var bestRegion = 0;
+    var enclosedHoles = 0;
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         final key = y * w + x;
         if (occupied.contains(key) || seen.contains(key)) continue;
         var size = 0;
+        var touchesBorder = false;
         final stack = <int>[key];
         seen.add(key);
         while (stack.isNotEmpty) {
@@ -288,6 +309,9 @@ class CompositionMetrics {
           size++;
           final kx = k % w;
           final ky = k ~/ w;
+          if (kx == 0 || ky == 0 || kx == w - 1 || ky == h - 1) {
+            touchesBorder = true;
+          }
           for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
             final nx = kx + dx;
             final ny = ky + dy;
@@ -299,6 +323,31 @@ class CompositionMetrics {
           }
         }
         bestRegion = max(bestRegion, size);
+        if (!touchesBorder) enclosedHoles++;
+      }
+    }
+
+    // 4-connected components of the OCCUPIED cells.
+    final seenNodes = <int>{};
+    var components = 0;
+    for (final key in occupied) {
+      if (seenNodes.contains(key)) continue;
+      components++;
+      final stack = <int>[key];
+      seenNodes.add(key);
+      while (stack.isNotEmpty) {
+        final k = stack.removeLast();
+        final kx = k % w;
+        final ky = k ~/ w;
+        for (final (dx, dy) in const [(1, 0), (-1, 0), (0, 1), (0, -1)]) {
+          final nx = kx + dx;
+          final ny = ky + dy;
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          final nk = ny * w + nx;
+          if (!occupied.contains(nk) || seenNodes.contains(nk)) continue;
+          seenNodes.add(nk);
+          stack.add(nk);
+        }
       }
     }
 
@@ -326,6 +375,8 @@ class CompositionMetrics {
       largestEmptyRegion: bestRegion,
       isolatedNodeCount: isolated,
       meanLocalDensity: densitySum / level.nodes.length,
+      components: components,
+      enclosedHoles: enclosedHoles,
     );
   }
 }
@@ -354,6 +405,7 @@ class BoardRow {
   BoardRow({
     required this.label,
     required this.levelId,
+    required this.contentIdentity,
     required this.sector,
     required this.worldName,
     required this.gridW,
@@ -363,6 +415,8 @@ class BoardRow {
     required this.bboxH,
     required this.metrics,
     required this.topo,
+    required this.core,
+    required this.visual,
     required this.cores,
     required this.locks,
     required this.relays,
@@ -380,6 +434,10 @@ class BoardRow {
 
   final String label; // "L742" or "20260813"
   final int levelId;
+
+  /// T0.0c content identity — `levelId/mode/vN/recipeId`. Stamped on every
+  /// CSV row so an offline measurement is traceable to its exact inputs.
+  final String contentIdentity;
   final int sector;
   final String worldName;
   final int gridW;
@@ -392,6 +450,16 @@ class BoardRow {
 
   final LevelMetrics metrics;
   final LevelTopologyMetrics topo;
+
+  /// T0.1 tap-depth core quality, measured on the ENRICHED board — the
+  /// sequential quantity `CoreWaveRatio` was standing in for. Evidence only
+  /// at P0; the gates that read it live in `core_triviality_test.dart`.
+  final CoreMetrics core;
+
+  /// T2.4a — composition score of the **shipped** board. Observation only;
+  /// nothing in `lib/` reads it. Pairs with the generator's
+  /// `visualScoresRejected` to give T2.4b both populations.
+  final VisualCompositionResult visual;
 
   final int cores;
   final int locks;
@@ -415,6 +483,22 @@ class BoardRow {
   final int bboxHeightCells;
 
   int get nodes => metrics.nodeCount;
+
+  /// Extractions the player must perform before the win fires.
+  ///
+  /// The single definition shared by the evidence layer and by the P1 gates in
+  /// `core_triviality_test.dart`, so the two cannot drift. It mirrors
+  /// `ChainPopGame.checkWinCondition` exactly:
+  ///
+  ///   * **core win** (`totalCores > 0`) — the win fires when the last core is
+  ///     extracted, so the cost is the prerequisite closure of the core set,
+  ///     i.e. [CoreMetrics.coreTapDepth].
+  ///   * **clear-all win** (no cores) — every node must be popped, so the cost
+  ///     is [nodes].
+  ///
+  /// Without the second branch a coreless board would report 0 taps, which is
+  /// the opposite of the truth: coreless boards are the *longest* ones.
+  int get tapsToWin => cores == 0 ? nodes : core.coreTapDepth;
   int get gridCells => gridW * gridH;
   int get bboxCells => bboxW * bboxH;
 
@@ -462,6 +546,23 @@ class BoardRow {
   /// Nodes per bounding-box cell — "how solid does the cluster read".
   double get bboxOccupancy => bboxCells == 0 ? 0 : nodes / bboxCells;
 
+  /// Coarse fill bucket — [bboxOccupancy] in quartiles, 0..3
+  /// (sparse / open / dense / solid). Deliberately blunt: the point of
+  /// [topologyClass] is that boards a player would call "the same kind of
+  /// shape" collapse onto one class.
+  ///
+  /// Quartiles were chosen by measurement, not taste — see
+  /// `docs/playtests/topology_class_calibration.md`, which also records why
+  /// this measure does **not** reproduce the 30/18/14 quoted in
+  /// `MASTER_PLAN_V2.md` and what that means for P2's DoD.
+  int get bboxFillBucket => (bboxOccupancy * 4).floor().clamp(0, 3);
+
+  /// The coarse perceptual shape class — `(components, enclosedHoles,
+  /// bboxFillBucket)`. Counting distinct values of this triple over a corpus
+  /// is the F4 measure.
+  String get topologyClass =>
+      '${composition.components}/${composition.enclosedHoles}/$bboxFillBucket';
+
   // ── re-measurement under alternative devices / fitters ───────────────────
 
   /// Cell edge this board would render at on [device] under [variant].
@@ -492,6 +593,7 @@ BoardRow measure(
   LevelData level, {
   required String label,
   required int levelId,
+  required DifficultyMode mode,
   required DifficultyProfile profile,
   required String directive,
   required int timeLimitSec,
@@ -530,9 +632,16 @@ BoardRow measure(
     heightFill: kBoardHeightFill,
   );
 
+  // T2.4a: the tier the generator's own evaluator would have used.
+  final visual = evaluateVisualComposition(
+    level,
+    DifficultyProfile.tierFromMode(mode),
+  );
+
   return BoardRow(
     label: label,
     levelId: levelId,
+    contentIdentity: contentIdentityFor(levelId: levelId, mode: mode),
     sector: sector,
     worldName: worldName,
     gridW: level.gridWidth,
@@ -542,6 +651,8 @@ BoardRow measure(
     bboxH: bboxH,
     metrics: m,
     topo: topo,
+    visual: visual,
+    core: CoreMetrics.compute(level),
     cores: level.nodes.where((n) => n.isCore).length,
     locks: level.nodes.where((n) => n.kind == NodeKind.locked).length,
     relays: level.nodes.where((n) => n.kind == NodeKind.relay).length,
@@ -559,11 +670,19 @@ BoardRow measure(
 }
 
 /// Generates + measures a campaign batch.
+///
+/// [timeBudget] defaults to [kProdBudget], which is what the shipped app
+/// applies and therefore what the diagnostic reports must measure. Callers that
+/// need a **reproducible** batch — the P1 gates in `core_triviality_test.dart` —
+/// pass `null`: the T0.0a closure audit scopes the determinism contract to
+/// `timeBudget == null`, because on the budgeted path elapsed wall-clock decides
+/// control flow, so a machine under load can take a different branch.
 List<BoardRow> runCampaignBatch({
   required List<int> levelIds,
   required DifficultyMode mode,
   required DifficultyProfile profile,
   required List<int> failures,
+  Duration? timeBudget = kProdBudget,
 }) {
   final gen = LevelGenerator();
   final rows = <BoardRow>[];
@@ -572,7 +691,7 @@ List<BoardRow> runCampaignBatch({
     sw
       ..reset()
       ..start();
-    final r = gen.generate(id, mode: mode, timeBudget: kProdBudget);
+    final r = gen.generate(id, mode: mode, timeBudget: timeBudget);
     sw.stop();
     if (!r.isSuccess) {
       failures.add(id);
@@ -585,6 +704,7 @@ List<BoardRow> runCampaignBatch({
       level,
       label: 'L$id',
       levelId: id,
+      mode: mode,
       profile: profile,
       directive: directiveFor(levelId: id, mode: mode).label,
       timeLimitSec: computeGameTimeLimit(mode, level.nodes.length, id) ?? 0,
@@ -631,6 +751,11 @@ void printRow(BoardRow r) {
     '| chokes=${m.chokePointCount} hub=${m.maxHubInDegree} '
     'antichain=${m.maxAntichainWidth} chainMax=${r.topo.chainDepthMax} '
     'fanout=${r.topo.avgUnlockFanout.toStringAsFixed(1)} '
+    '| topo=${r.topologyClass} '
+    'tapDepth=${r.core.coreTapDepth.toString().padLeft(2)} '
+    'tapFrac=${r.core.coreTapFraction.toStringAsFixed(2)} '
+    'coreCrit=${r.core.coreCriticalDepth} '
+    'cascade=${r.core.maxSingleTapCascade} '
     '| cores=${r.cores} lock=${r.locks} relay=${r.relays} '
     'phase=${r.phases} portal=${r.portals} '
     '| ${r.directive} t=${r.timeLimitSec}s inBand=${r.inBand ? "Y" : "n"} '
@@ -719,6 +844,23 @@ void printSummary(String label, List<BoardRow> rows, List<int> failures) {
     _Stat('antichain', [
       for (final r in rows) r.metrics.maxAntichainWidth.toDouble()
     ]),
+    _Stat('components', [
+      for (final r in rows) r.composition.components.toDouble()
+    ]),
+    _Stat('enclosedHoles', [
+      for (final r in rows) r.composition.enclosedHoles.toDouble()
+    ]),
+    _Stat('coreTapDepth', [
+      for (final r in rows) r.core.coreTapDepth.toDouble()
+    ]),
+    _Stat('coreTapFrac', [for (final r in rows) r.core.coreTapFraction]),
+    _Stat('coreIsolation', [for (final r in rows) r.core.coreIsolation]),
+    _Stat('coreCritDepth', [
+      for (final r in rows) r.core.coreCriticalDepth.toDouble()
+    ]),
+    _Stat('tapCascade', [
+      for (final r in rows) r.core.maxSingleTapCascade.toDouble()
+    ]),
     _Stat('timeLimitSec', [for (final r in rows) r.timeLimitSec.toDouble()]),
     _Stat('genMs', [for (final r in rows) r.genMs.toDouble()]),
   ];
@@ -767,6 +909,23 @@ void printSummary(String label, List<BoardRow> rows, List<int> failures) {
       [20, 30, 40, 50, 60, 70]);
   _histBucket(
       'FSR %', rows, (r) => r.metrics.forcedSequenceRatio * 100, [30, 40, 50, 60, 70]);
+
+  _histBucket('core tap depth', rows, (r) => r.core.coreTapDepth.toDouble(),
+      [3, 5, 7, 9, 12, 15, 20]);
+  _histBucket('core tap fraction', rows, (r) => r.core.coreTapFraction,
+      [0.15, 0.25, 0.35, 0.5, 0.65, 0.8]);
+
+  // F4 headline: how many coarse shape classes did this corpus actually
+  // produce? Diagnostic only — the gate lives elsewhere.
+  final classCounts = <String, int>{};
+  for (final r in rows) {
+    classCounts[r.topologyClass] = (classCounts[r.topologyClass] ?? 0) + 1;
+  }
+  final ranked = classCounts.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  print('  topology classes: ${ranked.length} distinct '
+      '(components/enclosedHoles/fillBucket)');
+  print('    commonest: ${ranked.take(5).map((e) => "${e.key}=${e.value}").join("  ")}');
 
   final slow = List<BoardRow>.from(rows)
     ..sort((a, b) => b.genMs.compareTo(a.genMs));
@@ -872,71 +1031,110 @@ void _histBucket(
 
 String _n(double v) => v == v.roundToDouble() ? v.toInt().toString() : '$v';
 
+/// The per-board CSV column names, in order.
+///
+/// Split out of [writeCsv] so a second corpus artifact can prepend its own
+/// bookkeeping columns and still emit an identical board block — T0.4's
+/// adversarial baseline does exactly that. One source of truth means a column
+/// added here appears in both, and the two can never silently disagree about
+/// what column 34 means.
+const String kBoardCsvHeader =
+    'label,levelId,contentIdentity,sector,world,gridW,gridH,'
+    'gridCells,maskCells,'
+    'nodes,screenEmptyPct,boardCoverPct,cellPx,tapPx,spritePx,'
+    'canvasEmptyPct,gridEmptyPct,bboxW,bboxH,bboxEmptyPct,bboxOccupancy,'
+    'emptyRowRun,emptyColRun,emptyRegion,isolatedNodes,meanLocalDensity,'
+    'components,enclosedHoles,topologyClass,'
+    'opening,waveZero,waves,cud,fsrPct,bf,frontierVar,paths,pathsCapped,'
+    'effort,chokes,maxHub,antichain,chainDepthMax,avgFanout,'
+    'coreTapDepth,coreTapFraction,coreIsolation,maxSingleTapCascade,'
+    'coreCriticalDepth,'
+    'compScore,compEvaluated,compAspect,compBlobVsGrid,compOccupancy,'
+    'compSingleton,compComponents,'
+    'cores,locks,relays,phases,portals,directive,timeLimitSec,inBand,genMs';
+
+/// One board as a CSV line matching [kBoardCsvHeader], without a trailing
+/// newline.
+String boardCsvRow(BoardRow r) {
+  final m = r.metrics;
+  return [
+    r.label,
+    r.levelId,
+    r.contentIdentity,
+    r.sector,
+    '"${r.worldName}"',
+    r.gridW,
+    r.gridH,
+    r.gridCells,
+    r.maskCells,
+    r.nodes,
+    r.screenEmptyPct.toStringAsFixed(1),
+    r.boardCoveragePct.toStringAsFixed(1),
+    r.cellPx.toStringAsFixed(1),
+    r.tapPx.toStringAsFixed(1),
+    r.spritePx.toStringAsFixed(1),
+    r.canvasEmptyPct.toStringAsFixed(1),
+    r.gridEmptyPct.toStringAsFixed(1),
+    r.bboxW,
+    r.bboxH,
+    r.bboxEmptyPct.toStringAsFixed(1),
+    r.bboxOccupancy.toStringAsFixed(3),
+    r.composition.largestEmptyRowRun,
+    r.composition.largestEmptyColRun,
+    r.composition.largestEmptyRegion,
+    r.composition.isolatedNodeCount,
+    r.composition.meanLocalDensity.toStringAsFixed(3),
+    r.composition.components,
+    r.composition.enclosedHoles,
+    r.topologyClass,
+    m.firstLegalMoveCount,
+    m.waveZeroWidth,
+    m.waveDepth,
+    m.criticalUnlockDepth,
+    (m.forcedSequenceRatio * 100).toStringAsFixed(1),
+    m.averageBranchingFactor.toStringAsFixed(2),
+    m.frontierVariance.toStringAsFixed(2),
+    m.viablePathCount,
+    m.viablePathCountCapped,
+    m.searchEffortScore,
+    m.chokePointCount,
+    m.maxHubInDegree,
+    m.maxAntichainWidth,
+    r.topo.chainDepthMax,
+    r.topo.avgUnlockFanout.toStringAsFixed(2),
+    r.core.coreTapDepth,
+    r.core.coreTapFraction.toStringAsFixed(3),
+    r.core.coreIsolation.toStringAsFixed(3),
+    r.core.maxSingleTapCascade,
+    r.core.coreCriticalDepth,
+    r.visual.score.toStringAsFixed(4),
+    r.visual.evaluated,
+    r.visual.detail.aspect.toStringAsFixed(4),
+    r.visual.detail.blobVsGrid.toStringAsFixed(4),
+    r.visual.detail.occupancy.toStringAsFixed(4),
+    r.visual.detail.singleton.toStringAsFixed(4),
+    r.visual.detail.components.toStringAsFixed(4),
+    r.cores,
+    r.locks,
+    r.relays,
+    r.phases,
+    r.portals,
+    r.directive,
+    r.timeLimitSec,
+    r.inBand,
+    r.genMs,
+  ].join(',');
+}
+
 /// Writes a CSV of every measured board for offline slicing.
 void writeCsv(String path, List<BoardRow> rows) {
   final f = File(path);
   f.parent.createSync(recursive: true);
   final b = StringBuffer()
-    ..writeln('label,levelId,sector,world,gridW,gridH,gridCells,maskCells,'
-        'nodes,screenEmptyPct,boardCoverPct,cellPx,tapPx,spritePx,'
-        'canvasEmptyPct,gridEmptyPct,bboxW,bboxH,bboxEmptyPct,bboxOccupancy,'
-        'emptyRowRun,emptyColRun,emptyRegion,isolatedNodes,meanLocalDensity,'
-        'opening,waveZero,waves,cud,fsrPct,bf,frontierVar,paths,pathsCapped,'
-        'effort,chokes,maxHub,antichain,chainDepthMax,avgFanout,'
-        'cores,locks,relays,phases,portals,directive,timeLimitSec,inBand,genMs');
+    ..write(kCorpusVersionHeader)
+    ..writeln(kBoardCsvHeader);
   for (final r in rows) {
-    final m = r.metrics;
-    b.writeln([
-      r.label,
-      r.levelId,
-      r.sector,
-      '"${r.worldName}"',
-      r.gridW,
-      r.gridH,
-      r.gridCells,
-      r.maskCells,
-      r.nodes,
-      r.screenEmptyPct.toStringAsFixed(1),
-      r.boardCoveragePct.toStringAsFixed(1),
-      r.cellPx.toStringAsFixed(1),
-      r.tapPx.toStringAsFixed(1),
-      r.spritePx.toStringAsFixed(1),
-      r.canvasEmptyPct.toStringAsFixed(1),
-      r.gridEmptyPct.toStringAsFixed(1),
-      r.bboxW,
-      r.bboxH,
-      r.bboxEmptyPct.toStringAsFixed(1),
-      r.bboxOccupancy.toStringAsFixed(3),
-      r.composition.largestEmptyRowRun,
-      r.composition.largestEmptyColRun,
-      r.composition.largestEmptyRegion,
-      r.composition.isolatedNodeCount,
-      r.composition.meanLocalDensity.toStringAsFixed(3),
-      m.firstLegalMoveCount,
-      m.waveZeroWidth,
-      m.waveDepth,
-      m.criticalUnlockDepth,
-      (m.forcedSequenceRatio * 100).toStringAsFixed(1),
-      m.averageBranchingFactor.toStringAsFixed(2),
-      m.frontierVariance.toStringAsFixed(2),
-      m.viablePathCount,
-      m.viablePathCountCapped,
-      m.searchEffortScore,
-      m.chokePointCount,
-      m.maxHubInDegree,
-      m.maxAntichainWidth,
-      r.topo.chainDepthMax,
-      r.topo.avgUnlockFanout.toStringAsFixed(2),
-      r.cores,
-      r.locks,
-      r.relays,
-      r.phases,
-      r.portals,
-      r.directive,
-      r.timeLimitSec,
-      r.inBand,
-      r.genMs,
-    ].join(','));
+    b.writeln(boardCsvRow(r));
   }
   f.writeAsStringSync(b.toString());
   print('  CSV: $path');

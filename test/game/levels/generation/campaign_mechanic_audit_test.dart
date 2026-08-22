@@ -5,6 +5,7 @@ import 'package:chain_pop/game/levels/generation/progression_profile.dart';
 import 'package:chain_pop/game/levels/seeds/milestone_seeds.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
+import 'package:chain_pop/game/world_registry.dart';
 
 void main() {
   test('Campaign Phase 0 regression guard', () {
@@ -53,9 +54,25 @@ void main() {
         }
       }
     }
-  });
+  }, tags: 'slow');
 
-  test('Medium campaign variable core-count regression guard', () {
+  // Re-baselined by P1 (T1.2/T1.3). Two things changed and both are deliberate:
+  //
+  //   * T1.3 raised Medium sector 3+ from two cores to three, at both of the
+  //     sites that used to carry the literal.
+  //   * T1.2's quality floor may ship MORE cores than the nominal budget, and
+  //     only more. On a board whose geometry cannot reach the mode's tap floor
+  //     at its nominal count, `_ensureCoreQuality` escalates one core at a time
+  //     up to the mode cap and accepts the first count that clears the floor.
+  //     In practice this fires only in sector 2, whose nominal count is 1:
+  //     across 400 sampled Medium levels, 23 sector-2 boards kept one core, 36
+  //     took two and 8 took three. Sectors 3-8 are already at the cap and never
+  //     escalate.
+  //
+  // So the invariant this guard can still assert is `>= budget.coreCount`, plus
+  // a hard cap of three. Asserting equality would forbid the escape valve that
+  // keeps `Medium min taps >= 6` true.
+  test('Medium campaign core-count regression guard', () {
     final gen = LevelGenerator(enableDiversityGating: false);
 
     for (final i in [126, 149, 174, 251, 274, 299]) {
@@ -66,8 +83,17 @@ void main() {
       final budget = budgetFor(levelId: i, mode: DifficultyMode.medium);
 
       final cores = level.nodes.where((n) => n.isCore).length;
-      expect(cores, equals(budget.coreCount),
-          reason: 'Medium level $i core count mismatch');
+      expect(cores, greaterThanOrEqualTo(budget.coreCount),
+          reason: 'Medium level $i shipped fewer cores than its budget');
+      expect(cores, lessThanOrEqualTo(3),
+          reason: 'Medium level $i exceeded the three-core cap');
+
+      final sector = worldForLevel(i).sector.mechanicBudgetTier;
+      if (sector >= 3) {
+        expect(cores, equals(3),
+            reason: 'Medium level $i (sector $sector) must ship exactly three '
+                'cores — sectors 3+ are already at the cap and cannot escalate');
+      }
     }
   });
 

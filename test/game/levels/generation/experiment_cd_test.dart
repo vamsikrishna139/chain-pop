@@ -5,6 +5,9 @@
 //   flutter test test/game/levels/generation/experiment_cd_test.dart
 // ignore_for_file: avoid_print
 
+@Tags(['report'])
+library;
+
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_profile.dart';
 import 'package:chain_pop/game/levels/generation/level_configuration.dart';

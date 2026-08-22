@@ -50,8 +50,7 @@ class _DailyChallengeBannerSlotState extends State<DailyChallengeBannerSlot>
 
     try {
       if (widget.useStandardSize) {
-        size = await AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(
-            bounded);
+        size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(bounded);
       } else {
         size = await AdSize.getLargeAnchoredAdaptiveBannerAdSize(bounded);
       }

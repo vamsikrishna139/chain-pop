@@ -15,14 +15,67 @@ class SearchEffortResult {
   /// Whether the human-like solver cleared the board.
   final bool solved;
 
+  /// True when the search hit [computeSearchEffort]'s expansion or time cap
+  /// and returned early. The counts are then a **lower bound**, and [solved]
+  /// is meaningless — a capped search reports `false` because it ran out of
+  /// budget, not because the board is unsolvable.
+  final bool capped;
+
   const SearchEffortResult({
     required this.expansionCount,
     required this.backtrackCount,
     required this.solved,
+    this.capped = false,
   });
 
   /// Combined effort signal: expansions plus backtracks.
   int get searchEffortScore => expansionCount + backtrackCount;
+}
+
+/// Bounds one [computeSearchEffort] run.
+///
+/// **Why this exists (T2.0, 2026-08-21).** `_solveState` → `_dfsTieBreak` →
+/// `_commitMove` → `_solveState` is a full backtracking search, and
+/// `maxTieDepth` does not bound it: `_dfsTieBreak` recurses through
+/// `_solveState`, which re-enters tie-breaking at `depth: 0`, so the depth
+/// counter resets on every commit. On a board with many tied moves the search
+/// is exponential.
+///
+/// Measured on campaign **L777 Hard**: `computeSearchEffort` took **6.2 s per
+/// call, 74.4 s of a 74.6 s generation — 99.8% of the total**. The board still
+/// generated correctly; it was simply unaffordable to measure. This is the
+/// pathology previously attributed to the retrograde constructor; the
+/// constructor accounted for 0.1 s of that 74.6 s.
+///
+/// The caps mirror [computeViablePathCount], which has carried
+/// `branchCap` / `expansionCap` / `maxMicroseconds` since it was written.
+class _EffortBudget {
+  _EffortBudget({required this.expansionCap, required this.maxMicroseconds})
+      : _watch = Stopwatch()..start();
+
+  final int expansionCap;
+  final int maxMicroseconds;
+  final Stopwatch _watch;
+
+  int expansions = 0;
+  bool capped = false;
+
+  /// Latches once tripped, so an exhausted search unwinds in O(depth) instead
+  /// of re-testing the clock at every frame.
+  bool get exhausted {
+    if (capped) return true;
+    if (expansions >= expansionCap) {
+      capped = true;
+      return true;
+    }
+    // Sample the clock rarely — Stopwatch reads are not free in a hot search.
+    if ((expansions & 0x3F) == 0 &&
+        _watch.elapsedMicroseconds >= maxMicroseconds) {
+      capped = true;
+      return true;
+    }
+    return false;
+  }
 }
 
 /// Simulates a human-like solve and returns search-effort telemetry.
@@ -30,9 +83,18 @@ class SearchEffortResult {
 /// Greedily prefers obvious moves (ray-clear, edge-pointing, min-dependents).
 /// When multiple moves tie at the top heuristic tier, a bounded depth-2–3 DFS
 /// explores alternatives and counts backtracks.
+/// [expansionCap] and [maxMicroseconds] bound the search. Boards that finish
+/// inside both budgets return exactly what they always did; only runs that
+/// would otherwise have exploded are affected, and they set
+/// [SearchEffortResult.capped].
+///
+/// Nothing in `lib/` selects on this metric — it is read only by the corpus
+/// CSV reporting — so capping it cannot change which board ships.
 SearchEffortResult computeSearchEffort(
   LevelData level, {
   int maxTieDepth = 3,
+  int expansionCap = 50000,
+  int maxMicroseconds = 20000,
 }) {
   if (level.nodes.isEmpty) {
     return const SearchEffortResult(
@@ -47,6 +109,11 @@ SearchEffortResult computeSearchEffort(
   var expansions = 0;
   var backtracks = 0;
 
+  final budget = _EffortBudget(
+    expansionCap: expansionCap,
+    maxMicroseconds: maxMicroseconds,
+  );
+
   final solved = _solveState(
     remaining,
     positions,
@@ -54,6 +121,7 @@ SearchEffortResult computeSearchEffort(
     maxTieDepth: maxTieDepth,
     expansions: expansions,
     backtracks: backtracks,
+    budget: budget,
     onExpansion: () => expansions++,
     onBacktrack: () => backtracks++,
   );
@@ -61,7 +129,8 @@ SearchEffortResult computeSearchEffort(
   return SearchEffortResult(
     expansionCount: expansions,
     backtrackCount: backtracks,
-    solved: solved,
+    solved: solved && !budget.capped,
+    capped: budget.capped,
   );
 }
 
@@ -72,12 +141,19 @@ bool _solveState(
   required int maxTieDepth,
   required int expansions,
   required int backtracks,
+  required _EffortBudget budget,
   required void Function() onExpansion,
   required void Function() onBacktrack,
 }) {
   if (remaining.isEmpty) return true;
+  // T2.0 cap. Returning false unwinds the stack the same way a dead end does,
+  // so an exhausted search costs O(depth) to abandon. `budget.capped` is what
+  // distinguishes "ran out of budget" from "genuinely unsolvable" — see
+  // [SearchEffortResult.capped].
+  if (budget.exhausted) return false;
 
   onExpansion();
+  budget.expansions++;
   final legal = <NodeData>[];
   for (final n in remaining) {
     if (LevelSolver.canRemoveWithPositions(n, positions, level)) {
@@ -94,6 +170,7 @@ bool _solveState(
       maxTieDepth: maxTieDepth,
       expansions: expansions,
       backtracks: backtracks,
+      budget: budget,
       onExpansion: onExpansion,
       onBacktrack: onBacktrack,
     );
@@ -115,6 +192,7 @@ bool _solveState(
       maxTieDepth: maxTieDepth,
       expansions: expansions,
       backtracks: backtracks,
+      budget: budget,
       onExpansion: onExpansion,
       onBacktrack: onBacktrack,
     );
@@ -129,6 +207,7 @@ bool _solveState(
     maxTieDepth: maxTieDepth,
     expansions: expansions,
     backtracks: backtracks,
+    budget: budget,
     onExpansion: onExpansion,
     onBacktrack: onBacktrack,
   );
@@ -142,6 +221,7 @@ bool _commitMove(
   required int maxTieDepth,
   required int expansions,
   required int backtracks,
+  required _EffortBudget budget,
   required void Function() onExpansion,
   required void Function() onBacktrack,
 }) {
@@ -156,6 +236,7 @@ bool _commitMove(
     maxTieDepth: maxTieDepth,
     expansions: expansions,
     backtracks: backtracks,
+    budget: budget,
     onExpansion: onExpansion,
     onBacktrack: onBacktrack,
   );
@@ -173,6 +254,7 @@ bool _dfsTieBreak(
   required int maxTieDepth,
   required int expansions,
   required int backtracks,
+  required _EffortBudget budget,
   required void Function() onExpansion,
   required void Function() onBacktrack,
 }) {
@@ -185,6 +267,7 @@ bool _dfsTieBreak(
       maxTieDepth: maxTieDepth,
       expansions: expansions,
       backtracks: backtracks,
+      budget: budget,
       onExpansion: onExpansion,
       onBacktrack: onBacktrack,
     );
@@ -202,6 +285,7 @@ bool _dfsTieBreak(
       maxTieDepth: maxTieDepth,
       expansions: expansions,
       backtracks: backtracks,
+      budget: budget,
       onExpansion: onExpansion,
       onBacktrack: onBacktrack,
     );

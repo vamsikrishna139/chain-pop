@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:chain_pop/game/levels/analytics/generation_analytics.dart';
 import 'package:chain_pop/game/levels/generation/silhouettes.dart';
 
+export 'corpus_version.dart';
+
 
 /// Default §4.5 emission window copied for rolling Hamming summaries.
 const int kDiversityFingerprintWindowSize = 20;

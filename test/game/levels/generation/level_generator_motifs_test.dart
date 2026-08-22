@@ -76,7 +76,7 @@ void main() {
       // ≤ Strong-Motif emissions and ≤ total motif shipments.
       expect(strongWithMotif, lessThanOrEqualTo(strongCount));
       expect(strongWithMotif, lessThanOrEqualTo(motifShippedTotal));
-    });
+    }, tags: 'slow');
 
     test('Hard/Expert generations reserve lock cluster motifs', () {
       final gen = LevelGenerator(enableDiversityGating: false);

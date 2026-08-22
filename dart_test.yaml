@@ -1,0 +1,21 @@
+# Tag declarations for the test suite.
+#
+# The default `flutter test` run should stay fast enough to use as a
+# tight feedback loop. Two buckets are held out of it:
+#
+#   report — diagnostic harnesses that print a human-readable report and
+#            assert nothing (or only that generation succeeded). Useful when
+#            investigating generator behaviour, worthless as a regression gate.
+#
+#   slow   — genuine regression canaries whose sweeps are large enough
+#            (500–1000 full level generations) that they belong in CI or a
+#            pre-release run rather than every local invocation.
+#
+# Day-to-day:   flutter test --exclude-tags "report || slow"
+# Full sweep:   flutter test
+# Reports only: flutter test --tags report
+tags:
+  report:
+    timeout: 60m
+  slow:
+    timeout: 30m

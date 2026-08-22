@@ -11,6 +11,7 @@ import 'difficulty_profile.dart';
 import 'director.dart';
 import 'diversity_ledger.dart';
 import 'generation_error.dart';
+import 'generation_version.dart';
 import 'difficulty_parameters.dart';
 import 'level_configuration.dart';
 import 'level_validator.dart';
@@ -60,9 +61,18 @@ class LevelGenerator {
   final SilhouetteSessionTracker _silhouetteSessionTracker;
 
   /// When false, the diversity ledger never rejects a candidate (it is still
-  /// updated for telemetry). Set to false in tests that expect strict
-  /// determinism across multiple `generate()` calls on the same generator;
-  /// production callers should leave it at the default `true`.
+  /// updated for telemetry). Production callers should leave it at the
+  /// default `true`.
+  ///
+  /// **This does NOT make a shared generator deterministic**, despite what
+  /// this comment used to claim. The flag is honoured in exactly one place —
+  /// the `isNovel` check in the K-loop — while `_silhouetteSessionTracker`
+  /// keeps scoring candidates by `streakPenalty`/`diversityBoost` regardless,
+  /// so two `generate(id)` calls on the same instance can still diverge.
+  ///
+  /// For byte-identity, construct a fresh [LevelGenerator.neutral] per call.
+  /// See the T0.0b probes in
+  /// `test/game/levels/generation/determinism_contract_test.dart`.
   final bool enableDiversityGating;
 
   /// Phase 6 §9 — analytics sink. Defaults to a no-op so the
@@ -78,6 +88,29 @@ class LevelGenerator {
   int _retrogradeOutOfBandSuccessCount = 0;
   int _evaluatorRejectionCount = 0;
   int _diversityRejectionCount = 0;
+  // T2.5 — K-loop mortality, per stage.
+  //
+  // `_evaluatorRejectionCount` cannot answer "which gate starves the funnel":
+  // it also increments on the `!inBand` branch when the candidate then *goes
+  // on to be counted*, so it is not a count of rejections. It is kept
+  // unchanged so the analytics series stays a like-for-like measurement, and
+  // these stand beside it. All are write-only — nothing reads them but tests.
+  int _kloopIterations = 0;
+  int _kloopBudgetBreaks = 0;
+  int _constructionFailures = 0;
+  int _fsrCapRejects = 0;
+  int _compositionHardRejects = 0;
+  int _cudFloorRejects = 0;
+  int _outOfBandNoted = 0;
+  // Attribution for [_compositionHardRejects]. `visual.reason` names the first
+  // failing rule in the fixed priority order aspect → blobVsGrid → occupancy →
+  // singleton → components, hard or soft — so on a hard reject it can name a
+  // *soft* rule that also failed. `kHardCompositionRules` is {aspect,
+  // components} and aspect is first, so the attribution is exact: reason ==
+  // aspect means aspect; anything else means components was the hard failure.
+  // Getting this wrong is the same trap T2.4c fell into.
+  int _hardRejectAspect = 0;
+  int _hardRejectComponents = 0;
   int _legacyAttemptCount = 0;
   int _renegotiationCount = 0;
   int _blockingDirCandidatesOffered = 0;
@@ -96,6 +129,21 @@ class LevelGenerator {
   int _rejectSingletonCount = 0;
   int _rejectBlobVsGridCount = 0;
 
+  // ── Candidate telemetry (the bundle, per plan §T2.0) ──────────────────────
+  //
+  // The open question T2.1 raised and could not answer while it was parked:
+  // when repeated `generate(44)` stopped producing different boards, did the
+  // diversity ledger stop *influencing* selection, or did the generator stop
+  // *producing* eligible alternatives for it to choose between? Those have
+  // opposite fixes, and no counter in the session snapshot separated them.
+  //
+  // Write-only, like every counter here (T0.0c asserts as much): nothing reads
+  // these during generation, so they cannot move a board.
+  int _candidateCount = 0;
+  int _novelCandidateCount = 0;
+  int _acceptedNovelCandidateCount = 0;
+  final Map<String, int> _fallbackReasonCounts = <String, int>{};
+
   // Per-archetype emission counts, used by Phase 3's "distribution matches
   // §5 within ±3%" acceptance test.
   final Map<GenerationArchetype, int> _archetypeEmissionCounts = {
@@ -112,6 +160,45 @@ class LevelGenerator {
   };
   // Phase 5 — seed-driven emission counter (by seed id).
   final Map<String, int> _seedEmissionCounts = <String, int>{};
+
+  // Seeded-path *failure* telemetry, by seed id.
+  //
+  // [_seedEmissionCounts] counts only the seeded attempts that shipped, which
+  // is why the milestone-fallthrough defect survived for so long: a milestone
+  // that burned all its attempts and quietly shipped as an ordinary procedural
+  // board was indistinguishable, from the outside, from one that never had a
+  // seed at all. Nothing counted the failure, so nothing could alert on it.
+  //
+  // These five are that missing half. They are pure counters — no behaviour
+  // depends on them — but between them they say exactly *why* a milestone did
+  // not ship as itself:
+  //
+  //   attempts             seeded iterations entered
+  //   constructionFailures the Director could not build the pinned silhouette
+  //   validationFailures   it built, but the enriched board was invalid
+  //   mechanicShortfalls   it built and validated, but could not seat the
+  //                        lock/relay budget
+  //   fallthroughs         the seeded path gave up and the level shipped as a
+  //                        procedural board — the landmark is gone
+  final Map<String, int> _seedAttemptCounts = <String, int>{};
+  final Map<String, int> _seedConstructionFailureCounts = <String, int>{};
+  final Map<String, int> _seedValidationFailureCounts = <String, int>{};
+  final Map<String, int> _seedMechanicShortfallCounts = <String, int>{};
+  final Map<String, int> _seedFallthroughCounts = <String, int>{};
+
+  void _bumpSeed(Map<String, int> counter, String id) =>
+      counter[id] = (counter[id] ?? 0) + 1;
+
+  /// How many seeded attempts may be spent chasing a board that seats its
+  /// *full* lock/relay budget before the path ships a mechanic-short one.
+  ///
+  /// The audit (`milestone_seed_audit_test`) measured the trade directly: on
+  /// every slot that lost its landmark, 30-39 of the 40 attempts ended in a
+  /// shortfall and none ever seated the full budget. Retrying is close to free
+  /// of upside there and costs the whole 40-attempt burn, so the cap is small.
+  /// It is not zero because the cheap slots *do* recover within an attempt or
+  /// two (225, 325, 825 all emit after one shortfall).
+  static const int _kSeedMechanicShortfallRetries = 3;
 
   // Phase 6 — staged emission record. Filled inside
   // `_attemptDirectorDrivenGeneration`; committed (= counters incremented +
@@ -136,7 +223,39 @@ class LevelGenerator {
         _diversityLedger = diversityLedger ?? DiversityLedger(),
         _silhouetteSessionTracker =
             silhouetteSessionTracker ?? SilhouetteSessionTracker(),
-        analyticsSink = analyticsSink ?? noopAnalyticsSink;
+        analyticsSink = analyticsSink ?? noopAnalyticsSink {
+    // Hand the Director a read-only view of session history so it can break
+    // same-family runs at request time. The tracker stays owned here; the
+    // Director only ever reads it.
+    _director.currentFamilyStreak = () => (
+          family: _silhouetteSessionTracker.currentStreakFamily() ??
+              SilhouetteVisualFamily.geometricLattice,
+          length: _silhouetteSessionTracker.currentStreakLength(),
+        );
+  }
+
+  /// Named construction guaranteeing an empty ledger and silhouette
+  /// tracker, for tests and reproduction.
+  ///
+  /// Functionally equivalent to `LevelGenerator()` today, since the default
+  /// constructor also creates fresh session state when none is injected. It
+  /// exists so byte-identity call sites *declare* that they depend on neutral
+  /// state rather than relying on that default staying true.
+  factory LevelGenerator.neutral({
+    LevelValidator? validator,
+    Director? director,
+    bool enableDiversityGating = true,
+    GenerationAnalyticsSink? analyticsSink,
+  }) {
+    return LevelGenerator(
+      validator: validator,
+      director: director,
+      diversityLedger: DiversityLedger(),
+      silhouetteSessionTracker: SilhouetteSessionTracker(),
+      enableDiversityGating: enableDiversityGating,
+      analyticsSink: analyticsSink,
+    );
+  }
 
   /// Index (0=0.72, 1=0.45, 2=0.25) from the most recent successful retrograde build.
   int? get lastWinningBlockingRetryIndex => _lastWinningBlockingRetryIndex;
@@ -161,6 +280,22 @@ class LevelGenerator {
 
   /// Diversity-ledger rejections (candidate too close to recent emissions).
   int get diversityRejectionCount => _diversityRejectionCount;
+
+  /// T2.5 — K-loop mortality, per stage. Every iteration entered exits through
+  /// exactly one of: [constructionFailures], [fsrCapRejects],
+  /// [compositionHardRejects], [cudFloorRejects], or reaching the ledger
+  /// ([candidateCount]). [kloopBudgetBreaks] counts iterations never entered
+  /// because the latency budget ended the loop early; [outOfBandNoted] is an
+  /// observation, not an exit — those candidates still reach the ledger.
+  int get kloopIterations => _kloopIterations;
+  int get kloopBudgetBreaks => _kloopBudgetBreaks;
+  int get constructionFailures => _constructionFailures;
+  int get fsrCapRejects => _fsrCapRejects;
+  int get compositionHardRejects => _compositionHardRejects;
+  int get cudFloorRejects => _cudFloorRejects;
+  int get outOfBandNoted => _outOfBandNoted;
+  int get hardRejectAspect => _hardRejectAspect;
+  int get hardRejectComponents => _hardRejectComponents;
 
   /// Number of times the legacy greedy path was tried (Experimental archetype
   /// in Phase 3+).
@@ -194,6 +329,30 @@ class LevelGenerator {
   Map<String, int> get seedEmissionCounts =>
       Map<String, int>.unmodifiable(_seedEmissionCounts);
 
+  /// Seeded iterations entered, by seed id.
+  Map<String, int> get seedAttemptCounts =>
+      Map<String, int>.unmodifiable(_seedAttemptCounts);
+
+  /// Seeded iterations where the Director could not build the pinned
+  /// silhouette at all.
+  Map<String, int> get seedConstructionFailureCounts =>
+      Map<String, int>.unmodifiable(_seedConstructionFailureCounts);
+
+  /// Seeded iterations that built a board whose enrichment failed validation.
+  Map<String, int> get seedValidationFailureCounts =>
+      Map<String, int>.unmodifiable(_seedValidationFailureCounts);
+
+  /// Seeded iterations discarded because the enriched board could not seat its
+  /// full lock/relay budget.
+  Map<String, int> get seedMechanicShortfallCounts =>
+      Map<String, int>.unmodifiable(_seedMechanicShortfallCounts);
+
+  /// Seeds that gave up and let the level ship as an ordinary procedural
+  /// board. **Any non-zero entry here is a lost milestone**, and the whole
+  /// point of this counter is that it can no longer happen silently.
+  Map<String, int> get seedFallthroughCounts =>
+      Map<String, int>.unmodifiable(_seedFallthroughCounts);
+
   /// Phase 6 §9 — returns a cumulative session snapshot suitable for the
   /// weekly QA-by-archetype report (the host app calls this every N levels
   /// and forwards the result to its sink).
@@ -209,6 +368,14 @@ class LevelGenerator {
       archetypeEmissions:
           Map<GenerationArchetype, int>.from(_archetypeEmissionCounts),
       seedEmissions: Map<String, int>.from(_seedEmissionCounts),
+      seedAttempts: Map<String, int>.from(_seedAttemptCounts),
+      seedConstructionFailures:
+          Map<String, int>.from(_seedConstructionFailureCounts),
+      seedValidationFailures:
+          Map<String, int>.from(_seedValidationFailureCounts),
+      seedMechanicShortfalls:
+          Map<String, int>.from(_seedMechanicShortfallCounts),
+      seedFallthroughs: Map<String, int>.from(_seedFallthroughCounts),
       strongMotifEmissions: _strongMotifEmissionCount,
       strongMotifEmissionsWithMotif: _strongMotifEmissionsWithMotifCount,
       blockingDirCandidatesOffered: _blockingDirCandidatesOffered,
@@ -239,6 +406,16 @@ class LevelGenerator {
     _retrogradeOutOfBandSuccessCount = 0;
     _evaluatorRejectionCount = 0;
     _diversityRejectionCount = 0;
+    _kloopIterations = 0;
+    _kloopBudgetBreaks = 0;
+    _constructionFailures = 0;
+    _fsrCapRejects = 0;
+    _coreFloorRejects = 0;
+    _compositionHardRejects = 0;
+    _cudFloorRejects = 0;
+    _outOfBandNoted = 0;
+    _hardRejectAspect = 0;
+    _hardRejectComponents = 0;
     _legacyAttemptCount = 0;
     _renegotiationCount = 0;
     _blockingDirCandidatesOffered = 0;
@@ -255,6 +432,10 @@ class LevelGenerator {
     _rejectComponentsCount = 0;
     _rejectSingletonCount = 0;
     _rejectBlobVsGridCount = 0;
+    _candidateCount = 0;
+    _novelCandidateCount = 0;
+    _acceptedNovelCandidateCount = 0;
+    _fallbackReasonCounts.clear();
     for (final a in GenerationArchetype.values) {
       _archetypeEmissionCounts[a] = 0;
     }
@@ -264,6 +445,61 @@ class LevelGenerator {
       _motifEmissionCounts[m] = 0;
     }
     _seedEmissionCounts.clear();
+    _seedAttemptCounts.clear();
+    _seedConstructionFailureCounts.clear();
+    _seedValidationFailureCounts.clear();
+    _seedMechanicShortfallCounts.clear();
+    _seedFallthroughCounts.clear();
+  }
+
+  /// T2.4a shadow-mode score samples. Capped so a long session cannot grow
+  /// them without bound; the cap is far above any single corpus sweep.
+  static const int _kVisualScoreSampleCap = 50000;
+  final List<double> _visualScoresAccepted = [];
+  final List<double> _visualScoresRejected = [];
+
+  /// Composition scores of candidates that passed the composition rules.
+  List<double> get visualScoresAccepted =>
+      List.unmodifiable(_visualScoresAccepted);
+
+  /// Composition scores of candidates the composition rules rejected.
+  ///
+  /// This is the population T2.4b cannot obtain any other way: these boards are
+  /// discarded inside the K-loop and never reach a CSV.
+  List<double> get visualScoresRejected =>
+      List.unmodifiable(_visualScoresRejected);
+
+  /// Candidates that survived construction, the FSR cap and composition
+  /// admission, i.e. everything the diversity ledger was actually offered.
+  int get candidateCount => _candidateCount;
+
+  /// Of those, how many the ledger judged novel.
+  int get novelCandidateCount => _novelCandidateCount;
+
+  /// Of the novel ones, how many were retained as in-band candidates — the
+  /// pool the comparator then ranks.
+  int get acceptedNovelCandidateCount => _acceptedNovelCandidateCount;
+
+  /// Which exit path each shipped level took, by name. A generator whose
+  /// boards have stopped varying reads very differently here depending on the
+  /// cause: `in-band` with `candidateCount == 1` means nothing else was
+  /// produced; `in-band` with a healthy candidate count and
+  /// `novelCandidateCount == candidateCount` means the ledger saw plenty and
+  /// simply had no reason to prefer a different one.
+  Map<String, int> get fallbackReasonCounts =>
+      Map<String, int>.unmodifiable(_fallbackReasonCounts);
+
+  void _noteFallbackReason(String reason) =>
+      _fallbackReasonCounts[reason] = (_fallbackReasonCounts[reason] ?? 0) + 1;
+
+  void _recordVisualScore(VisualCompositionResult visual,
+      {required bool accepted}) {
+    // Easy short-circuits to pass() without evaluating the rules, so its
+    // filler detail must not be mistaken for a perfect composition.
+    if (!visual.evaluated) return;
+    final target = accepted ? _visualScoresAccepted : _visualScoresRejected;
+    if (target.length >= _kVisualScoreSampleCap) return;
+    target.add(visual.score);
   }
 
   void _incrementVisualRejectCounter(VisualCompositionRejectReason? reason) {
@@ -349,6 +585,11 @@ class LevelGenerator {
     Duration? timeBudget,
     bool allowMechanicShortFallback = false,
   }) {
+    // T0.0c: fold generationVersion into seed derivation (identity at v1)
+    if (kGenerationVersion > 1) {
+      primarySeed = primarySeed ^ ((kGenerationVersion - 1) * 73856093);
+    }
+
     final validation = config.validate();
     if (!validation.isValid) {
       return Result.error(
@@ -396,15 +637,55 @@ class LevelGenerator {
                 GenerationError.invalidConfiguration(validation.message));
           }
         }
+        // On [maxAttempts] here, rather than a smaller seeded-specific cap:
+        // a tight cap looks like the obvious way to bound this path, and the
+        // measurement says otherwise. Sniper slots fail construction
+        // repeatedly and then *succeed*, at attempt 14 (L100), 15 (L400), 18
+        // (L1000) and 19 (L600); an 8-attempt cap would trade six landmarks
+        // for latency that is no longer the problem. The multi-second stalls
+        // (L725 Hard: 42.5s) came from the shortfall burn below, and capping
+        // that at [_kSeedMechanicShortfallRetries] took the same slot to
+        // ~2.4s. Anything left here is bounded by attempts that are
+        // individually cheap, and [_seedFallthroughCounts] now makes a give-up
+        // visible instead of silent. Re-measure with
+        // `milestone_seed_audit_test` before bounding this further.
         final seedSalt = seed.seedRng ?? 0;
+        // Latency bound for the seeded path. Kept on its own stopwatch rather
+        // than shared with the main pipeline below: it must not hand the
+        // fall-through pipeline a clock that is already spent (that regressed
+        // deadlock_test — the regular path then starts over budget and
+        // exhausts its attempts). It only ever *shortens* the seeded search,
+        // and only once there is a retained board to ship.
+        final seedWatch = timeBudget != null ? (Stopwatch()..start()) : null;
+        /// Valid + solvable seeded board that could not seat the level's full
+        /// lock/relay budget. Shipping it keeps the milestone's pinned identity
+        /// (silhouette, archetype, telemetry seed id); the alternative —
+        /// falling through to the procedural pipeline — silently turns the
+        /// milestone into an ordinary board, which is how L150 stopped
+        /// emitting as `milestone-overload`.
+        LevelData? seedMechanicShort;
+        _PendingDirectorEmission? seedMechanicShortEmission;
+        var shortfalls = 0;
         for (int i = 0; i < maxAttempts; i++) {
+          if (seedWatch != null &&
+              seedMechanicShort != null &&
+              seedWatch.elapsed >= timeBudget!) {
+            break;
+          }
+          _bumpSeed(_seedAttemptCounts, seed.id);
           final rng = Random(primarySeed * 31337 + seedSalt + i);
           final seedResult = _attemptDirectorDrivenGeneration(
             seedConfig,
             rng,
             targetTier: targetTier,
             seed: seed,
+            overBudget: seedWatch == null
+                ? null
+                : () => seedWatch.elapsed >= timeBudget!,
           );
+          if (seedResult.isError) {
+            _bumpSeed(_seedConstructionFailureCounts, seed.id);
+          }
           if (seedResult.isSuccess) {
             final enriched = _enrichLevel(
                 seedResult.value, seedConfig, targetTier,
@@ -422,8 +703,36 @@ class LevelGenerator {
                   enriched.nodes.where((n) => n.kind == NodeKind.relay).length;
               if (lockCount < budget.lockCount ||
                   relayCount < budget.relayCount) {
-                _discardPendingEmission();
-                continue;
+                _bumpSeed(_seedMechanicShortfallCounts, seed.id);
+                shortfalls++;
+                if (shortfalls < _kSeedMechanicShortfallRetries) {
+                  // Retry while retries are left — a board that seats the full
+                  // budget is the better milestone — but retain the first
+                  // shortfall so an exit that never reaches the cap (the
+                  // `seedWatch` break, or construction/validation failures for
+                  // the remaining attempts) still ships the *seed* rather than
+                  // dropping to the procedural pipeline.
+                  if (seedMechanicShort == null) {
+                    seedMechanicShort = enriched;
+                    seedMechanicShortEmission = _pendingEmission;
+                  }
+                  _discardPendingEmission();
+                  continue;
+                }
+                // Out of retries: ship this board rather than the seed. The
+                // discard-and-retry above used to be unconditional, and after
+                // `maxAttempts` the whole seeded path fell through to the
+                // procedural pipeline — so a milestone that could not seat one
+                // lock silently stopped being a milestone at all. A landmark
+                // missing a mechanic is a far smaller loss than a landmark that
+                // is not there, and `campaign_mechanic_audit_test` only ever
+                // asserts `locks <= budget.lockCount`, so a short board is
+                // legal by the campaign's own rules.
+                //
+                // Shipped from *this* attempt while its staged emission is
+                // still live, so the seed's telemetry cannot go dark. (The
+                // post-loop path ships the retained board instead, and has to
+                // restore `_pendingEmission` by hand to get the same effect.)
               }
 
               _seedEmissionCounts[seed.id] =
@@ -432,10 +741,27 @@ class LevelGenerator {
               _commitPendingEmission();
               return Result.success(enriched);
             }
+            _bumpSeed(_seedValidationFailureCounts, seed.id);
           }
         }
-        // Seed path failed (e.g. silhouette starvation on a tiny grid):
-        // fall through to the regular pipeline so the level still ships.
+        // Attempts exhausted (or the latency budget ran out) without ever
+        // reaching the shortfall cap. Ship the retained seeded board if there
+        // is one: a milestone that is one lock short still reads as the
+        // milestone, whereas a procedural board does not.
+        if (seedMechanicShort != null) {
+          _seedEmissionCounts[seed.id] = (_seedEmissionCounts[seed.id] ?? 0) + 1;
+          _assertGeneratedLayout(seedMechanicShort);
+          _pendingEmission = seedMechanicShortEmission;
+          _commitPendingEmission();
+          return Result.success(seedMechanicShort);
+        }
+        // Seed path failed outright (e.g. silhouette starvation on a tiny
+        // grid): fall through to the regular pipeline so the level still ships.
+        //
+        // This is the silent milestone loss: the level generates, the player
+        // gets a playable board, and nothing anywhere says the landmark is
+        // gone. The counter is what makes it sayable.
+        _bumpSeed(_seedFallthroughCounts, seed.id);
         _discardPendingEmission();
       }
     }
@@ -454,13 +780,11 @@ class LevelGenerator {
     // wave-band *preference* — solvability/layout are still enforced. Off by
     // default → behaviour is byte-identical for the generation test suites.
     //
-    // NOTE: this clock deliberately does NOT cover the seeded path above. That
-    // path is unbounded, and a seed with a high pinned node count can send it
-    // into a multi-minute search (see milestone_seeds.dart). Extending this
-    // watch to cover it was tried and regressed deadlock_test — the regular
-    // pipeline then starts already over budget and exhausts its attempts.
-    // Bounding the seeded path needs a deadline inside the Director, not a
-    // shared stopwatch here.
+    // NOTE: this clock deliberately does NOT cover the seeded path above —
+    // sharing it regressed deadlock_test, because the regular pipeline then
+    // starts already over budget and exhausts its attempts. The seeded path
+    // runs the same [timeBudget] on its own stopwatch instead, so a fall-
+    // through arrives here with a full clock.
     final budgetWatch = timeBudget != null ? (Stopwatch()..start()) : null;
     /// Valid + solvable, but missed the ideal removal-wave band.
     LevelData? budgetFallback;
@@ -471,7 +795,8 @@ class LevelGenerator {
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
       final overBudgetNow =
           budgetWatch != null && budgetWatch.elapsed >= timeBudget!;
-      final overBudgetShippable = budgetFallback ?? mechanicShortFallback;
+      final overBudgetShippable = budgetFallback ??
+          (allowMechanicShortFallback ? mechanicShortFallback : null);
       if (overBudgetNow && overBudgetShippable != null) {
         _discardPendingEmission();
         return Result.success(overBudgetShippable);
@@ -526,7 +851,46 @@ class LevelGenerator {
             : () => budgetWatch.elapsed >= timeBudget!,
       );
       if (result.isSuccess) {
-        final enriched = _enrichLevel(result.value, scaledConfig, targetTier);
+        // F1 — reject a board whose core floor cannot be met, rather than
+        // shipping the deepest placement that happened to exist.
+        //
+        // `_ensureCoreQuality` repicks over three widening rungs and then
+        // escalates the core count one at a time up to the mode's `maxCores`.
+        // When even that misses, it returns "best seen". On a geometrically
+        // flat board that is not a near miss: `medium L236` (16 nodes, 7x7)
+        // needs depth 8 and its deepest reachable placement is **3**, so the
+        // board shipped as a three-tap win and took F1 red — the same gate
+        // this project has already paid for once, in P2.
+        //
+        // §12 of the plan pre-committed this exact remedy for this exact
+        // situation: *"T1.2's bounded repick cannot fix these. Move the remedy
+        // upstream into candidate rejection — do not let it silently ship
+        // 'best seen'."* The board is not repairable by core placement; the
+        // right answer is a different board.
+        //
+        // Cheap, measured before implementing: **1 of 184** Medium enrichment
+        // calls across L1-300 misses the floor, and Hard and Easy never do. So
+        // this costs the K-loop essentially nothing, which matters because
+        // candidate supply is P2b's binding constraint.
+        //
+        // Procedural path only. The seeded path at the milestone call site
+        // deliberately does not reject: a lost seed is a lost milestone
+        // (`seedFallthroughCounts`), and the same asymmetry already applies to
+        // the node floor there for the same reason.
+        var coreFloorUnmet = false;
+        final enriched = _enrichLevel(
+          result.value,
+          scaledConfig,
+          targetTier,
+          onCoreSelection: (rec) {
+            if (rec.floorAchieved < rec.floorRequired) coreFloorUnmet = true;
+          },
+        );
+        if (coreFloorUnmet) {
+          _coreFloorRejects++;
+          _discardPendingEmission();
+          continue;
+        }
         final validationResult = _validator.validate(enriched);
         if (!validationResult.isValid) {
           _discardPendingEmission();
@@ -557,9 +921,14 @@ class LevelGenerator {
           // levels their locked nodes and their silhouette mask, and broke the
           // L150 milestone emission. Only Daily — where the alternative was a
           // 40-attempt burn — opts in.
-          if (budgetWatch != null && allowMechanicShortFallback) {
-            mechanicShortFallback ??= enriched;
-          }
+          //
+          // Recorded unconditionally; *consumed* conditionally. The opt-in
+          // above governs the over-budget escape only — that is the path whose
+          // cost the paragraph above measured. The attempt-exhaustion path at
+          // the bottom of this method consumes it for every caller, because
+          // there the alternative is not a slightly worse level, it is
+          // `Result.error` and a level the player cannot play at all.
+          mechanicShortFallback ??= enriched;
           _discardPendingEmission();
           continue;
         }
@@ -597,6 +966,34 @@ class LevelGenerator {
         budgetFallback ??= enriched;
         _discardPendingEmission();
       }
+    }
+
+    // Attempts exhausted. Before surfacing an error, ship anything valid that
+    // was retained along the way, ranked worst-acceptable-last:
+    //
+    //   budgetFallback        — valid, solvable, wave count outside the ideal
+    //                           band. A slightly-off level.
+    //   mechanicShortFallback — valid, solvable, but could not seat its full
+    //                           lock/relay budget. A level missing a mechanic.
+    //
+    // Both are strictly better than the alternative. This branch used to return
+    // `Result.error` outright, and P1 turned that from theoretical into real:
+    // raising Medium sector 3+ from two cores to three (T1.3) starves relay
+    // placement on the odd cramped board, because `_markSpecialNodes` keeps
+    // relays out of *core rows* and three cores occupy three of them. Exactly
+    // one level in 1..1500 hit it — **L427 Medium** — and it went from
+    // generating fine to not generating at all. A campaign level that cannot be
+    // produced is a level the player cannot play, which is a worse defect than
+    // any of the ones P1 set out to fix.
+    //
+    // The typed error is retained for the case where genuinely nothing valid
+    // was ever built, so callers can still distinguish "we tried and got
+    // something imperfect" from "we got nothing".
+    final exhaustedFallback = budgetFallback ?? mechanicShortFallback;
+    if (exhaustedFallback != null) {
+      _discardPendingEmission();
+      _maxAttemptsExhaustedCount++;
+      return Result.success(exhaustedFallback);
     }
 
     // Phase 3: no monotone fallback any more. The Director Renegotiation
@@ -679,6 +1076,18 @@ class LevelGenerator {
   /// §9 Phase 2 K = 8.
   static const int _evaluatorRetryBudget = 8;
 
+  /// T2.9a — test-only relaxation of the K-loop's CUD floor, in depth units.
+  ///
+  /// T2.5's mortality table put the CUD floor at **22.3% of Hard iterations**,
+  /// the second-largest killer after composition `components`. Whether it is
+  /// *safe* to relax is a separate question from whether it is large, and the
+  /// T2.8 lesson says measure one variable alone before believing either.
+  ///
+  /// Zero by default, so the shipped behaviour is untouched and no board
+  /// moves. Only `p2b_cud_isolation_report_test.dart` writes it.
+  @visibleForTesting
+  static int cudFloorRelaxation = 0;
+
   Result<LevelData, GenerationError> _attemptDirectorDrivenGeneration(
     LevelConfiguration config,
     Random random, {
@@ -698,6 +1107,18 @@ class LevelGenerator {
     GenerationPlan? novelOutOfBandPlan;
     int novelOutOfBandRenegotiations = 0;
     ConstructionTelemetry? novelOutOfBandTelemetry;
+    // T2.4c — the composition score of each retained fallback.
+    //
+    // Before T2.4c, a candidate violating `components` / `singleton` /
+    // `occupancy` / `blobVsGrid` never reached these slots at all: it was
+    // discarded in the K-loop. Now it can, so "first one found" would let a
+    // badly-composed board become the shipped fallback where previously an
+    // error or a later attempt would have. Keeping the best-composed instead
+    // is what makes softening the rules safe on the paths that have no
+    // comparator — it is the same ranking decision the in-band pool gets, and
+    // without it T2.4c's p10 floor would be defended on the in-band path only.
+    double novelOutOfBandComposition = -1;
+    double nonNovelComposition = -1;
     Result<LevelData, GenerationError>? nonNovelFallback;
     LevelMetrics? nonNovelMetrics;
     LevelFingerprint? nonNovelFp;
@@ -709,7 +1130,9 @@ class LevelGenerator {
     final evaluatorTier =
         targetTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
     final evaluatorProfile = DifficultyProfile.forTier(evaluatorTier);
-    final cudFloor = evaluatorProfile.criticalUnlockDepth.min;
+    // T2.9a — `cudFloorRelaxation` is 0 in every shipped path.
+    final cudFloor =
+        evaluatorProfile.criticalUnlockDepth.min - cudFloorRelaxation;
 
     // Lock the archetype choice for this outer candidate generation wave to prevent selection bias
     final lockedArchetype = overrideArchetype ??
@@ -726,8 +1149,10 @@ class LevelGenerator {
           (inBandCandidates.isNotEmpty ||
               novelOutOfBand != null ||
               nonNovelFallback != null)) {
+        _kloopBudgetBreaks += _evaluatorRetryBudget - k;
         break;
       }
+      _kloopIterations++;
       // Derive a per-iteration RNG so successive retries diverge
       // deterministically without consuming unbounded state from `random`.
       final iterationRandom = Random(random.nextInt(0x7fffffff));
@@ -766,52 +1191,94 @@ class LevelGenerator {
         renegotiationsForThisAttempt++;
         plan = renegotiated;
       }
-      if (once == null || once.isError) continue;
+      if (once == null || once.isError) {
+        _constructionFailures++;
+        continue;
+      }
 
       final level = once.value;
       final metrics = LevelMetrics.compute(level);
       if (!DifficultyProfile.passesFsrCap(metrics)) {
         _evaluatorRejectionCount++;
+        _fsrCapRejects++;
         continue;
       }
 
       final visual = evaluateVisualComposition(level, evaluatorTier);
+      // T2.4a — record the composition score for BOTH populations. Shadow mode:
+      // the decision below is untouched, this only observes. T2.4b needs the
+      // *rejected* distribution as much as the accepted one, and the generator
+      // is the only place a rejected candidate is ever visible.
+      // Recorded against "no rule failed", NOT against "was admitted".
+      // T2.4c widens admission; keeping the split on rule violation is what
+      // lets the accepted / rejected distributions in
+      // `docs/playtests/composition_calibration.md` stay the same measurement
+      // before and after the bundle.
+      _recordVisualScore(visual, accepted: visual.reason == null);
+      // Per-rule volumes likewise count violations, hard or soft, so the T2.4b
+      // reject-reason table remains a like-for-like series.
+      _incrementVisualRejectCounter(visual.reason);
       if (!visual.passes) {
         _evaluatorRejectionCount++;
-        _incrementVisualRejectCounter(visual.reason);
+        _compositionHardRejects++;
+        if (visual.reason == VisualCompositionRejectReason.aspect) {
+          _hardRejectAspect++;
+        } else {
+          _hardRejectComponents++;
+        }
         continue;
       }
 
-      final inBand = evaluatorProfile.passes(metrics) && visual.passes;
+      final inBand = evaluatorProfile.passes(metrics) && !visual.softFailed;
       if (!inBand) {
         _evaluatorRejectionCount++;
+        _outOfBandNoted++;
         if (metrics.criticalUnlockDepth < cudFloor) {
+          _cudFloorRejects++;
           continue;
         }
       }
 
+      _candidateCount++;
       final visible = _visibleMotifsIn(plan, level);
       final dominantMotif = visible.isEmpty ? MotifId.none : visible.first;
       final fingerprint = computeLevelFingerprint(
         level: level,
         metrics: metrics,
         silhouette: plan.silhouette,
+        // T2.6 — the *evaluator's* tier, the same one the band and the CUD
+        // floor are taken from, so the buckets are cut on the population this
+        // candidate is actually judged against. A seed's tier need not match
+        // the mode it ships on (the T2.2 lesson), and `evaluatorTier` is the
+        // one that already resolves that.
+        tier: evaluatorTier,
         dominantMotifId: motifIdFingerprintSlot(dominantMotif),
       );
       final novel =
           !enableDiversityGating || _diversityLedger.isNovel(fingerprint);
+      if (novel) _novelCandidateCount++;
       if (!novel) {
         _diversityRejectionCount++;
-        nonNovelFallback ??= once;
-        nonNovelPlan ??= plan;
-        nonNovelMetrics ??= metrics;
-        nonNovelFp ??= fingerprint;
-        nonNovelRenegotiations = renegotiationsForThisAttempt;
-        nonNovelTelemetry = runTelemetry ?? ConstructionTelemetry.zero;
+        // Strictly-better only, so the first candidate still wins ties and the
+        // pre-T2.4c "first found" behaviour is preserved whenever composition
+        // does not separate them. Note this also fixes an existing
+        // inconsistency: `renegotiations` and `telemetry` used `=` while the
+        // rest used `??=`, so they described a different candidate than the
+        // one retained. The whole record now updates together.
+        if (nonNovelFallback == null || visual.score > nonNovelComposition) {
+          nonNovelFallback = once;
+          nonNovelPlan = plan;
+          nonNovelMetrics = metrics;
+          nonNovelFp = fingerprint;
+          nonNovelRenegotiations = renegotiationsForThisAttempt;
+          nonNovelTelemetry = runTelemetry ?? ConstructionTelemetry.zero;
+          nonNovelComposition = visual.score;
+        }
         continue;
       }
 
       if (inBand) {
+        _acceptedNovelCandidateCount++;
         inBandCandidates.add(_InBandCandidate(
           result: once,
           plan: plan,
@@ -820,15 +1287,19 @@ class LevelGenerator {
           visibleMotifs: visible,
           renegotiations: renegotiationsForThisAttempt,
           constructionTelemetry: runTelemetry ?? ConstructionTelemetry.zero,
+          compositionScore: visual.score,
         ));
         continue;
       }
-      novelOutOfBand ??= once;
-      novelOutOfBandFp ??= fingerprint;
-      novelOutOfBandMetrics ??= metrics;
-      novelOutOfBandPlan ??= plan;
-      novelOutOfBandRenegotiations = renegotiationsForThisAttempt;
-      novelOutOfBandTelemetry ??= runTelemetry ?? ConstructionTelemetry.zero;
+      if (novelOutOfBand == null || visual.score > novelOutOfBandComposition) {
+        novelOutOfBand = once;
+        novelOutOfBandFp = fingerprint;
+        novelOutOfBandMetrics = metrics;
+        novelOutOfBandPlan = plan;
+        novelOutOfBandRenegotiations = renegotiationsForThisAttempt;
+        novelOutOfBandTelemetry = runTelemetry ?? ConstructionTelemetry.zero;
+        novelOutOfBandComposition = visual.score;
+      }
     }
 
     if (inBandCandidates.isNotEmpty) {
@@ -844,8 +1315,10 @@ class LevelGenerator {
       }
       _retrogradeInBandSuccessCount++;
       _retrogradeSuccessCount++;
+      _noteFallbackReason('in-band');
       _diversityLedger.record(best.fingerprint);
       _recordEmissionTelemetry(
+        config: config,
         plan: best.plan,
         level: best.result.value,
         metrics: best.metrics,
@@ -867,6 +1340,40 @@ class LevelGenerator {
       novelOutOfBand = null;
     }
 
+    // T2.9b — yield to the non-novel fallback when this path's candidate is
+    // below the composition floor and the fallback's is not.
+    //
+    // Exit priority is `in-band` > `novel-out-of-band` > `non-novel`, which
+    // ranks novelty above the band and above composition. Measured on Medium
+    // L1–300, that ordering is backwards on quality — the *last resort* is the
+    // best-composed path, because it is the only one that selects purely on
+    // composition:
+    //
+    //   exit path            n    composition p10   below the 0.63 floor
+    //   non-novel           76         0.7201              3
+    //   in-band            175         0.6016             26
+    //   novel-out-of-band   49         0.5615             18
+    //
+    // 16% of levels were producing 38% of the sub-floor boards. Both paths
+    // ship an out-of-band board either way, so the band is not the thing being
+    // traded — only novelty is, and only when the novel candidate is
+    // measurably badly composed and a better-composed alternative is in hand.
+    //
+    // Deliberately narrow. It fires only when the novel candidate is *below*
+    // the floor and the non-novel one is *above* it; when both are above,
+    // below, or the fallback is absent, novelty still wins as before. On Hard
+    // it is close to a no-op — 10 levels take this path and none are
+    // sub-floor — so it does not spend the DoD's `non-novel` budget on the
+    // tier that budget is for.
+    if (novelOutOfBand != null && nonNovelFallback != null) {
+      final floor = kCompositionFloor[evaluatorTier];
+      if (floor != null &&
+          novelOutOfBandComposition < floor &&
+          nonNovelComposition >= floor) {
+        novelOutOfBand = null;
+      }
+    }
+
     // Ship best novel out-of-band when the K-loop found no in-band candidate.
     // Hard/Expert may still ship here when opening is within [3,11] but other
     // metrics missed band — the opening ceiling is the hard guard.
@@ -879,8 +1386,10 @@ class LevelGenerator {
       }
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
+      _noteFallbackReason('novel-out-of-band');
       _diversityLedger.record(novelOutOfBandFp!);
       _recordEmissionTelemetry(
+        config: config,
         plan: novelOutOfBandPlan!,
         level: novelOutOfBand.value,
         metrics: novelOutOfBandMetrics!,
@@ -893,10 +1402,27 @@ class LevelGenerator {
       );
       return novelOutOfBand;
     }
-    // Last resort: emit a non-novel candidate WITHOUT recording it in the
-    // ledger. This keeps the window's "all pairs distance ≥ 5" invariant
-    // intact (the cost is that the very next emission can be close to
-    // this one, which we accept over crashing the caller).
+    // Last resort: emit a non-novel candidate, and DO record it in the ledger.
+    //
+    // This comment used to claim the opposite — that the emission was not
+    // recorded, "keeping the window's all-pairs distance ≥ 5 invariant intact"
+    // — while the code twenty lines below recorded anyway, on 286 of 300 Hard
+    // levels. T2.8 took the comment at its word and made the code match it,
+    // measured in isolation, and the result falsified the idea:
+    //
+    //   non-novel exits   Hard 286 -> 285   Medium 256 -> 275   Easy 239 -> 264
+    //   rankable / level  Hard 0.05 -> 0.05  Medium 0.17 -> 0.13  Easy 0.06 -> 0.04
+    //
+    // Flat on Hard and worse on both other modes, so it was reverted per the
+    // plan's pre-committed rule. The reason it backfires: skipping the record
+    // stops the window turning over, so it ages into a set of *older* entries
+    // that are no less similar — the eviction churn that occasionally cleared
+    // a blocking neighbour is lost, and nothing is gained in exchange.
+    //
+    // The invariant the old comment named was never real, and the feedback
+    // loop it implied is not what starves novelty. The binding constraint is
+    // the fingerprint's usable entropy (T2.6/T2.7). Full reading in
+    // `docs/playtests/p2b_t28_isolated.md`.
     if (nonNovelFallback != null) {
       if (_isHardExpertTier(evaluatorTier) &&
           !_openingWithinHardExpertBand(nonNovelMetrics!)) {
@@ -912,8 +1438,10 @@ class LevelGenerator {
       }
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
+      _noteFallbackReason('non-novel');
       _diversityLedger.record(nonNovelFp!);
       _recordEmissionTelemetry(
+        config: config,
         plan: nonNovelPlan!,
         level: nonNovelFallback.value,
         metrics: nonNovelMetrics!,
@@ -926,6 +1454,7 @@ class LevelGenerator {
       );
       return nonNovelFallback;
     }
+    _noteFallbackReason('exhausted');
     return Result.error(
       GenerationError.noValidDirections(
         'Director exhausted retries; no candidate produced',
@@ -936,6 +1465,7 @@ class LevelGenerator {
   /// Stages an emission record. Counters + analytics fire only when the
   /// outer caller commits via [_commitPendingEmission].
   void _recordEmissionTelemetry({
+    required LevelConfiguration config,
     required GenerationPlan plan,
     required LevelData level,
     required LevelMetrics metrics,
@@ -944,6 +1474,7 @@ class LevelGenerator {
     required bool novel,
     required LevelSeed? seed,
     required int renegotiations,
+    String recipeId = 'neutral',
     List<MotifId> visibleMotifs = const [],
     ConstructionTelemetry construction = ConstructionTelemetry.zero,
   }) {
@@ -961,6 +1492,11 @@ class LevelGenerator {
       construction: construction,
       event: buildEmissionEvent(
         level: level,
+        contentIdentity: contentIdentityFor(
+          levelId: level.levelId,
+          mode: config.difficulty.mode,
+          recipeId: recipeId,
+        ),
         archetype: plan.archetype,
         silhouette: plan.silhouette,
         seed: seed,
@@ -1002,6 +1538,7 @@ class LevelGenerator {
             visibleMotifs: c.visibleMotifs,
             renegotiations: c.renegotiations,
             constructionTelemetry: c.constructionTelemetry,
+            compositionScore: c.compositionScore,
           );
         }
       }
@@ -1017,6 +1554,23 @@ class LevelGenerator {
     final silhouetteScore =
         _silhouetteRankingScore(b).compareTo(_silhouetteRankingScore(a));
     if (silhouetteScore != 0) return silhouetteScore;
+
+    // T2.4c — composition, second only to silhouette diversity.
+    //
+    // Placed high on purpose. This is the term that replaces four hard
+    // rejections, and it can only do that job if a well-composed candidate
+    // still beats a scattered one when both exist; buried under the Hard
+    // metric keys it would almost never break a tie and softening the rules
+    // would be a pure loss of quality control.
+    //
+    // Banded rather than compared raw. The score is an unweighted mean of five
+    // continuous terms, so almost every pair separates by *something* at full
+    // precision — comparing raw would make composition the de-facto sole sort
+    // key and silently retire the tempo, CUD and topology ordering below.
+    // [kCompositionRankBand] is the granularity at which two boards genuinely
+    // look differently composed; inside one band the existing order decides.
+    final compositionBand = _compositionBand(b).compareTo(_compositionBand(a));
+    if (compositionBand != 0) return compositionBand;
 
     final profile = DifficultyProfile.forTier(tier);
     if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
@@ -1077,6 +1631,9 @@ class LevelGenerator {
         .compareTo(a.metrics.firstLegalMoveCount);
   }
 
+  int _compositionBand(_InBandCandidate c) =>
+      (c.compositionScore / kCompositionRankBand).floor();
+
   double _spatialDensity(LevelData level) {
     final area = level.gridWidth * level.gridHeight;
     if (area == 0) return 0;
@@ -1088,11 +1645,23 @@ class LevelGenerator {
     LevelConfiguration config,
     DifficultyTier? targetTier, {
     MechanicBudgetOverride? mechanicOverride,
+    void Function(CoreSelectionRecord record)? onCoreSelection,
   }) {
     final tier =
         targetTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
-    return enrichLevel(level, config, tier, mechanicOverride: mechanicOverride);
+    return enrichLevel(
+      level,
+      config,
+      tier,
+      mechanicOverride: mechanicOverride,
+      onCoreSelection: onCoreSelection,
+    );
   }
+
+  /// F1 — how many procedural candidates were rejected because no core
+  /// placement on that board could reach the mode's tap-depth floor.
+  int _coreFloorRejects = 0;
+  int get coreFloorRejects => _coreFloorRejects;
 
   double _silhouetteRankingScore(_InBandCandidate candidate) {
     final penalty =
@@ -1770,6 +2339,66 @@ class _PendingDirectorEmission {
   });
 }
 
+/// T2.4c — the granularity at which composition scores are treated as
+/// different when ranking in-band candidates.
+///
+/// 0.05 of a 0..1 unweighted mean of five terms, i.e. two candidates must
+/// differ by a quarter of a point on one rule (or a spread across several)
+/// before composition outranks tempo, CUD and topology. Chosen against the
+/// T2.4b distributions: shipped-vs-rejected p50 separation is 0.30 on Medium
+/// and 0.24 on Hard, so a real composition difference clears several bands
+/// while measurement-level jitter clears none.
+const double kCompositionRankBand = 0.05;
+
+/// T2.9b — the composition score below which a board is considered to have
+/// missed the quality floor T2.4b calibrated, per tier.
+///
+/// **Medium 0.577, Hard 0.65** — re-derived by T2.10a. Hard is unchanged; only
+/// Medium moved, and the reason is not the one this section originally assumed.
+///
+/// The old Medium 0.63 was the shipped p10 of L1–300 under the pre-P2b regime.
+/// Measured on the *pre-P2b tree* over two later, disjoint windows of the same
+/// campaign, it was never met there either:
+///
+///   Medium p10, pre-P2b :  L1-300 **0.6530**   L301-800 0.6097   L801-1300 0.6246
+///   Medium p10, post-P2b:  L1-300 0.6153       L301-800 0.6008   L801-1300 0.6057
+///
+/// So 0.63 was overfit to the first 300 levels, not merely to the old
+/// selection regime — a distinction that only appeared once a fresh corpus was
+/// used. P2b's actual cost is **−0.009 to −0.019** on Medium, not the −0.03+ it
+/// looked like when only L1–300 was ever measured.
+///
+/// The new Medium floor is the 2.5th percentile of a 2,000-resample bootstrap
+/// of the L301–800 p10 (**0.5880**) less a **0.01** margin — one fifth of
+/// `kCompositionRankBand`, so smaller than the granularity at which two boards
+/// read as differently composed, and large enough to absorb the corpus-to-
+/// corpus noise the interval shows. Validated on the held-out L801–1300 window
+/// it did not derive from (p10 0.6057, clears).
+///
+/// **Hard keeps 0.65 deliberately.** The same derivation proposed 0.657, which
+/// would *tighten* the gate as a side effect of recalibrating a different tier
+/// — and 0.65 already holds on every post-P2b window (0.6632 / 0.6754 /
+/// 0.6654). A recalibration is not a licence to move gates that are passing.
+///
+/// Derivation and the control run: `docs/playtests/p2b_t210a_recalibration.md`.
+///
+/// Easy is absent on purpose: `evaluateVisualComposition` short-circuits for
+/// Easy, so `compositionScore` there is filler rather than a measurement and
+/// ranking on it would sort on noise.
+///
+/// Used by the `novel-out-of-band` yield (T2.9b) and **not** by the in-band
+/// comparator. Placing it there as a lexicographic tier above silhouette
+/// diversity was implemented, instrumented and reverted: it fired on 29 of 168
+/// Medium comparator calls, and moved the shipped composition p10, p25, min and
+/// every funnel number by **zero**. The bottom decile is made of levels where
+/// *every* in-band candidate is sub-floor, and a comparator can only reorder
+/// what exists. See `docs/playtests/p2b_t29c_floor_tier.md`.
+const Map<DifficultyTier, double> kCompositionFloor = {
+  DifficultyTier.medium: 0.577,
+  DifficultyTier.hard: 0.65,
+  DifficultyTier.expert: 0.65,
+};
+
 class _InBandCandidate {
   final Result<LevelData, GenerationError> result;
   final GenerationPlan plan;
@@ -1779,6 +2408,9 @@ class _InBandCandidate {
   final int renegotiations;
   final ConstructionTelemetry constructionTelemetry;
 
+  /// T2.4c — `VisualCompositionResult.score`, 0..1, higher is better.
+  final double compositionScore;
+
   const _InBandCandidate({
     required this.result,
     required this.plan,
@@ -1787,5 +2419,6 @@ class _InBandCandidate {
     required this.visibleMotifs,
     required this.renegotiations,
     required this.constructionTelemetry,
+    required this.compositionScore,
   });
 }

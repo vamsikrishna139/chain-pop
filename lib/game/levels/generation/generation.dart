@@ -12,6 +12,7 @@ library generation;
 
 export 'archetype.dart';
 export 'candidate_scorer.dart';
+export 'core_metrics.dart';
 export 'difficulty_mode.dart';
 export 'difficulty_parameters.dart';
 export 'difficulty_profile.dart';
@@ -19,6 +20,7 @@ export 'director.dart';
 export 'diversity_ledger.dart';
 export 'frontier_set.dart';
 export 'generation_error.dart';
+export 'generation_version.dart';
 export 'level_configuration.dart';
 export 'level_generator.dart';
 export 'level_bank.dart';

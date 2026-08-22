@@ -7,6 +7,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Milestone slots take a separate, unbudgeted generation path, so a heavy
 /// pinned seed there is paid directly in level-load time by the player.
+///
+/// Tagged `slow`: this costs ~90s, and irreducibly so — the runtime *is* the
+/// measurement. 40 slots against a baseline whose worst is ~2.2s cannot be
+/// made cheap without measuring something else. It stays a real gate; it just
+/// belongs in CI rather than in the local edit loop. Run with:
+///     flutter test --tags slow
 void main() {
   test('milestone slots load fast enough to not stall the player', () {
     final gen = LevelGenerator();
@@ -56,5 +62,5 @@ void main() {
     // generator's time budget does not bound the seeded Director path.
     expect(worst, lessThan(3000),
         reason: 'slot $worstSlot took ${worst}ms to generate');
-  });
+  }, tags: 'slow');
 }

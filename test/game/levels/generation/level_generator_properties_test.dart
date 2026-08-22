@@ -58,10 +58,19 @@ void main() {
 
   // ─── Property 2: Deterministic Generation ────────────────────────────────
   group('Property 2 — Deterministic Generation', () {
+    // Uses a fresh generator per call, per the T0.0c determinism contract:
+    // byte-identity holds for `LevelGenerator.neutral()`, not for a shared
+    // instance. This previously shared one `enableDiversityGating: false`
+    // generator on the belief that the flag neutralised session state — it
+    // does not (it only disables ledger *rejection*; the silhouette tracker
+    // still ranks candidates), so the test failed for any id where that
+    // ranking changed the winner.
+    //
+    // The assertions are unchanged. Do not weaken this to a validity check.
     test('Same level ID always produces identical levels', () {
       for (final id in sampleIds) {
-        final r1 = generator.generate(id);
-        final r2 = generator.generate(id);
+        final r1 = LevelGenerator.neutral(enableDiversityGating: false).generate(id);
+        final r2 = LevelGenerator.neutral(enableDiversityGating: false).generate(id);
         expect(r1.isSuccess, isTrue);
         expect(r2.isSuccess, isTrue);
 

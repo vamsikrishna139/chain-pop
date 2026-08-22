@@ -80,7 +80,7 @@ void main() {
     );
 
     _printDailies();
-  });
+  }, tags: 'report');
 
   test('Hard L30-39 waveZeroWidth gate (informational)', () {
     final gen = LevelGenerator(enableDiversityGating: false);

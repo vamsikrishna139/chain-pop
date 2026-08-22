@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import '../level.dart';
+import 'difficulty_profile.dart';
 import 'metrics.dart';
 import 'motifs.dart';
 import 'silhouettes.dart';
@@ -10,8 +11,8 @@ import 'silhouettes.dart';
 ///
 /// Bit layout:
 /// - `[ 0.. 2]` (3 bits) — silhouetteId (8 silhouettes; see [SilhouetteId])
-/// - `[ 3.. 4]` (2 bits) — waveDepth bucket (`1–2`, `3–4`, `5–6`, `7+`)
-/// - `[ 5.. 6]` (2 bits) — avgBF bucket (`<2`, `2–3.5`, `3.5–5`, `>5`)
+/// - `[ 3.. 4]` (2 bits) — waveDepth bucket, **cut per tier** (T2.6)
+/// - `[ 5.. 6]` (2 bits) — avgBF bucket, **cut per tier** (T2.6)
 /// - `[ 7.. 9]` (3 bits) — dominantMotifId (8 motifs; 0 = none)
 /// - `[10..13]` (4 bits) — directionHistogram: one bit per cardinal direction
 ///   set when that direction makes up more than 30% of node dirs
@@ -57,12 +58,13 @@ LevelFingerprint computeLevelFingerprint({
   required LevelData level,
   required LevelMetrics metrics,
   required SilhouetteId silhouette,
+  required DifficultyTier tier,
   int dominantMotifId = 0,
 }) {
   var bits = 0;
   bits |= (silhouette.index & 0x07);
-  bits |= (_waveBucket(metrics.waveDepth) & 0x03) << 3;
-  bits |= (_bfBucket(metrics.averageBranchingFactor) & 0x03) << 5;
+  bits |= (_waveBucket(metrics.waveDepth, tier) & 0x03) << 3;
+  bits |= (_bfBucket(metrics.averageBranchingFactor, tier) & 0x03) << 5;
   bits |= (dominantMotifId & 0x07) << 7;
   bits |= (_directionHistogramBits(level) & 0x0f) << 10;
   bits |= (_spatialDensityBits(level, level.gridWidth, level.gridHeight) &
@@ -72,17 +74,66 @@ LevelFingerprint computeLevelFingerprint({
   return LevelFingerprint(bits);
 }
 
-int _waveBucket(int wave) {
-  if (wave <= 2) return 0;
-  if (wave <= 4) return 1;
-  if (wave <= 6) return 2;
+/// T2.6 — per-tier cut points for the wave and branching-factor buckets.
+///
+/// The originals were one global scale (`wave 1–2 / 3–4 / 5–6 / 7+`,
+/// `bf <2 / 2–3.5 / 3.5–5 / >5`) chosen across all modes. Measured on 500
+/// levels per mode, that scale puts every Hard board in the top bucket:
+///
+/// | field | Hard occupancy under the global cuts | entropy |
+/// |---|---|---|
+/// | waveDepth | 0% / 0% / 89% / 11% | 0.49 of 2 bits |
+/// | avgBF | 0% / 0% / 0% / **100%** | **0.02 of 2 bits** |
+///
+/// So four of the fingerprint's 26 bits carried 0.51 bits between them, and
+/// the novelty threshold — chosen for a 26-bit space — was being applied to a
+/// ~16-bit one. Cutting per tier at that tier's own quartiles is what gives
+/// the bits back. The cut points below are the measured quartiles, not
+/// round numbers; the same method T0.2 used to settle `bboxFillBucket`.
+///
+/// Raw distributions and the derivation: `docs/playtests/p2b_t26_buckets.md`.
+///
+/// **These cut points are content-defining.** Changing one moves boards, so it
+/// is a `generationVersion` concern after the Gen V1 freeze.
+const Map<DifficultyTier, List<int>> kWaveBucketCuts = {
+  // Easy   observed 2..7,  quartiles 3 / 3 / 4   → {≤2} {3} {4} {≥5}
+  DifficultyTier.easy: [2, 3, 4],
+  // Medium observed 3..8,  quartiles 4 / 4 / 5   → {≤3} {4} {5} {≥6}
+  DifficultyTier.medium: [3, 4, 5],
+  // Hard   observed 5..11, quartiles 5 / 5 / 6   → {5} {6} {7} {≥8}
+  DifficultyTier.hard: [5, 6, 7],
+};
+
+const Map<DifficultyTier, List<double>> kBfBucketCuts = {
+  // Easy   observed 1.88..8.04, quartiles 3.60 / 4.30 / 4.93
+  DifficultyTier.easy: [3.60, 4.30, 4.93],
+  // Medium observed 2.73..9.32, quartiles 4.75 / 5.24 / 5.80
+  DifficultyTier.medium: [4.75, 5.24, 5.80],
+  // Hard   observed 4.75..9.04, quartiles 6.60 / 7.08 / 7.52
+  DifficultyTier.hard: [6.60, 7.08, 7.52],
+};
+
+/// Expert shares Hard's cuts — it is the same density regime, and it has no
+/// separate measured population to derive its own from.
+List<int> _waveCuts(DifficultyTier tier) =>
+    kWaveBucketCuts[tier] ?? kWaveBucketCuts[DifficultyTier.hard]!;
+
+List<double> _bfCuts(DifficultyTier tier) =>
+    kBfBucketCuts[tier] ?? kBfBucketCuts[DifficultyTier.hard]!;
+
+int _waveBucket(int wave, DifficultyTier tier) {
+  final c = _waveCuts(tier);
+  if (wave <= c[0]) return 0;
+  if (wave <= c[1]) return 1;
+  if (wave <= c[2]) return 2;
   return 3;
 }
 
-int _bfBucket(double bf) {
-  if (bf < 2.0) return 0;
-  if (bf < 3.5) return 1;
-  if (bf < 5.0) return 2;
+int _bfBucket(double bf, DifficultyTier tier) {
+  final c = _bfCuts(tier);
+  if (bf < c[0]) return 0;
+  if (bf < c[1]) return 1;
+  if (bf < c[2]) return 2;
   return 3;
 }
 
@@ -180,8 +231,32 @@ class DiversityLedger {
   DiversityLedger({
     this.windowSize = 20,
     this.historicalCap = 100,
-    this.hammingThreshold = 5,
-    this.sameVisualFamilyHammingMargin = 3,
+    // T2.7 — recalibrated from the post-T2.6 nearest-neighbour distribution,
+    // not chosen as round numbers. Observed on Hard L1–500 after the per-tier
+    // re-bucketing (min=0 p25=4 median=5 p75=6 p90=7 max=12):
+    //
+    //   threshold | share of levels admitted as novel
+    //       3     | 89.4%
+    //       4     | 75.2%   <- base, the measured p25
+    //       5     | 52.7%   (the old base)
+    //       6     | 29.1%   <- same-family, 4 + margin 2
+    //       8     |  5.6%   (the old same-family, 5 + 3)
+    //
+    // The same-family threshold is the one that actually applies on Hard —
+    // 72% of Hard boards are geometric-lattice — and at 8 it admitted 5.6% of
+    // candidates. That is not a strict gate, it is an unreachable one, and it
+    // is why 286 of 300 Hard levels shipped by last resort.
+    //
+    // **The floor this cannot cross.** The margin exists so pure silhouette
+    // hopping ("diamond vs cross jitter") cannot read as novelty. Within a
+    // visual family the family bits are identical, so a silhouette-only
+    // difference is at most **3** bits — see `diversity_ledger_test`, which
+    // pins this. A same-family threshold of 6 keeps double that headroom
+    // while admitting 5.2x more candidates than 8 did.
+    //
+    // Derivation: `docs/playtests/p2b_t27_threshold.md`.
+    this.hammingThreshold = 4,
+    this.sameVisualFamilyHammingMargin = 2,
     this.recentStrictMarginCount,
   });
 
