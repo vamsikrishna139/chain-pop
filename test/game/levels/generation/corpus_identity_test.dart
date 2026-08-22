@@ -50,9 +50,49 @@ import 'corpus_identity.dart';
 /// The move is a re-layout, not a re-scale: header is `50/medium/9x9/28`
 /// before and after — same grid, same node count — and only node coordinates
 /// differ. The 7-byte drop is coordinate digit widths.
-const String kGenV1CorpusHash = '52f44d1b347398a1';
+/// **Re-pinned by P2b, 2026-08-22** (was `52f44d1b347398a1` / 165623 bytes).
+/// This event covers the whole P2b working tree, not one commit: an
+/// intermediate dump of the tree *without* the two changes below already read
+/// `1ff5bf517cd3d920` / 164347, so T2.21 (resolved-silhouette reporting) had
+/// moved boards before this. The pin now covers all of it.
+///
+/// The eight boards that moved were named, not assumed — dumped with and
+/// without the change and diffed:
+///
+///   45/easy   8x6  12 -> 25 nodes    55/easy   8x8  16 -> 25 nodes
+///   25/medium 9x9  23 -> 25 nodes    50/medium 9x9  28 -> 26 nodes
+///   45/medium 9x9  23 nodes, re-laid out
+///   55/medium 9x9  25 nodes, re-laid out
+///   45/hard   8x8  25 nodes, re-laid out
+///   55/hard   8x8  25 nodes, re-laid out
+///
+/// Two causes, both deliberate:
+///
+///   * T2.22 re-declared the L45/L55 showcase seeds (`diamond` -> `cross`,
+///     `corridor` -> `asymmetric`), because the originals cannot be built at
+///     8x8 against a 25-cell floor — 0/200 seeds each — and so shipped as the
+///     64-cell full rectangle.
+///   * T2.23 made `pinnedSilhouette` survive `_refinePlanMaskDensity`, which
+///     is what moves the two *milestone* rows (25/medium, 50/medium). This
+///     completes the work the 2026-08-20 note above started: that fix stopped
+///     `renegotiate` swapping a pinned silhouette, and this one stops the
+///     density refiner it tail-calls from doing the same thing.
+///
+/// NODE COUNTS ON EASY. `45/easy` and `55/easy` doubling to 25 nodes is real
+/// and is NOT a defect of these changes: showcase seeds pin
+/// `difficultyTier: hard` and apply on every mode, so they were always going
+/// to spike an Easy slot. `40/easy` has shipped 25 nodes against neighbours of
+/// 8-14 all along; L45 and L55 only escaped it because their broken seeds
+/// renegotiated down. All three showcase slots now behave the same way. If
+/// that spike is wrong, it is wrong at L40 too and the fix is a content
+/// decision about showcase seeds on Easy, not a generator change.
+///
+/// `milestone_identity_test` and `level_seed_test` stayed GREEN throughout —
+/// no milestone board moved on the surfaces those pin. Per the note below,
+/// this is a sanctioned re-baseline only because Gen V1 is not frozen yet.
+const String kGenV1CorpusHash = '7ad43c963aa0d9ae';
 const int kGenV1CorpusBoards = 360;
-const int kGenV1CorpusBytes = 165623;
+const int kGenV1CorpusBytes = 164918;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RE-PINNED BY P2'S BUNDLE, 2026-08-21. The canary went red once, as designed.

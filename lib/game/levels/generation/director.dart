@@ -74,6 +74,87 @@ const Set<GenerationArchetype> _organicArchetypes = {
   GenerationArchetype.organicMessy,
 };
 
+/// How many extra concrete-shape rolls a failing silhouette gets from its own
+/// [silhouetteShapePool] before [Director._resolveMask] leaves the id.
+///
+/// Two, not "until the pool is exhausted": the pools are 1-4 deep, each roll
+/// costs a mask build, and the measured win comes from the first re-roll
+/// (ring's donut -> cShape -> hollowDiamond spread most of its 34/200 failures
+/// across different kinds). Capping it keeps the p95 generation budget intact.
+const int kMaskShapePoolRetries = 2;
+
+/// Where [Director._resolveMask] ended up, relative to what was asked for.
+///
+/// Reported through [Director.onSilhouetteRouted] so the requested-family ->
+/// final-family conversion matrix can be measured directly. Without it, a
+/// drop in lattice share cannot be attributed: "the requested shapes became
+/// feasible" and "the fallback stopped converting them" look identical from
+/// the emitted boards alone.
+enum MaskRouteStage {
+  /// The requested silhouette built on the first roll.
+  direct,
+
+  /// A different concrete shape from the requested id's own pool.
+  shapePool,
+
+  /// A different id inside the requested id's [SilhouetteVisualFamily].
+  sameFamily,
+
+  /// Nothing in-family fit; the full rectangle escape hatch.
+  rectangle,
+
+  /// Density clamp: kept the plan's own id, re-rolled its concrete shape.
+  densitySameId,
+
+  /// Density clamp: swapped inside the plan's visual family.
+  densitySameFamily,
+
+  /// Density clamp: shrank to a dense-capable NON-lattice shape.
+  densityNonLattice,
+
+  /// Density clamp: fell through to the dense (all-lattice) pool.
+  densityDensePool,
+}
+
+/// Other silhouettes sharing [id]'s visual family, in enum order.
+List<SilhouetteId> _sameFamilySilhouettes(SilhouetteId id) {
+  final family = silhouetteVisualFamily(id);
+  return SilhouetteId.values
+      .where((s) => s != id && silhouetteVisualFamily(s) == family)
+      .toList(growable: false);
+}
+
+/// Break a same-family run once it reaches this length. 2 means the third
+/// board of a run is the first one steered away, which is the shortest run a
+/// player reliably notices.
+const int kStreakBreakThreshold = 2;
+
+/// Silhouettes the T2.13 feasibility matrix demoted for Hard/Expert.
+///
+/// Measured at 8x8 against the [25, 38] mask window, `archipelago` is bimodal:
+/// 198/400 rolls land too small, 202/400 too large, and *zero* land in band.
+/// It builds every time, so this is a shape-generator defect rather than a
+/// floor incompatibility — hence demoted, not banned. It is still picked when
+/// it is the only way to break a run, because a YELLOW break beats no break.
+const List<SilhouetteId> _demotedForDenseTiers = [
+  SilhouetteId.archipelago,
+];
+
+/// Non-lattice shapes that reliably land *dense* on Hard, ordered by the T2.13
+/// in-band rate measured at 8x8 against the [25, 38] window:
+/// organicBlob 79%, corridor 66%, asymmetric 37%.
+///
+/// Every one of these beats ring (32%), and organicBlob/corridor beat diamond
+/// (50%) — so shrinking an overshoot into one of them is not a concession to
+/// variety, it is the better geometric answer. Archipelago is excluded: it is
+/// bimodal (0% in band, 198/400 too small and 202/400 too large), so it cannot
+/// serve as a *shrink* target.
+const List<SilhouetteId> _denseCapableNonLattice = [
+  SilhouetteId.organicBlob,
+  SilhouetteId.corridor,
+  SilhouetteId.asymmetric,
+];
+
 /// Dense silhouettes favoured by the Phase 1C bias for Hard/Expert tiers.
 /// These shapes produce tight boards with minimal dead canvas space.
 const List<SilhouetteId> _denseSilhouettes = [
@@ -191,7 +272,47 @@ class Director {
   final void Function(SilhouetteId attempted, SilhouetteId resolved)?
       onMaskRectangleFallback;
 
-  Director({this.maxRenegotiations = 3, this.onMaskRectangleFallback});
+  /// Invoked for every mask resolution with (requested, resolved, stage).
+  ///
+  /// Optional test/offline tooling only — production defaults to null.
+  final void Function(
+    SilhouetteId requested,
+    SilhouetteId resolved,
+    MaskRouteStage stage,
+  )? onSilhouetteRouted;
+
+  /// Invoked for every [_pickSilhouette] draw with (archetype, requested,
+  /// denseBranchTaken).
+  ///
+  /// [onSilhouetteRouted] measures the *resolution* layer, which is attempt-
+  /// weighted: a level that retries 40 masks reports 40 routings, and the
+  /// density-refinement re-resolutions all draw from the all-lattice dense
+  /// pool. That inflates lattice share relative to what the Director actually
+  /// asked for, so it cannot falsify a change to request-time selection.
+  /// This hook reports one event per pick, which can.
+  ///
+  /// Optional test/offline tooling only — production defaults to null.
+  final void Function(
+    GenerationArchetype archetype,
+    SilhouetteId requested,
+    bool denseBranchTaken,
+  )? onSilhouettePicked;
+
+  /// Session-history hook, supplied by [LevelGenerator], which owns the
+  /// `SilhouetteSessionTracker`. Null on the seeded/milestone path and in any
+  /// caller that constructs a bare Director, so those stay history-free and
+  /// byte-stable.
+  ///
+  /// Deliberately mutable: the generator owns both objects and wires this in
+  /// its constructor, which keeps the tracker out of the Director's own API.
+  ({SilhouetteVisualFamily family, int length}) Function()? currentFamilyStreak;
+
+  Director({
+    this.maxRenegotiations = 3,
+    this.onMaskRectangleFallback,
+    this.onSilhouetteRouted,
+    this.onSilhouettePicked,
+  });
 
   /// Builds the initial plan for [config].
   ///
@@ -214,13 +335,17 @@ class Director {
     spec = _applyDensityOverrides(spec, tier);
     final useLegacy = archetype == GenerationArchetype.experimental &&
         random.nextDouble() < spec.legacyGreedyProbability;
-    final silhouette = _pickSilhouette(spec, random, tier: tier);
-    final mask = _buildOrFallbackMask(
-      silhouette: silhouette,
+    final requested = _pickSilhouette(spec, random, tier: tier);
+    // The resolved id, not the requested one: [_resolveMask] may have kept the
+    // family but changed the shape, and the plan must describe what shipped.
+    final resolved = _resolveMask(
+      silhouette: requested,
       config: config,
       random: random,
       minCells: _proceduralMaskFloor(tier, config),
     );
+    final silhouette = resolved.silhouette;
+    final mask = resolved.mask;
     final profile = DifficultyProfile.forTier(tier);
     final target = _pickTargetNodeCount(
       config: config,
@@ -268,7 +393,7 @@ class Director {
     // Hand-authored seeds pin a deliberate silhouette; honour the canonical
     // rendering (no shape-pool variety) so the showcase looks as designed and
     // the seed's RNG stream stays byte-stable.
-    final mask = _buildOrFallbackMask(
+    final resolvedSeed = _buildOrFallbackMask(
       silhouette: seed.silhouetteId,
       config: config,
       random: random,
@@ -289,6 +414,11 @@ class Director {
       minCells: config.difficulty.minNodes,
       varied: false,
     );
+    final mask = resolvedSeed.mask;
+    // The id the mask actually belongs to. Equal to `seed.silhouetteId`
+    // whenever the seed's shape built; `rectangle` when it could not and the
+    // fallback supplied a full board. The seed itself is untouched.
+    final shipped = resolvedSeed.silhouette;
     final profile = DifficultyProfile.forTier(seed.difficultyTier);
     final target = seed.targetNodeCount ??
         _pickTargetNodeCount(
@@ -309,7 +439,7 @@ class Director {
     return GenerationPlan(
       archetype: seed.archetypeId,
       spec: spec,
-      silhouette: seed.silhouetteId,
+      silhouette: shipped,
       silhouetteMask: mask,
       targetNodeCount: clampedTarget,
       tier: seed.difficultyTier,
@@ -345,13 +475,14 @@ class Director {
           .where((s) => s != previous.silhouette)
           .toList();
       if (candidates.isNotEmpty) {
-        nextSilhouette = candidates[random.nextInt(candidates.length)];
-        nextMask = _buildOrFallbackMask(
-          silhouette: nextSilhouette,
+        final resolved = _resolveMask(
+          silhouette: candidates[random.nextInt(candidates.length)],
           config: config,
           random: random,
           minCells: _proceduralMaskFloor(previous.tier, config),
         );
+        nextSilhouette = resolved.silhouette;
+        nextMask = resolved.mask;
       }
     }
     // Re-roll motifs on every renegotiation — the silhouette and node count
@@ -402,17 +533,18 @@ class Director {
           .where((s) => s != previous.silhouette)
           .toList();
       if (candidates.isNotEmpty) {
-        nextSilhouette = candidates[random.nextInt(candidates.length)];
-        nextMask = _buildOrFallbackMask(
-          silhouette: nextSilhouette,
+        final resolved = _resolveMask(
+          silhouette: candidates[random.nextInt(candidates.length)],
           config: config,
           random: random,
           minCells: _proceduralMaskFloor(previous.tier, config),
         );
+        nextSilhouette = resolved.silhouette;
+        nextMask = resolved.mask;
         downscaled = downscaled.clamp(1, nextMask.length);
       }
     } else {
-      nextMask = _buildOrFallbackMask(
+      final resolved = _resolveMask(
         silhouette: nextSilhouette,
         config: config,
         random: random,
@@ -426,6 +558,8 @@ class Director {
         // authored look and the seed's RNG stream along with it.
         varied: !previous.pinnedSilhouette,
       );
+      nextSilhouette = resolved.silhouette;
+      nextMask = resolved.mask;
       downscaled = downscaled.clamp(1, nextMask.length);
     }
 
@@ -539,17 +673,97 @@ class Director {
       return plan;
     }
     if (_organicArchetypes.contains(plan.archetype)) return plan;
+    // P2b T2.23 — a pinned silhouette is an invariant, not a preference.
+    //
+    // [renegotiate] and [renegotiateAfterGreedyFailure] both guard their
+    // explicit silhouette swaps on `!previous.pinnedSilhouette`, and then both
+    // end by calling this method, which did not. So a seeded plan that reached
+    // renegotiation could still have its silhouette replaced here — measured
+    // on L45, whose seed pins `cross` (39 cells) and which shipped a 27-cell
+    // `diamond` because 39 overshoots `targetNodeCount * kMaskAreaSlack` and
+    // the recovery ladder below re-picked from the dense pool.
+    //
+    // That the substitute happened to be a good board is not a defence: the
+    // seed's declared shape has to survive downstream refinement, or the
+    // authored intent and the shipped identity are only accidentally equal and
+    // any change to the mask builder silently separates them again.
+    //
+    // Returning the plan untouched is safe because the seeded path already
+    // bounds its own density: `choosePlanFromSeed` clamps the node count with
+    // `target.clamp(1, mask.length)`, so a pinned mask cannot starve the
+    // constructor the way an unclamped procedural overshoot can.
+    if (plan.pinnedSilhouette) return plan;
     final maxArea = (plan.targetNodeCount * kMaskAreaSlack).ceil();
     if (plan.silhouetteMask.length <= maxArea) return plan;
 
-    for (final sid in _denseSilhouettes) {
-      if (sid == plan.silhouette) continue;
-      final mask = _buildOrFallbackMask(
+    // T2.11 (P2b lever 1) — recovery order, widest-intent first.
+    //
+    // This loop used to be `for (final sid in _denseSilhouettes)` and nothing
+    // else. That pool is ring / cross / diamond / rectangle: **every entry is
+    // geometricLattice**. So every overshoot — including the ones manufactured
+    // by the old rectangle fallback in [_resolveMask], which is always 64
+    // cells and therefore always overshoots — was converted into a lattice
+    // board, with diamond as the sink because it is the one dense shape that
+    // reliably lands in Hard's 25..38 band (116/200 rolls, against cross and
+    // rectangle at 0/200).
+    //
+    // The clamp's actual job is to remove dead canvas, and that is satisfied
+    // by any in-band mask, not specifically by a lattice one. So it now tries
+    // to shrink *within the Director's intent* first and only leaves the
+    // family when the geometry gives it nothing.
+    final candidates = <(SilhouetteId, MaskRouteStage)>[
+      (plan.silhouette, MaskRouteStage.densitySameId),
+      // Hard only, and that scope is measured, not cautious. On Expert — the
+      // tier Daily generates at — keeping a sparse in-area mask instead of
+      // substituting a dense one costs branching factor and FSR, and Daily's
+      // in-band rate fell 90% -> 70% (3 of 10 days out of band at BF ~3.0,
+      // FSR ~90%) with this step enabled there. Hard's own in-band rate rises
+      // 96.7% -> 100% with it. Expert therefore keeps the dense recovery it
+      // has always had; Hard, where the monoculture complaint actually lives,
+      // gets the family-preserving one.
+      if (plan.tier == DifficultyTier.hard)
+        for (final sid in _sameFamilySilhouettes(plan.silhouette))
+          (sid, MaskRouteStage.densitySameFamily),
+      // T2.15 — the family-preserving leg above has a hole the L138-145 trace
+      // exposed: `corridor` and `archipelago` are each ALONE in their visual
+      // family, so `_sameFamilySilhouettes` returns empty for them and their
+      // overshoots skipped straight into the all-lattice pool. That is how an
+      // `experimental` plan — whose pool holds no lattice at all after the
+      // T2.12 purge — still shipped a diamond.
+      //
+      // Staying non-lattice is a weaker guarantee than staying in-family, so
+      // this sits *after* the family leg and *before* the lattice pool. Hard
+      // only, for the same reason the family leg is: on Expert this step cost
+      // Daily 90% -> 70% in-band.
+      //
+      // T2.15b — scoped to plans that were ALREADY non-lattice. The first cut
+      // fired for every overshooting Hard plan, so a lattice plan whose
+      // same-family options failed reached for organicBlob/corridor ahead of
+      // the dense pool. That inverted the very bug being fixed: measured
+      // lattice->organic 2.3% and lattice->corridor 0.5%, Hard lattice share
+      // down to 44% (under the >=0.5 Phase 1C floor) and Hard in-band 100% ->
+      // 93.3%. Preserving the Director's intent has to mean *both*
+      // directions, so a lattice request still recovers into lattice.
+      if (plan.tier == DifficultyTier.hard &&
+          silhouetteVisualFamily(plan.silhouette) !=
+              SilhouetteVisualFamily.geometricLattice)
+        for (final sid in _denseCapableNonLattice)
+          if (sid != plan.silhouette &&
+              silhouetteVisualFamily(sid) !=
+                  silhouetteVisualFamily(plan.silhouette))
+            (sid, MaskRouteStage.densityNonLattice),
+      for (final sid in _denseSilhouettes)
+        if (sid != plan.silhouette) (sid, MaskRouteStage.densityDensePool),
+    ];
+
+    for (final (sid, stage) in candidates) {
+      final resolved = _resolveMask(
         silhouette: sid,
         config: config,
         random: random,
         minCells: _proceduralMaskFloor(plan.tier, config),
       );
+      final mask = resolved.mask;
       if (mask.length <= maxArea && mask.length >= plan.targetNodeCount) {
         final remapped = _reserveMotifs(
           spec: plan.spec,
@@ -560,8 +774,9 @@ class Director {
           target: plan.targetNodeCount,
           random: random,
         );
+        onSilhouetteRouted?.call(plan.silhouette, resolved.silhouette, stage);
         return plan.copyWith(
-          silhouette: sid,
+          silhouette: resolved.silhouette,
           silhouetteMask: mask,
           motifs: remapped,
         );
@@ -570,22 +785,85 @@ class Director {
     return plan;
   }
 
+  /// P2b T2.18 — the Daily Expert content policy.
+  ///
+  /// The T2.12 rectangle purge solves a *campaign sequencing* problem: long
+  /// same-family runs across a session. Daily has no sequencing problem — a
+  /// player sees one board a day and never experiences a run — but it does
+  /// have the strictest difficulty contract in the game, and the purge
+  /// measurably breaks it. Measured at n=30 dates, Daily's Expert in-band rate
+  /// fell 90.0% -> 83.3%, and every added failure is FSR over the 0.85 expert
+  /// ceiling: purging the one dense member of `organicMessy` / `experimental`
+  /// leaves those pools drawing sparser masks, and sparser masks force longer
+  /// unbranched removal chains.
+  ///
+  /// So the purge is scoped to the tier whose problem it solves. Expert keeps
+  /// the dense member; Hard and below get the purged pools. This is a content
+  /// policy per surface, not a workaround — the two surfaces have genuinely
+  /// different objectives.
+  static List<SilhouetteId> _poolForTier(
+    GenerationArchetypeSpec spec,
+    DifficultyTier? tier,
+  ) {
+    final pool = spec.preferredSilhouettes;
+    if (tier != DifficultyTier.expert) return pool;
+    if (spec.kind != GenerationArchetype.organicMessy &&
+        spec.kind != GenerationArchetype.experimental) {
+      return pool;
+    }
+    if (pool.contains(SilhouetteId.rectangle)) return pool;
+    return [...pool, SilhouetteId.rectangle];
+  }
+
   SilhouetteId _pickSilhouette(
     GenerationArchetypeSpec spec,
     Random random, {
     DifficultyTier? tier,
   }) {
-    final pool = spec.preferredSilhouettes;
+    final pool = _poolForTier(spec, tier);
+    // P2b T2.14 — break a same-family run before the dense bias gets a vote.
+    //
+    // Ordered first because the 40% dense branch is all-lattice by
+    // construction: letting it fire ahead of the break would extend exactly
+    // the runs this is here to cut. The T2.13 matrix is what makes this safe
+    // to do bluntly — `organicBlob` (79% in band) and `corridor` (66%) are the
+    // two MOST feasible Hard shapes, beating every lattice shape, so steering
+    // toward them does not trade variety for fallback pressure.
+    final streak = currentFamilyStreak?.call();
+    if (streak != null && streak.length >= kStreakBreakThreshold) {
+      final offFamily = pool
+          .where((s) => silhouetteVisualFamily(s) != streak.family)
+          .toList();
+      if (offFamily.isNotEmpty) {
+        // Prefer GREEN alternatives, but keep the demoted ones as a last
+        // resort: `cleanAuthored` has no off-family member at all, so on that
+        // archetype this whole block is a no-op by design.
+        final preferred = (tier == DifficultyTier.hard ||
+                tier == DifficultyTier.expert)
+            ? offFamily
+                .where((s) => !_demotedForDenseTiers.contains(s))
+                .toList()
+            : offFamily;
+        final breakers = preferred.isNotEmpty ? preferred : offFamily;
+        final picked = breakers[random.nextInt(breakers.length)];
+        onSilhouettePicked?.call(spec.kind, picked, false);
+        return picked;
+      }
+    }
     // Dense Strategy Phase 1C: for Hard/Expert, bias 40% toward dense
     // silhouettes to keep structured tension, but allow full variety.
     if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
       final denseInPool =
           pool.where((s) => _denseSilhouettes.contains(s)).toList();
       if (denseInPool.isNotEmpty && random.nextDouble() < 0.40) {
-        return denseInPool[random.nextInt(denseInPool.length)];
+        final dense = denseInPool[random.nextInt(denseInPool.length)];
+        onSilhouettePicked?.call(spec.kind, dense, true);
+        return dense;
       }
     }
-    return pool[random.nextInt(pool.length)];
+    final picked = pool[random.nextInt(pool.length)];
+    onSilhouettePicked?.call(spec.kind, picked, false);
+    return picked;
   }
 
   /// Dense Strategy Phase 1B: for Hard/Expert tiers, clamp isolation penalty
@@ -657,26 +935,137 @@ class Director {
     return max(8, (tierFloor * kMaskCellFloorRatio).round());
   }
 
-  Set<int> _buildOrFallbackMask({
+  /// Thin mask-only wrapper for the canonical/seeded call sites, which must
+  /// keep the pre-P2b behaviour exactly (build once, else full rectangle).
+  /// P2b T2.21 — returns the resolution *result*, not just its mask.
+  ///
+  /// This used to end in `.mask`, discarding the resolved id that
+  /// [_resolveMask] computes precisely so callers can describe what shipped.
+  /// `choosePlanFromSeed` then stamped `seed.silhouetteId` on the plan
+  /// regardless, so a seed whose shape could not be built kept its declared
+  /// label on the 64-cell rectangle fallback.
+  ///
+  /// That is not an unlucky draw, it is arithmetic. On the seeded path
+  /// `varied: false` disables jitter, so `_diamond` runs with `rx == ry ==
+  /// base`, and `base = min(w,h)/2 - 0.3 + wobble` with `wobble` in [0, 0.15)
+  /// tops out below 4.0 on an 8x8 board — admitting only the Manhattan rings
+  /// summing to 3, i.e. exactly 24 cells, every single time. `_corridor` is
+  /// worse: `bandWidth = max(2, 8 ~/ 3) = 2`, so 16 cells whichever way
+  /// `nextBool` falls. Against a 25-cell floor neither can ever succeed, which
+  /// is why retrying the build is a no-op rather than a fix.
+  ///
+  /// So these boards *are* rectangles and cannot presently be anything else.
+  /// The seed keeps declaring its shape — if the grid, the floor or the
+  /// builder changes, it starts shipping as that shape again with no further
+  /// edit. What stops here is the engine reporting a shape it did not build.
+  ({SilhouetteId silhouette, Set<int> mask}) _buildOrFallbackMask({
+    required SilhouetteId silhouette,
+    required LevelConfiguration config,
+    required Random random,
+    required int minCells,
+    bool varied = true,
+  }) =>
+      _resolveMask(
+        silhouette: silhouette,
+        config: config,
+        random: random,
+        minCells: minCells,
+        varied: varied,
+      );
+
+  /// Family-preserving mask resolution — P2b levers 1+2.
+  ///
+  /// The old routine had exactly two outcomes: the requested silhouette's
+  /// first mask roll, or the **full rectangle**. Measured at 8x8 against
+  /// Hard's 25-cell floor that second outcome is not rare — archipelago fails
+  /// to build on 109/200 rolls, corridor on 75/200 — and it is not neutral: a
+  /// 64-cell rectangle always overshoots [kMaskAreaSlack], so
+  /// [_refinePlanMaskDensity] then re-picks from [_denseSilhouettes], which is
+  /// 100% [SilhouetteVisualFamily.geometricLattice]. Every mask failure
+  /// therefore ended as a lattice board. That one-way valve is the measured
+  /// mechanism behind Hard L30-80's 0/51 archipelago, 2/51 corridor and 72.5%
+  /// lattice share — not the 40% dense coin-flip in [_pickSilhouette], which
+  /// is the smaller of the funnels and is deliberately left alone here.
+  ///
+  /// The ladder keeps the Director's intent for as long as the geometry
+  /// allows, and only then escapes:
+  ///
+  ///   requested id -> same id, another concrete shape -> same visual family
+  ///   -> full rectangle
+  ///
+  /// Rectangle stays reachable on purpose. It is the known-safe escape that
+  /// guarantees the constructor has room; forbidding it would trade a variety
+  /// problem for a rejection-and-latency one. It is now the *lowest*-priority
+  /// outcome rather than the first.
+  ///
+  /// **Canonical masks are exempt.** `varied: false` is the seeded/milestone
+  /// path, whose authored look and RNG stream must stay byte-stable, so it
+  /// keeps the old build-once-or-rectangle behaviour and consumes exactly the
+  /// draws it used to.
+  ///
+  /// Returns the silhouette the mask actually belongs to, so the plan (and
+  /// therefore the fingerprint's family bits and every downstream family
+  /// metric) describes what shipped rather than what was asked for.
+  ({SilhouetteId silhouette, Set<int> mask}) _resolveMask({
     required SilhouetteId silhouette,
     required LevelConfiguration config,
     required Random random,
     required int minCells,
     bool varied = true,
   }) {
-    final mask = buildSilhouetteMask(
-      id: silhouette,
-      gridWidth: config.gridWidth,
-      gridHeight: config.gridHeight,
-      random: random,
-      minCells: minCells,
-      varied: varied,
-      // Level-isolated jitter seed (procedural path only). +1 so level 0 still
-      // jitters; does not consume from `random`, so the stream is unchanged.
-      jitterSeed: varied ? config.levelId + 1 : 0,
-    );
-    if (mask != null && mask.length >= minCells) return mask;
+    Set<int>? attempt(SilhouetteId id) {
+      final mask = buildSilhouetteMask(
+        id: id,
+        gridWidth: config.gridWidth,
+        gridHeight: config.gridHeight,
+        random: random,
+        minCells: minCells,
+        varied: varied,
+        // Level-isolated jitter seed (procedural path only). +1 so level 0
+        // still jitters; does not consume from `random`, so the stream is
+        // unchanged.
+        jitterSeed: varied ? config.levelId + 1 : 0,
+      );
+      return (mask != null && mask.length >= minCells) ? mask : null;
+    }
+
+    final direct = attempt(silhouette);
+    if (direct != null) {
+      onSilhouetteRouted?.call(silhouette, silhouette, MaskRouteStage.direct);
+      return (silhouette: silhouette, mask: direct);
+    }
+
+    if (varied) {
+      // Stage 1 — the requested id's own concrete-shape pool. `buildSilhouette
+      // Mask` draws the [LayoutMaskKind] from `random`, so a re-roll is a
+      // genuinely different rendering of the *same* silhouette (donut -> C ->
+      // hollow diamond), not a retry of the roll that just failed.
+      final poolSize = (silhouetteShapePool[silhouette] ?? const [null]).length;
+      final retries = min(poolSize - 1, kMaskShapePoolRetries);
+      for (var i = 0; i < retries; i++) {
+        final mask = attempt(silhouette);
+        if (mask != null) {
+          onSilhouetteRouted?.call(
+              silhouette, silhouette, MaskRouteStage.shapePool);
+          return (silhouette: silhouette, mask: mask);
+        }
+      }
+
+      // Stage 2 — a different id inside the same visual family. This is the
+      // step that keeps an unbuildable archipelago reading as an archipelago
+      // board instead of becoming a diamond.
+      for (final sid in _sameFamilySilhouettes(silhouette)) {
+        final mask = attempt(sid);
+        if (mask != null) {
+          onSilhouetteRouted?.call(silhouette, sid, MaskRouteStage.sameFamily);
+          return (silhouette: sid, mask: mask);
+        }
+      }
+    }
+
     onMaskRectangleFallback?.call(silhouette, SilhouetteId.rectangle);
+    onSilhouetteRouted?.call(
+        silhouette, SilhouetteId.rectangle, MaskRouteStage.rectangle);
     // Fall back to the full rectangle so the constructor always has room.
     final all = <int>{};
     for (var y = 0; y < config.gridHeight; y++) {
@@ -684,7 +1073,7 @@ class Director {
         all.add(gridCellKey(x, y));
       }
     }
-    return all;
+    return (silhouette: SilhouetteId.rectangle, mask: all);
   }
 
   int _pickTargetNodeCount({

@@ -162,11 +162,16 @@ class GenerationArchetypeSpec {
             temperature: 1.6,
           ),
           motifBudget: 0,
+          // P2b T2.12: `rectangle` purged. It was the ONLY member of this pool
+          // that intersects `_denseSilhouettes`, so the Hard/Expert 40% dense
+          // coin-flip in `Director._pickSilhouette` resolved to rectangle
+          // 100% of the times it fired — making a nominally organic archetype
+          // request lattice 54.5% of the time (measured). With no dense member
+          // the branch cannot fire at all and this pool is purely organic.
           preferredSilhouettes: [
             SilhouetteId.organicBlob,
             SilhouetteId.archipelago,
             SilhouetteId.asymmetric,
-            SilhouetteId.rectangle,
           ],
         );
       case GenerationArchetype.strongMotif:
@@ -219,11 +224,13 @@ class GenerationArchetypeSpec {
             temperature: 2.0,
           ),
           motifBudget: 0,
+          // P2b T2.12: `rectangle` purged — same dense-pool pollution as
+          // organicMessy (measured 57.9% lattice from a pool of three
+          // non-lattice shapes plus rectangle).
           preferredSilhouettes: [
             SilhouetteId.archipelago,
             SilhouetteId.asymmetric,
             SilhouetteId.corridor,
-            SilhouetteId.rectangle,
           ],
           // 50% chance an Experimental roll uses the legacy greedy path
           // (preserves emergence as §5 demands).

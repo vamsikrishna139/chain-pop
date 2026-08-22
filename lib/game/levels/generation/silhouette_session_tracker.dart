@@ -52,6 +52,33 @@ class SilhouetteSessionTracker {
     return 1.5;
   }
 
+  /// The family of the run at the session tail, or null when no board has
+  /// been recorded yet.
+  ///
+  /// Generalised from [trailingGeometricStreak] because the lattice-only view
+  /// has a blind spot that the rectangle purge widened: once `organicMessy`
+  /// became a purely non-lattice pool, organic runs became *more* likely and
+  /// stayed invisible to a lattice-only instrument. The player-facing target
+  /// is "no long run of any family", so the signal has to be family-agnostic.
+  SilhouetteVisualFamily? currentStreakFamily() =>
+      _recent.isEmpty ? null : _recent.last;
+
+  /// Length of the trailing run of [currentStreakFamily], capped by the
+  /// history window.
+  int currentStreakLength() {
+    if (_recent.isEmpty) return 0;
+    final family = _recent.last;
+    var streak = 0;
+    for (final past in _recent.toList().reversed) {
+      if (past == family) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
   /// Consecutive geometric-lattice count at session tail (for tests).
   int trailingGeometricStreak() {
     var streak = 0;

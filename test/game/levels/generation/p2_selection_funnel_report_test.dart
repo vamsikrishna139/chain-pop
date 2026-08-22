@@ -18,7 +18,11 @@
 //
 //   1. THE FUNNEL — of the K-loop's iterations, how many candidates survive to
 //      the diversity ledger, how many the ledger calls novel, and how many are
-//      left for the comparator to actually rank.
+//      left for the comparator to actually rank. T2.5 adds the per-stage
+//      MORTALITY table: every iteration entered exits through exactly one
+//      gate, so the row that dominates is the one starving the funnel.
+//      Medium and Easy are run as controls — if they are healthy, the cause is
+//      Hard-specific density rather than the loop's shape.
 //   2. FINGERPRINT ENTROPY — per-bit, which of the ledger's 26 fingerprint bits
 //      carry information on Hard. A novelty threshold is only meaningful
 //      against the entropy actually available.
@@ -52,7 +56,11 @@ const int kSequenceLevels = 500;
 void main() {
   test('P2b selection funnel report', () {
     printCorpusVersionBanner('P2b SELECTION FUNNEL');
-    _funnel();
+    _funnel(DifficultyMode.hard);
+    print('');
+    _funnel(DifficultyMode.medium);
+    print('');
+    _funnel(DifficultyMode.easy);
     print('');
     final bits = _entropyAndOutlines();
     print('');
@@ -64,16 +72,26 @@ void main() {
 // 1. The funnel.
 // ═══════════════════════════════════════════════════════════════════════════
 
-void _funnel() {
+void _funnel(DifficultyMode mode) {
   final gen = LevelGenerator();
   final cand = <int, int>{};
   final rankable = <int, int>{};
   final paths = <String, int>{};
   var totalCand = 0, totalNovel = 0, totalRankable = 0, totalRej = 0, n = 0;
+  // T2.5 — per-stage mortality. Every iteration entered leaves through exactly
+  // one of these, or reaches the ledger.
+  var iters = 0,
+      budgetBreaks = 0,
+      construction = 0,
+      fsr = 0,
+      cud = 0,
+      oob = 0,
+      hrAspect = 0,
+      hrComponents = 0;
 
   for (var id = 1; id <= kFunnelLevels; id++) {
     gen.resetCounters();
-    final r = gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
+    final r = gen.generate(id, mode: mode, timeBudget: kProdBudget);
     if (!r.isSuccess) continue;
     n++;
     final c = gen.candidateCount;
@@ -84,10 +102,19 @@ void _funnel() {
     totalNovel += gen.novelCandidateCount;
     totalRankable += a;
     totalRej += gen.evaluatorRejectionCount;
+    iters += gen.kloopIterations;
+    budgetBreaks += gen.kloopBudgetBreaks;
+    construction += gen.constructionFailures;
+    fsr += gen.fsrCapRejects;
+    cud += gen.cudFloorRejects;
+    oob += gen.outOfBandNoted;
+    hrAspect += gen.hardRejectAspect;
+    hrComponents += gen.hardRejectComponents;
     gen.fallbackReasonCounts.forEach((k, v) => paths[k] = (paths[k] ?? 0) + v);
   }
 
-  print('--- THE FUNNEL (Hard L1-$kFunnelLevels, prod budget, n=$n) ---');
+  final label = mode.name.toUpperCase();
+  print('--- THE FUNNEL ($label L1-$kFunnelLevels, prod budget, n=$n) ---');
   print('candidates reaching the ledger, per level : ${_hist(cand)}');
   print('RANKABLE candidates (in-band + novel)     : ${_hist(rankable)}');
   print('exit path taken                           : $paths');
@@ -103,6 +130,34 @@ void _funnel() {
   print('  ^ every diversity mechanism in the generator — ledger novelty, the');
   print('    silhouette streak penalty and diversity boost, T2.4c composition');
   print('    ranking, the tempo/CUD/topology comparator — chooses among these.');
+
+  // T2.5 — the mortality table. This is the view that says WHICH gate to
+  // touch, and it is the reason `_evaluatorRejectionCount` was split: that
+  // counter also fires on the `!inBand` branch when the candidate then goes on
+  // to reach the ledger, so it never named a stage.
+  print('  K-loop mortality, $label — where the $iters iterations went:');
+  final rows = <String, int>{
+    'construction failed (build/solve/renegotiate)': construction,
+    'FSR cap reject': fsr,
+    'composition HARD reject — aspect': hrAspect,
+    'composition HARD reject — components': hrComponents,
+    'CUD floor reject (out-of-band only)': cud,
+    'REACHED THE LEDGER': totalCand,
+  };
+  final mi = math.max(1, iters);
+  for (final e in rows.entries) {
+    print('    ${e.key.padRight(46)} ${e.value.toString().padLeft(5)}  '
+        '${(100 * e.value / mi).toStringAsFixed(1)}%');
+  }
+  final accounted = rows.values.reduce((a, b) => a + b);
+  print('    ${'—— accounted for'.padRight(46)} ${accounted.toString().padLeft(5)}'
+      '${accounted == iters ? '  (conserved)' : '  MISMATCH vs $iters'}');
+  print('    iterations never entered (latency budget)      '
+      '${budgetBreaks.toString().padLeft(5)}');
+  print('    of the ledger-reaching, out-of-band            '
+      '${oob.toString().padLeft(5)}   (an observation, not an exit)');
+  print('    per level: iterations=${(iters / d).toStringAsFixed(2)}  '
+      'reached ledger=${(totalCand / d).toStringAsFixed(2)}');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -192,16 +247,52 @@ void _novelty(List<int> bits) {
       'max=${sorted.isEmpty ? 0 : sorted.last}');
   final below5 = sorted.where((d) => d < 5).length;
   final below8 = sorted.where((d) => d < 8).length;
-  final t = math.max(1, sorted.length);
+  final t2 = math.max(1, sorted.length);
+  final t = t2;
   print('ledger thresholds: base=5, same-visual-family=8');
   print('  share under base 5 : ${(100 * below5 / t).toStringAsFixed(1)}%');
   print('  share under 8      : ${(100 * below8 / t).toStringAsFixed(1)}%');
+  // T2.7 — the admission CDF the new threshold is chosen from. Printed so the
+  // constant is derived from the distribution rather than picked as a round
+  // number, the same observe-then-calibrate split T2.4a/b used.
+  print('T2.7 admission CDF — share of levels a threshold would call NOVEL:');
+  for (var t = 2; t <= 9; t++) {
+    final admitted = sorted.where((d) => d >= t).length;
+    print('  threshold $t : ${(100 * admitted / t2).toStringAsFixed(1)}% admitted');
+  }
+  // What a silhouette-only difference actually costs, which is the floor the
+  // plan pinned: novelty must still reject a board differing only in
+  // silhouette id from a window entry.
+  final silDistances = <int>[];
+  for (final a in SilhouetteId.values) {
+    for (final b in SilhouetteId.values) {
+      if (a.index >= b.index) continue;
+      final d = _pop((a.index ^ b.index)) +
+          _pop(silhouetteVisualFamily(a).index ^ silhouetteVisualFamily(b).index);
+      silDistances.add(d);
+    }
+  }
+  silDistances.sort();
+  print('silhouette-id-only pair distances (sil bits + family bits): '
+      'min=${silDistances.first} max=${silDistances.last}');
+  print('  ^ a threshold at or below max makes a pure silhouette swap read as');
+  print('    novel, which is the floor the plan pinned a fixture test on.');
   print('  ^ a candidate must clear the threshold against EVERY one of the 20');
   print('    entries in the window, so these shares are a lower bound on how');
   print('    often novelty is unreachable.');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+
+int _pop(int x) {
+  var c = 0;
+  var v = x;
+  while (v != 0) {
+    c += v & 1;
+    v >>= 1;
+  }
+  return c;
+}
 
 double _log2(double x) => x <= 0 ? 0 : math.log(x) / math.ln2;
 

@@ -114,7 +114,30 @@ class LevelManager {
   }
 
   static LevelData _generateDaily(int dayKey) {
-    final result = generator.generateDailyChallenge(
+    // The Daily contract is `dayKey -> identical board`, for every player and
+    // on every call. It is generated from a **fresh generator**, never the
+    // static [generator].
+    //
+    // [generator] is static and its `DiversityLedger` and
+    // `SilhouetteSessionTracker` are mutable session state, which the T0.0a
+    // closure audit classifies as generation *inputs*. So the synchronous path
+    // produced a board that depended on how much campaign play preceded it —
+    // and, because each Daily call also records into that state, two calls for
+    // the same date returned different boards.
+    //
+    // The doc on [getDailyChallengeAsync] already identified this and fixed it
+    // for the async path only, by way of a worker isolate starting from fresh
+    // statics. The synchronous path — the one `getDailyChallenge` uses and the
+    // one the async path falls back to when `Isolate.run` throws — kept the
+    // bug, and it was invisible because the novelty gate was unreachable: with
+    // `isNovel` almost always false every call fell through to the same
+    // last-resort candidate, so the board looked stable. T2.6/T2.7 made the
+    // gate reachable and the non-determinism surfaced immediately.
+    //
+    // A fresh generator is the smallest change that makes the contract hold on
+    // both paths, and it makes the isolate an optimisation for latency rather
+    // than a correctness requirement.
+    final result = LevelGenerator().generateDailyChallenge(
       dayKey,
       timeBudget: dailyGenerationBudget,
     );

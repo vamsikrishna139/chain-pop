@@ -18,10 +18,18 @@ LevelData enrichLevel(
   LevelConfiguration config,
   DifficultyTier tier, {
   MechanicBudgetOverride? mechanicOverride,
+  /// F1 — receives the core-selection outcome for this board, if one was made.
+  ///
+  /// [CoreSelectionTelemetry.sink] already broadcasts the same record, but it
+  /// is a global static that tests set for their own purposes; a caller that
+  /// needs the outcome for a *decision* cannot share it. This is the per-call
+  /// channel, so the generator can reject a board whose core floor could not
+  /// be met instead of shipping it.
+  void Function(CoreSelectionRecord record)? onCoreSelection,
 }) {
   var nodes = level.nodes.map((n) => n.clone()).toList();
-  nodes =
-      _markCoreNodes(nodes, config.difficulty.mode, level, mechanicOverride);
+  nodes = _markCoreNodes(
+      nodes, config.difficulty.mode, level, mechanicOverride, onCoreSelection);
   nodes = _markSpecialNodes(nodes, config, level, mechanicOverride);
   return LevelData(
     levelId: level.levelId,
@@ -391,8 +399,9 @@ List<NodeData> _markCoreNodes(
   List<NodeData> nodes,
   DifficultyMode mode,
   LevelData level,
-  MechanicBudgetOverride? mechanicOverride,
-) {
+  MechanicBudgetOverride? mechanicOverride, [
+  void Function(CoreSelectionRecord record)? onCoreSelection,
+]) {
   final budget = budgetForLevel(
     levelId: level.levelId,
     mode: mode,
@@ -441,8 +450,7 @@ List<NodeData> _markCoreNodes(
   );
   coreIds = quality.ids;
 
-  CoreSelectionTelemetry._emit(
-    CoreSelectionRecord(
+  final record = CoreSelectionRecord(
       levelId: level.levelId,
       mode: mode,
       path: selection.path,
@@ -455,8 +463,9 @@ List<NodeData> _markCoreNodes(
       floorAchieved: quality.achieved,
       repickRungs: quality.rungs,
       escalated: quality.escalated,
-    ),
   );
+  CoreSelectionTelemetry._emit(record);
+  onCoreSelection?.call(record);
 
   return [
     for (final n in nodes) n.copyWith(isCore: coreIds.contains(n.id)),
@@ -913,6 +922,40 @@ List<NodeData> _markSpecialNodes(
     ];
   }
 
+  // Phase gates are assigned HERE, before relays, and the ordering is
+  // load-bearing.
+  //
+  // They used to be assigned last, after the relay block below. A phase gate
+  // strictly *tightens* legal tap order, so `_relayIsSoftlockSafe` was proving
+  // its worst case against a board that never shipped: same relay, same
+  // rotation, but every node in phase group 0. Measured on `hard L592`, whose
+  // relay is poppable on tap 1 (`must` is empty, so the proof's worst case is
+  // the full board):
+  //
+  //   worst case with phase groups stripped — what the proof saw : SOLVABLE
+  //   worst case as shipped                 — what the player got: UNSOLVABLE
+  //
+  // The relay was accepted and the board could be tapped into a dead end; the
+  // 600-level autoplay found it on 1 of 3 routes. Same defect shape as §0.3's
+  // two core fallbacks: a correctness check that does not sit at the last
+  // choke point is not a check.
+  //
+  // Moving the block is safe and leaves phase assignment itself unchanged —
+  // `chunkSize` reads `result.length`, and the relay block substitutes node
+  // kinds without adding or removing any node.
+  if (budget.phaseGateCount > 0) {
+    final groups = budget.phaseGateCount + 1;
+    // Node ids are 0-based and contiguous, and the canonical solve order *is*
+    // id order, so chunking by id keeps the constructed solution legal while
+    // forbidding the out-of-order deviations the gate is meant to block.
+    final chunkSize = (result.length / groups).ceil();
+    result = [
+      for (final n in result)
+        n.copyWith(
+            phaseGroup: (n.id ~/ chunkSize).clamp(0, budget.phaseGateCount)),
+    ];
+  }
+
   if (budget.relayCount > 0) {
     // A relay rotates its whole row when popped, which can spin arrows into
     // permanent face-offs. Relay-free Chain Pop can never soft-lock (removing a
@@ -958,6 +1001,20 @@ List<NodeData> _markSpecialNodes(
         }
       }
     } else if (budget.relayCount == 2) {
+      // `relay_softlock_property_test`'s two-relay case still fails: it finds
+      // boards that softlock despite `_relayIsSoftlockSafe` returning true, so
+      // the predicate is unsound for two relays. Nothing budgets two relays
+      // today — measured across all three modes x 600 levels, every shipped
+      // board has 0 or 1 — so this path is unreachable and the defect is
+      // latent. It is left in place rather than deleted because the sound
+      // single-relay argument does not obviously extend, and finding out why
+      // is the work the property test exists to force.
+      //
+      // Anything that starts budgeting two relays must fix the predicate
+      // first. Solvability is invariant C5; an unreachable unsound path is
+      // tolerable, a reachable one is not. Deliberately NOT an `assert(false)`
+      // — the property test drives this exact path to demonstrate the defect,
+      // and an assertion here would replace its useful failure with a crash.
       bool found = false;
       for (int i = 0; i < relayCandidates.length; i++) {
         for (int j = i + 1; j < relayCandidates.length; j++) {
@@ -988,19 +1045,6 @@ List<NodeData> _markSpecialNodes(
         if (found) break;
       }
     }
-  }
-
-  if (budget.phaseGateCount > 0) {
-    final groups = budget.phaseGateCount + 1;
-    // Node ids are 0-based and contiguous, and the canonical solve order *is*
-    // id order, so chunking by id keeps the constructed solution legal while
-    // forbidding the out-of-order deviations the gate is meant to block.
-    final chunkSize = (result.length / groups).ceil();
-    result = [
-      for (final n in result)
-        n.copyWith(
-            phaseGroup: (n.id ~/ chunkSize).clamp(0, budget.phaseGateCount)),
-    ];
   }
 
   return result;
