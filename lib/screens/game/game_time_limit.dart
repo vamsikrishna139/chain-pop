@@ -75,8 +75,7 @@ int? computeGameTimeLimit(
     case DifficultyMode.easy:
       final n = nodeCount.clamp(1, 999);
       final perNode = easyCampaignBaseSecondsPerNode * n;
-      final levelScale =
-          (1.0 - easyCampaignTimerLevelSlope * levelId).clamp(
+      final levelScale = (1.0 - easyCampaignTimerLevelSlope * levelId).clamp(
         easyCampaignTimerLevelClampLow,
         1.0,
       );
@@ -89,14 +88,12 @@ int? computeGameTimeLimit(
       final base = mediumCampaignTimerBasePerNode *
           n *
           (1 + mediumCampaignTimerLogFactor * log(n));
-      final learning =
-          (1.0 - mediumCampaignTimerLevelSlope * levelId).clamp(
+      final learning = (1.0 - mediumCampaignTimerLevelSlope * levelId).clamp(
         mediumCampaignTimerLevelClampLow,
         1.0,
       );
-      return (base * learning)
-          .round()
-          .clamp(mediumCampaignTimerClampLowSec, mediumCampaignTimerClampHighSec);
+      return (base * learning).round().clamp(
+          mediumCampaignTimerClampLowSec, mediumCampaignTimerClampHighSec);
     case DifficultyMode.hard:
       final n = nodeCount.clamp(1, 999);
       final base = hardCampaignTimerBasePerNode *

@@ -63,9 +63,8 @@ double mapElitesQualityScore(LevelMetrics m) {
       ? 0.5
       : 1.0 - _tempoVolatility(m.tempoProfile).clamp(0.0, 1.0);
   final pathTerm = m.viablePathCount > 1 ? 1.0 : 0.4;
-  final openerTerm = (m.firstLegalMoveCount >= 2 && m.firstLegalMoveCount <= 5)
-      ? 1.0
-      : 0.5;
+  final openerTerm =
+      (m.firstLegalMoveCount >= 2 && m.firstLegalMoveCount <= 5) ? 1.0 : 0.5;
   final fsr = m.forcedSequenceRatio;
   final fsrTerm = 1.0 - (fsr - 0.25).abs().clamp(0.0, 0.5) * 2;
   return (0.30 * tempoTerm) +

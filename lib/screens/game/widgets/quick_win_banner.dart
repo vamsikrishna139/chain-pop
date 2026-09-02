@@ -85,9 +85,8 @@ class _QuickWinBannerState extends State<QuickWinBanner>
                               ? Icons.star_rounded
                               : Icons.star_outline_rounded,
                           size: 22,
-                          color: i < widget.stars
-                              ? widget.accent
-                              : Colors.white24,
+                          color:
+                              i < widget.stars ? widget.accent : Colors.white24,
                         ),
                       const SizedBox(width: 12),
                       Column(

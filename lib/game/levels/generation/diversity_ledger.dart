@@ -51,6 +51,7 @@ const double kFingerprintDensityThreshold = 0.50;
 
 /// Maps [MotifId] to the 3-bit dominant-motif fingerprint slot (§4.5 bits 7–9).
 int motifIdFingerprintSlot(MotifId id) => id.index & 0x07;
+
 ///
 /// [silhouette] is the silhouette the Director chose. [dominantMotifId] is
 /// always 0 in Phase 3 (no motifs yet); Phase 4 will pass a meaningful id.
@@ -67,9 +68,9 @@ LevelFingerprint computeLevelFingerprint({
   bits |= (_bfBucket(metrics.averageBranchingFactor, tier) & 0x03) << 5;
   bits |= (dominantMotifId & 0x07) << 7;
   bits |= (_directionHistogramBits(level) & 0x0f) << 10;
-  bits |= (_spatialDensityBits(level, level.gridWidth, level.gridHeight) &
-          0x1ff) <<
-      14;
+  bits |=
+      (_spatialDensityBits(level, level.gridWidth, level.gridHeight) & 0x1ff) <<
+          14;
   bits |= (silhouetteVisualFamily(silhouette).index & 0x07) << 23;
   return LevelFingerprint(bits);
 }
@@ -164,9 +165,8 @@ int _spatialDensityBits(LevelData level, int gridWidth, int gridHeight) {
     for (var x = 0; x < w; x++) {
       final xThird = ((x / w) * 3).floor().clamp(0, 2);
       final cell = yThird * 3 + xThird;
-      final allowed = level.playCells == null
-          ? true
-          : level.playCells!.contains('$x,$y');
+      final allowed =
+          level.playCells == null ? true : level.playCells!.contains('$x,$y');
       if (allowed) capacity[cell]++;
     }
   }
@@ -262,8 +262,8 @@ class DiversityLedger {
 
   /// True iff [fingerprint] is far enough from every entry in the window.
   bool isNovel(LevelFingerprint fingerprint) {
-    final mySilhouette =
-        SilhouetteId.values[(fingerprint.bits & 0x07) % SilhouetteId.values.length];
+    final mySilhouette = SilhouetteId
+        .values[(fingerprint.bits & 0x07) % SilhouetteId.values.length];
     final myFamily = silhouetteVisualFamily(mySilhouette);
     final windowList = _recent.toList(growable: false);
     for (var j = windowList.length - 1; j >= 0; j--) {

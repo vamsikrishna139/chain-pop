@@ -75,8 +75,7 @@ void main() {
       // has shipped yet; with 50 emissions that's extremely unlikely.
       if (snap.strongMotifEmissions > 0) {
         expect(snap.strongMotifVisibilityRate, isNotNull);
-        expect(snap.strongMotifVisibilityRate!,
-            inInclusiveRange(0.0, 1.0));
+        expect(snap.strongMotifVisibilityRate!, inInclusiveRange(0.0, 1.0));
       }
     });
 

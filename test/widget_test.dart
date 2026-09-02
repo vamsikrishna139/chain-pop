@@ -71,7 +71,8 @@ void main() {
 
   testWidgets(
       'retry after auto-advance delay fires still does not auto-advance',
-      skip: true, // Flaky/Hangs due to fakeAsync Timer orchestration after init state.
+      skip:
+          true, // Flaky/Hangs due to fakeAsync Timer orchestration after init state.
       (tester) async {
     // This variant tests the _hasWon guard rather than the timer-cancel path.
     // The 700 ms delay timer is allowed to fire and set up the periodic

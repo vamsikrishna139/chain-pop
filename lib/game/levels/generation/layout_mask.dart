@@ -221,10 +221,12 @@ Set<String> _cShape(int w, int h, Random? random, {Random? jitter}) {
   // always survives because the void is clamped to w-2 / h-2.
   final iw = j == null
       ? max(2, w ~/ 3)
-      : (((w / 3) * (0.75 + j.nextDouble() * 0.6)).round()).clamp(2, max(2, w - 2));
+      : (((w / 3) * (0.75 + j.nextDouble() * 0.6)).round())
+          .clamp(2, max(2, w - 2));
   final ih = j == null
       ? max(2, h ~/ 3)
-      : (((h / 3) * (0.75 + j.nextDouble() * 0.6)).round()).clamp(2, max(2, h - 2));
+      : (((h / 3) * (0.75 + j.nextDouble() * 0.6)).round())
+          .clamp(2, max(2, h - 2));
   final ox = j == null
       ? (w - iw) ~/ 2
       : ((w - iw) ~/ 2 + j.nextInt(3) - 1).clamp(1, max(1, w - iw - 1));
@@ -541,7 +543,8 @@ Set<String> _hollowDiamond(int w, int h, Random? random, {Random? jitter}) {
   final cx = w / 2.0 + (j == null ? 0.0 : (j.nextDouble() - 0.5) * w * 0.12);
   final cy = h / 2.0 + (j == null ? 0.0 : (j.nextDouble() - 0.5) * h * 0.12);
   final radius = min(w, h) / 2.0;
-  final innerRatio = j == null ? 0.4 : 0.30 + j.nextDouble() * 0.30; // 0.30–0.60
+  final innerRatio =
+      j == null ? 0.4 : 0.30 + j.nextDouble() * 0.30; // 0.30–0.60
   final innerRadius = max(1.0, radius * innerRatio);
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
@@ -564,7 +567,8 @@ Set<String> _xShape(int w, int h, Random? random, {Random? jitter}) {
   final cx = w / 2.0;
   final cy = h / 2.0;
   final j = jitter;
-  final thickFrac = j == null ? 0.15 : 0.11 + j.nextDouble() * 0.12; // 0.11–0.23
+  final thickFrac =
+      j == null ? 0.15 : 0.11 + j.nextDouble() * 0.12; // 0.11–0.23
   final thickness = max(1.0, min(w, h) * thickFrac);
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {

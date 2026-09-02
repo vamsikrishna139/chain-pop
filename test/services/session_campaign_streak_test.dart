@@ -12,7 +12,8 @@ void main() {
         4,
       );
       expect(
-        SessionCampaignStreak.interstitialStreakThreshold(DifficultyMode.medium),
+        SessionCampaignStreak.interstitialStreakThreshold(
+            DifficultyMode.medium),
         3,
       );
       expect(

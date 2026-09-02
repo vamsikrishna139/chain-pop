@@ -83,8 +83,11 @@ void main() {
 
       final shipped = <double>[];
       final shippedDetail = <String, List<double>>{
-        'aspect': [], 'blobVsGrid': [], 'occupancy': [],
-        'singleton': [], 'components': [],
+        'aspect': [],
+        'blobVsGrid': [],
+        'occupancy': [],
+        'singleton': [],
+        'components': [],
       };
       var failures = 0;
 
@@ -111,16 +114,16 @@ void main() {
       emit('## ${mode.name.toUpperCase()}');
       emit('');
       emit('```');
-      emit(_fmtRow('SHIPPED (known-good)', shipped.length,
-          _percentiles(shipped)));
+      emit(_fmtRow(
+          'SHIPPED (known-good)', shipped.length, _percentiles(shipped)));
       emit(_fmtRow('candidates ACCEPTED by rules', accepted.length,
           _percentiles(accepted)));
       emit(_fmtRow('candidates REJECTED by rules', rejected.length,
           _percentiles(rejected)));
       emit('');
       for (final e in shippedDetail.entries) {
-        emit(_fmtRow('  shipped.${e.key}', e.value.length,
-            _percentiles(e.value)));
+        emit(_fmtRow(
+            '  shipped.${e.key}', e.value.length, _percentiles(e.value)));
       }
       emit('');
       emit('  reject reasons: '

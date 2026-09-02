@@ -39,11 +39,14 @@ void main() {
 
     // ── Render every board ───────────────────────────────────────────────
     final b = StringBuffer();
-    b.writeln('\n================ 100 BOARDS (in generation order) ================');
-    b.writeln('legend: ^v<> = node facing · core=O locked=L relay=R · "·"=empty cell · " "=void\n');
+    b.writeln(
+        '\n================ 100 BOARDS (in generation order) ================');
+    b.writeln(
+        'legend: ^v<> = node facing · core=O locked=L relay=R · "·"=empty cell · " "=void\n');
     for (var i = 0; i < rows.length; i++) {
       final r = rows[i];
-      b.writeln('#${(i + 1).toString().padLeft(3)}  ${r.mode.name.toUpperCase().padRight(6)}'
+      b.writeln(
+          '#${(i + 1).toString().padLeft(3)}  ${r.mode.name.toUpperCase().padRight(6)}'
           ' id=${r.id.toString().padLeft(4)}  ${r.level.gridWidth}x${r.level.gridHeight}'
           '  nodes=${r.level.nodes.length}  sig=${r.sig.hashCode.toRadixString(16)}');
       b.writeln(_render(r.level));
@@ -83,7 +86,8 @@ void main() {
     }
     b.writeln('\nOVERALL (100 boards in order):');
     b.writeln('  distinct shapes: ${allSigs.toSet().length}/100');
-    b.writeln('  back-to-back identical shapes: $backToBack (max consecutive run: $maxRun)');
+    b.writeln(
+        '  back-to-back identical shapes: $backToBack (max consecutive run: $maxRun)');
     // Sliding window of 5: how varied does any short streak of play feel?
     var minW = 5;
     for (var i = 0; i + 5 <= allSigs.length; i++) {
@@ -130,7 +134,9 @@ String _shapeSignature(LevelData lvl) {
 String _render(LevelData lvl) {
   final play = lvl.playCells;
   bool playable(int x, int y) => play == null || play.contains('$x,$y');
-  final byCell = <String, NodeData>{for (final n in lvl.nodes) '${n.x},${n.y}': n};
+  final byCell = <String, NodeData>{
+    for (final n in lvl.nodes) '${n.x},${n.y}': n
+  };
 
   final sb = StringBuffer();
   for (var y = 0; y < lvl.gridHeight; y++) {

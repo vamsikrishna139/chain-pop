@@ -6,26 +6,32 @@ void main() {
     setUp(CampaignInterstitialFrustrationGate.resetForTests);
 
     test('no suppression until two failures recorded', () {
-      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(), isFalse);
+      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(),
+          isFalse);
       CampaignInterstitialFrustrationGate.noteFailedRunEnded();
-      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(), isFalse);
+      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(),
+          isFalse);
       CampaignInterstitialFrustrationGate.noteFailedRunEnded();
-      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(), isTrue);
+      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(),
+          isTrue);
     });
 
     test('noteCampaignWin clears frustration tracking', () {
       CampaignInterstitialFrustrationGate.noteFailedRunEnded();
       CampaignInterstitialFrustrationGate.noteFailedRunEnded();
-      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(), isTrue);
+      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(),
+          isTrue);
       CampaignInterstitialFrustrationGate.noteCampaignWin();
-      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(), isFalse);
+      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(),
+          isFalse);
     });
 
     test('resetForTests clears state', () {
       CampaignInterstitialFrustrationGate.noteFailedRunEnded();
       CampaignInterstitialFrustrationGate.noteFailedRunEnded();
       CampaignInterstitialFrustrationGate.resetForTests();
-      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(), isFalse);
+      expect(CampaignInterstitialFrustrationGate.shouldSuppressInterstitial(),
+          isFalse);
     });
   });
 }

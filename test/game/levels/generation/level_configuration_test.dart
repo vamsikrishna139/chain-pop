@@ -7,7 +7,8 @@ void main() {
   group('LevelConfiguration', () {
     group('fromLevelId with explicit mode', () {
       test('produces correct grid sizes and node counts for easy mode', () {
-        final config = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
+        final config =
+            LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
 
         expect(config.levelId, equals(5));
         expect(config.difficulty.mode, equals(DifficultyMode.easy));
@@ -16,11 +17,13 @@ void main() {
         expect(config.gridHeight, greaterThanOrEqualTo(3));
         expect(config.gridHeight, lessThanOrEqualTo(20));
         expect(config.targetNodeCount, greaterThanOrEqualTo(4));
-        expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
+        expect(config.targetNodeCount,
+            lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
 
       test('produces correct grid sizes and node counts for medium mode', () {
-        final config = LevelConfiguration.fromLevelId(15, mode: DifficultyMode.medium);
+        final config =
+            LevelConfiguration.fromLevelId(15, mode: DifficultyMode.medium);
 
         expect(config.levelId, equals(15));
         expect(config.difficulty.mode, equals(DifficultyMode.medium));
@@ -29,11 +32,13 @@ void main() {
         expect(config.gridHeight, greaterThanOrEqualTo(3));
         expect(config.gridHeight, lessThanOrEqualTo(20));
         expect(config.targetNodeCount, greaterThanOrEqualTo(10));
-        expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
+        expect(config.targetNodeCount,
+            lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
 
       test('produces correct grid sizes and node counts for hard mode', () {
-        final config = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
+        final config =
+            LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
 
         expect(config.levelId, equals(50));
         expect(config.difficulty.mode, equals(DifficultyMode.hard));
@@ -42,7 +47,8 @@ void main() {
         expect(config.gridHeight, greaterThanOrEqualTo(3));
         expect(config.gridHeight, lessThanOrEqualTo(20));
         expect(config.targetNodeCount, greaterThanOrEqualTo(25));
-        expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
+        expect(config.targetNodeCount,
+            lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
     });
 
@@ -54,7 +60,8 @@ void main() {
         expect(config.gridWidth, greaterThanOrEqualTo(3));
         expect(config.gridWidth, lessThanOrEqualTo(20));
         expect(config.targetNodeCount, greaterThanOrEqualTo(4));
-        expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
+        expect(config.targetNodeCount,
+            lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
 
       test('auto-derives medium mode for level 10-29', () {
@@ -64,7 +71,8 @@ void main() {
         expect(config.gridWidth, greaterThanOrEqualTo(3));
         expect(config.gridWidth, lessThanOrEqualTo(20));
         expect(config.targetNodeCount, greaterThanOrEqualTo(10));
-        expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
+        expect(config.targetNodeCount,
+            lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
 
       test('auto-derives hard mode for level 30+', () {
@@ -74,7 +82,8 @@ void main() {
         expect(config.gridWidth, greaterThanOrEqualTo(3));
         expect(config.gridWidth, lessThanOrEqualTo(20));
         expect(config.targetNodeCount, greaterThanOrEqualTo(25));
-        expect(config.targetNodeCount, lessThanOrEqualTo(config.gridWidth * config.gridHeight));
+        expect(config.targetNodeCount,
+            lessThanOrEqualTo(config.gridWidth * config.gridHeight));
       });
     });
 
@@ -91,35 +100,49 @@ void main() {
 
     group('difficulty progression', () {
       test('easy mode produces smaller or equal grids than medium', () {
-        final easyConfig = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
-        final mediumConfig = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.medium);
+        final easyConfig =
+            LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
+        final mediumConfig =
+            LevelConfiguration.fromLevelId(5, mode: DifficultyMode.medium);
 
         expect(easyConfig.gridWidth, lessThanOrEqualTo(mediumConfig.gridWidth));
       });
 
       test('easy mode produces fewer nodes than medium', () {
-        final easyConfig = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
-        final mediumConfig = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.medium);
+        final easyConfig =
+            LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
+        final mediumConfig =
+            LevelConfiguration.fromLevelId(5, mode: DifficultyMode.medium);
 
-        expect(easyConfig.targetNodeCount, lessThan(mediumConfig.targetNodeCount));
+        expect(
+            easyConfig.targetNodeCount, lessThan(mediumConfig.targetNodeCount));
       });
 
       // With archetypes, a single level may get different grid shapes per mode.
       // Test the *base* grid size relationship instead of archetype-modulated.
-      test('hard mode base grid is at least as large as medium at higher levels', () {
+      test(
+          'hard mode base grid is at least as large as medium at higher levels',
+          () {
         // Verify across many levels that hard's base cap (9) ≥ medium's (9)
-        final mediumConfig = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.medium);
-        final hardConfig = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
+        final mediumConfig =
+            LevelConfiguration.fromLevelId(50, mode: DifficultyMode.medium);
+        final hardConfig =
+            LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
 
-        expect(mediumConfig.gridWidth * mediumConfig.gridHeight,
-            lessThanOrEqualTo(hardConfig.gridWidth * hardConfig.gridHeight + 80));
+        expect(
+            mediumConfig.gridWidth * mediumConfig.gridHeight,
+            lessThanOrEqualTo(
+                hardConfig.gridWidth * hardConfig.gridHeight + 80));
       });
 
       test('hard mode produces more max nodes than medium', () {
-        final mediumConfig = LevelConfiguration.fromLevelId(15, mode: DifficultyMode.medium);
-        final hardConfig = LevelConfiguration.fromLevelId(15, mode: DifficultyMode.hard);
+        final mediumConfig =
+            LevelConfiguration.fromLevelId(15, mode: DifficultyMode.medium);
+        final hardConfig =
+            LevelConfiguration.fromLevelId(15, mode: DifficultyMode.hard);
 
-        expect(hardConfig.difficulty.maxNodes, greaterThan(mediumConfig.difficulty.maxNodes));
+        expect(hardConfig.difficulty.maxNodes,
+            greaterThan(mediumConfig.difficulty.maxNodes));
       });
     });
 
@@ -165,7 +188,8 @@ void main() {
         final result = config.validate();
 
         expect(result.isValid, isFalse);
-        expect(result.message, contains('Grid dimensions must be at least 3x3'));
+        expect(
+            result.message, contains('Grid dimensions must be at least 3x3'));
       });
 
       test('rejects grids larger than 20x20', () {
@@ -187,7 +211,8 @@ void main() {
         final result = config.validate();
 
         expect(result.isValid, isFalse);
-        expect(result.message, contains('Grid dimensions must not exceed 20x20'));
+        expect(
+            result.message, contains('Grid dimensions must not exceed 20x20'));
       });
 
       test('rejects node count less than 3', () {
@@ -239,7 +264,7 @@ void main() {
         // But the validation should still check the 400 limit explicitly
         // We can't actually trigger this with valid grid dimensions, so we skip this test
         // or test it with an artificially large grid that would fail the grid size check first
-        
+
         // Instead, let's verify the grid capacity check works (which is the practical limit)
         const config = LevelConfiguration(
           levelId: 1,
@@ -267,8 +292,8 @@ void main() {
     group('grid dimension caps', () {
       test('hard mode L30-500 respects 6-8 axis caps', () {
         for (var levelId = 30; levelId <= 500; levelId++) {
-          final config =
-              LevelConfiguration.fromLevelId(levelId, mode: DifficultyMode.hard);
+          final config = LevelConfiguration.fromLevelId(levelId,
+              mode: DifficultyMode.hard);
           expect(
             config.gridWidth,
             inInclusiveRange(6, 8),
@@ -285,7 +310,8 @@ void main() {
 
     group('validation accepts valid configurations', () {
       test('accepts valid easy mode configuration', () {
-        final config = LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
+        final config =
+            LevelConfiguration.fromLevelId(5, mode: DifficultyMode.easy);
 
         final result = config.validate();
 
@@ -294,7 +320,8 @@ void main() {
       });
 
       test('accepts valid medium mode configuration', () {
-        final config = LevelConfiguration.fromLevelId(15, mode: DifficultyMode.medium);
+        final config =
+            LevelConfiguration.fromLevelId(15, mode: DifficultyMode.medium);
 
         final result = config.validate();
 
@@ -303,7 +330,8 @@ void main() {
       });
 
       test('accepts valid hard mode configuration', () {
-        final config = LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
+        final config =
+            LevelConfiguration.fromLevelId(50, mode: DifficultyMode.hard);
 
         final result = config.validate();
 

@@ -25,7 +25,10 @@ List<NodeData> _legalMoves(List<NodeData> nodes, LevelData level) {
 }
 
 List<NodeData> _apply(List<NodeData> nodes, NodeData n) {
-  var next = [for (final m in nodes) if (m.id != n.id) m.clone()];
+  var next = [
+    for (final m in nodes)
+      if (m.id != n.id) m.clone()
+  ];
   if (n.kind == NodeKind.relay) {
     next = [
       for (final m in next) m.y == n.y ? m.copyWith(dir: m.dir.rotatedCw) : m,

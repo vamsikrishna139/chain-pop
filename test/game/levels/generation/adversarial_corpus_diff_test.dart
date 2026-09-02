@@ -18,7 +18,7 @@
 //
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -65,8 +65,9 @@ void main() {
     void viewSummary(String label, bool Function(AdversarialRow) where) {
       final rs = rows.where(where).toList();
       if (rs.isEmpty) return;
-      final beforeTaps = <int>[for (final r in rs) before[r.entry.key]!.tapsToWin]
-        ..sort();
+      final beforeTaps = <int>[
+        for (final r in rs) before[r.entry.key]!.tapsToWin
+      ]..sort();
       final afterTaps = <int>[for (final r in rs) r.tapsToWin]..sort();
       final beforeCapture = <double>[
         for (final r in rs) before[r.entry.key]!.captureRate
@@ -90,8 +91,8 @@ void main() {
           '${percentileDouble(afterCapture, 0.50).toStringAsFixed(2)}');
     }
 
-    viewSummary('MEDIUM SEVERITY',
-        (r) => r.entry.view == CorpusView.mediumSeverity);
+    viewSummary(
+        'MEDIUM SEVERITY', (r) => r.entry.view == CorpusView.mediumSeverity);
     viewSummary('MEDIUM REPRESENTATIVE',
         (r) => r.entry.view == CorpusView.mediumRepresentative);
     viewSummary('HARD CONTROL', (r) => r.entry.view == CorpusView.hardControl);
@@ -101,10 +102,12 @@ void main() {
     for (var q = 1; q <= 5; q++) {
       final rs = rows
           .where((r) =>
-              r.entry.view == CorpusView.mediumSeverity && r.entry.quintile == q)
+              r.entry.view == CorpusView.mediumSeverity &&
+              r.entry.quintile == q)
           .toList();
       if (rs.isEmpty) continue;
-      final bt = <int>[for (final r in rs) before[r.entry.key]!.tapsToWin]..sort();
+      final bt = <int>[for (final r in rs) before[r.entry.key]!.tapsToWin]
+        ..sort();
       final at = <int>[for (final r in rs) r.tapsToWin]..sort();
       final bc = <double>[for (final r in rs) before[r.entry.key]!.captureRate]
         ..sort();

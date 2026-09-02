@@ -18,6 +18,7 @@ LevelData enrichLevel(
   LevelConfiguration config,
   DifficultyTier tier, {
   MechanicBudgetOverride? mechanicOverride,
+
   /// F1 — receives the core-selection outcome for this board, if one was made.
   ///
   /// [CoreSelectionTelemetry.sink] already broadcasts the same record, but it
@@ -424,8 +425,7 @@ List<NodeData> _markCoreNodes(
       path: CoreSelectionPath.legacyNoWaveDepth,
     );
   } else {
-    selection =
-        _climaxBandCoreIds(nodes, probe, closures, budget.coreCount);
+    selection = _climaxBandCoreIds(nodes, probe, closures, budget.coreCount);
   }
   var coreIds = selection.ids;
   if (coreIds.length < budget.coreCount) {
@@ -451,18 +451,18 @@ List<NodeData> _markCoreNodes(
   coreIds = quality.ids;
 
   final record = CoreSelectionRecord(
-      levelId: level.levelId,
-      mode: mode,
-      path: selection.path,
-      requested: budget.coreCount,
-      selected: coreIds.length,
-      fromStrictBand: selection.fromStrictBand,
-      fromRelaxedBand: selection.fromRelaxedBand,
-      coreIds: coreIds.toList()..sort(),
-      floorRequired: quality.required,
-      floorAchieved: quality.achieved,
-      repickRungs: quality.rungs,
-      escalated: quality.escalated,
+    levelId: level.levelId,
+    mode: mode,
+    path: selection.path,
+    requested: budget.coreCount,
+    selected: coreIds.length,
+    fromStrictBand: selection.fromStrictBand,
+    fromRelaxedBand: selection.fromRelaxedBand,
+    coreIds: coreIds.toList()..sort(),
+    floorRequired: quality.required,
+    floorAchieved: quality.achieved,
+    repickRungs: quality.rungs,
+    escalated: quality.escalated,
   );
   CoreSelectionTelemetry._emit(record);
   onCoreSelection?.call(record);
@@ -684,8 +684,7 @@ Set<int> _greedyDeepestCoreSet({
     var bestGain = -1;
     for (final n in pool) {
       if (picks.any((p) => p.id == n.id)) continue;
-      if (!picks
-          .every((p) => (p.x - n.x).abs() + (p.y - n.y).abs() >= 2)) {
+      if (!picks.every((p) => (p.x - n.x).abs() + (p.y - n.y).abs() >= 2)) {
         continue;
       }
       final gain = closures.gainOver(covered, n.id);
@@ -1138,7 +1137,7 @@ List<int> _rayCellKeys(NodeData n, LevelData level) {
   var x = n.x;
   var y = n.y;
   var hops = 0;
-  
+
   while (hops < 50) {
     switch (n.dir) {
       case Direction.up:
@@ -1152,7 +1151,7 @@ List<int> _rayCellKeys(NodeData n, LevelData level) {
     }
     if (x < 0 || x >= level.gridWidth || y < 0 || y >= level.gridHeight) break;
     cells.add(gridCellKey(x, y));
-    
+
     if (level.portalPairs.isNotEmpty) {
       for (final p in level.portalPairs) {
         if (p.x1 == x && p.y1 == y) {

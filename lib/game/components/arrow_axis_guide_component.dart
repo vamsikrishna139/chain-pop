@@ -43,7 +43,8 @@ class ArrowAxisGuideComponent extends PositionComponent
     void drawSegment(int cx, int cy, int nextX, int nextY) {
       final key = '$cx,$cy->$nextX,$nextY';
       final revKey = '$nextX,$nextY->$cx,$cy';
-      if (visitedSegments.contains(key) || visitedSegments.contains(revKey)) return;
+      if (visitedSegments.contains(key) || visitedSegments.contains(revKey))
+        return;
       visitedSegments.add(key);
 
       final p1 = Offset((cx + 0.5) * cellSize, (cy + 0.5) * cellSize);
@@ -59,15 +60,30 @@ class ArrowAxisGuideComponent extends PositionComponent
         var nextX = cx;
         var nextY = cy;
         switch (dir) {
-          case Direction.up: nextY--; break;
-          case Direction.down: nextY++; break;
-          case Direction.left: nextX--; break;
-          case Direction.right: nextX++; break;
+          case Direction.up:
+            nextY--;
+            break;
+          case Direction.down:
+            nextY++;
+            break;
+          case Direction.left:
+            nextX--;
+            break;
+          case Direction.right:
+            nextX++;
+            break;
         }
 
-        if (nextX < 0 || nextX >= gridWidth || nextY < 0 || nextY >= gridHeight) {
-          final edgeX = nextX < 0 ? -0.5 : (nextX >= gridWidth ? gridWidth - 0.5 : cx + 0.5);
-          final edgeY = nextY < 0 ? -0.5 : (nextY >= gridHeight ? gridHeight - 0.5 : cy + 0.5);
+        if (nextX < 0 ||
+            nextX >= gridWidth ||
+            nextY < 0 ||
+            nextY >= gridHeight) {
+          final edgeX = nextX < 0
+              ? -0.5
+              : (nextX >= gridWidth ? gridWidth - 0.5 : cx + 0.5);
+          final edgeY = nextY < 0
+              ? -0.5
+              : (nextY >= gridHeight ? gridHeight - 0.5 : cy + 0.5);
           canvas.drawLine(
             Offset((cx + 0.5) * cellSize, (cy + 0.5) * cellSize),
             Offset(edgeX * cellSize, edgeY * cellSize),
@@ -83,9 +99,13 @@ class ArrowAxisGuideComponent extends PositionComponent
         if (game.levelData.portalPairs.isNotEmpty) {
           for (final p in game.levelData.portalPairs) {
             if (p.x1 == cx && p.y1 == cy) {
-              cx = p.x2; cy = p.y2; break;
+              cx = p.x2;
+              cy = p.y2;
+              break;
             } else if (p.x2 == cx && p.y2 == cy) {
-              cx = p.x1; cy = p.y1; break;
+              cx = p.x1;
+              cy = p.y1;
+              break;
             }
           }
         }
@@ -97,9 +117,13 @@ class ArrowAxisGuideComponent extends PositionComponent
       // Trace forward
       trace(n, n.dir);
       // Trace backward
-      final opposite = n.dir == Direction.left ? Direction.right :
-                       n.dir == Direction.right ? Direction.left :
-                       n.dir == Direction.up ? Direction.down : Direction.up;
+      final opposite = n.dir == Direction.left
+          ? Direction.right
+          : n.dir == Direction.right
+              ? Direction.left
+              : n.dir == Direction.up
+                  ? Direction.down
+                  : Direction.up;
       trace(n, opposite);
     }
   }

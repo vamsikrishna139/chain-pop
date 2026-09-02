@@ -49,12 +49,14 @@ void main() {
 
       final rate = inBandCount / totalLevels;
       // ignore: avoid_print
-      print('Hard Campaign In-Band Rate: ${(rate * 100).toStringAsFixed(1)}% ($inBandCount/$totalLevels)');
+      print(
+          'Hard Campaign In-Band Rate: ${(rate * 100).toStringAsFixed(1)}% ($inBandCount/$totalLevels)');
       expect(rate, greaterThanOrEqualTo(0.90),
           reason: 'In-band rate for Hard campaign levels must be at least 90%');
     });
 
-    test('Daily challenge sample week levels have high in-band rate (>= 90%)', () {
+    test('Daily challenge sample week levels have high in-band rate (>= 90%)',
+        () {
       var inBandCount = 0;
       const dates = [
         '2026-06-13',
@@ -100,9 +102,11 @@ void main() {
 
       final rate = inBandCount / dates.length;
       // ignore: avoid_print
-      print('Daily Challenge In-Band Rate: ${(rate * 100).toStringAsFixed(1)}% ($inBandCount/${dates.length})');
+      print(
+          'Daily Challenge In-Band Rate: ${(rate * 100).toStringAsFixed(1)}% ($inBandCount/${dates.length})');
       expect(rate, greaterThanOrEqualTo(0.90),
-          reason: 'In-band rate for Daily challenge levels must be at least 90%');
+          reason:
+              'In-band rate for Daily challenge levels must be at least 90%');
     });
   });
 }

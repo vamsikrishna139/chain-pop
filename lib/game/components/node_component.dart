@@ -563,7 +563,8 @@ class NodeComponent extends PositionComponent
     // ── Blocker flash (one-shot warning ring) ───────────────────────────────
     if (_blockerFlashTimer >= 0) {
       _blockerFlashTimer += dt;
-      if (_blockerFlashTimer >= _blockerFlashDuration) _blockerFlashTimer = -1.0;
+      if (_blockerFlashTimer >= _blockerFlashDuration)
+        _blockerFlashTimer = -1.0;
     }
 
     // ── Relay arrow rotation (ease the spin offset back to 0) ────────────────

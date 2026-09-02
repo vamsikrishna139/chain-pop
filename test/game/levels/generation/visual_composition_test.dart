@@ -147,7 +147,8 @@ void main() {
           reason: '3 singletons / 3 components sit exactly at the allowance; '
               'before T2.4c this board rejected on an allowance of 2');
       expect(result.detail.singleton, lessThan(1.0),
-          reason: 'still scored — the allowance moved, the measurement did not');
+          reason:
+              'still scored — the allowance moved, the measurement did not');
       expect(result.detail.components, lessThan(1.0));
     });
 
@@ -179,7 +180,8 @@ void main() {
   // See docs/IMPLEMENTATION_PLAN_V2.md §T2.4a.
   // ═════════════════════════════════════════════════════════════════════════
   group('T2.4a composition score (shadow mode)', () {
-    test('every rejection still names the same reason, in the same priority '
+    test(
+        'every rejection still names the same reason, in the same priority '
         'order', () {
       // The restructure replaced five early returns with compute-all +
       // resolve-at-the-end. Priority must be identical: a board failing both
@@ -236,7 +238,8 @@ void main() {
       expect(r.evaluated, isFalse);
     });
 
-    test('the generator records both populations and still ships the same '
+    test(
+        'the generator records both populations and still ships the same '
         'board', () {
       final g = LevelGenerator.neutral();
       final a = g.generate(42, mode: DifficultyMode.hard).value;
@@ -265,7 +268,8 @@ void main() {
 
 void _t24c() {
   group('T2.4c — soft rules rank, hard rules reject', () {
-    test('a hard rule rejects even when a soft rule fails first in priority '
+    test(
+        'a hard rule rejects even when a soft rule fails first in priority '
         'order', () {
       // THE REGRESSION THIS FILE EXISTS FOR.
       //
@@ -307,8 +311,10 @@ void _t24c() {
     test('every soft rule admits, and every hard rule rejects', () {
       for (final rule in VisualCompositionRejectReason.values) {
         final isHard = kHardCompositionRules.contains(rule);
-        expect(isHard, rule == VisualCompositionRejectReason.aspect ||
-            rule == VisualCompositionRejectReason.components,
+        expect(
+            isHard,
+            rule == VisualCompositionRejectReason.aspect ||
+                rule == VisualCompositionRejectReason.components,
             reason: 'T2.4c ships exactly {aspect, components} as hard; '
                 'changing that set is a seed-moving decision and must be '
                 'made in the plan, not here');

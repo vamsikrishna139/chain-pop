@@ -34,7 +34,8 @@ void main() {
       for (final a in kAchievementCatalog) {
         if (a.kind != AchievementKind.incremental) continue;
         expect(a.steps, isNotNull, reason: a.id);
-        expect(a.steps!, greaterThanOrEqualTo(kPlayGamesMinSteps), reason: a.id);
+        expect(a.steps!, greaterThanOrEqualTo(kPlayGamesMinSteps),
+            reason: a.id);
         expect(a.steps!, lessThanOrEqualTo(kPlayGamesMaxSteps), reason: a.id);
       }
     });

@@ -62,6 +62,7 @@ final class GamePlayfieldInsetController {
     topReserved = topReserved.clamp(96.0, h * 0.55);
     bottomReserved = bottomReserved.clamp(64.0, h * 0.5);
 
-    _host.engine.configurePlayfieldInsets(top: topReserved, bottom: bottomReserved);
+    _host.engine
+        .configurePlayfieldInsets(top: topReserved, bottom: bottomReserved);
   }
 }

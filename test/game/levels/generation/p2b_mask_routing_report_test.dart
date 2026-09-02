@@ -34,7 +34,7 @@
 //
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'package:chain_pop/game/levels/generation/archetype.dart';
@@ -119,7 +119,8 @@ void _sweep(DifficultyMode mode) {
   _window(emitted, shipped, 1, kSweepLevels, '$label L1-$kSweepLevels');
 
   micros.sort();
-  final p95 = micros[(micros.length * 0.95).floor().clamp(0, micros.length - 1)];
+  final p95 =
+      micros[(micros.length * 0.95).floor().clamp(0, micros.length - 1)];
   print('generation p95: ${(p95 / 1000).toStringAsFixed(0)} ms   '
       'emitted ${emitted.length}/$kSweepLevels');
 
@@ -191,7 +192,8 @@ void _window(
     // `rectangle`, which undercounted every full grid that arrived under
     // another label.
     if (level.playCells == null) plainRect++;
-    if (sid == SilhouetteId.rectangle && level.playCells == null) plainRectLabelled++;
+    if (sid == SilhouetteId.rectangle && level.playCells == null)
+      plainRectLabelled++;
   }
   final counts = <SilhouetteVisualFamily, int>{};
   for (final f in seq) {
@@ -224,7 +226,8 @@ void _window(
   print('  family shares     : $shares');
   print('  longest same-family run : $longest'
       '   (player-visible: $longestVisible)');
-  print('  families present  : ${visibleCounts.keys.length}/4  <- player-visible');
+  print(
+      '  families present  : ${visibleCounts.keys.length}/4  <- player-visible');
   print('  PLAIN RECTANGLES  : $plainRect'
       ' (${n == 0 ? 0 : (100 * plainRect / n).toStringAsFixed(1)}%)'
       '   [label-only counter said $plainRectLabelled'
@@ -234,5 +237,6 @@ void _window(
   for (final i in ids) {
     idCounts[i] = (idCounts[i] ?? 0) + 1;
   }
-  print('  ids               : ${idCounts.entries.map((e) => '${e.key.name}=${e.value}').join('  ')}');
+  print(
+      '  ids               : ${idCounts.entries.map((e) => '${e.key.name}=${e.value}').join('  ')}');
 }

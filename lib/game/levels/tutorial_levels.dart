@@ -32,7 +32,8 @@ final List<LevelData> tutorialLevels = [
   _tutorial9,
 ];
 
-Color _c(int slot) => AppColors.nodePalette[slot % AppColors.nodePalette.length];
+Color _c(int slot) =>
+    AppColors.nodePalette[slot % AppColors.nodePalette.length];
 
 /// One node: tap to clear (ray exits upward).
 final LevelData _tutorial0 = LevelData(

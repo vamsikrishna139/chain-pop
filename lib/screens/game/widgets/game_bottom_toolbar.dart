@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-
 import 'undo_restart_button.dart';
 import '../../../theme/app_colors.dart';
 
@@ -46,69 +45,75 @@ class GameBottomToolbar extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                UndoRestartButton(
-                  accent: accent,
-                  canUndo: canUndo,
-                  onUndo: onUndo,
-                  onRestart: onRestart,
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: InkWell(
-                    onTap: onHint,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      height: 40,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.lightbulb_outline_rounded, size: 16, color: Colors.amberAccent),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              'HINT',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.amberAccent,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (showHintAdBadge) ...[
+                  UndoRestartButton(
+                    accent: accent,
+                    canUndo: canUndo,
+                    onUndo: onUndo,
+                    onRestart: onRestart,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: InkWell(
+                      onTap: onHint,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.1)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.lightbulb_outline_rounded,
+                                size: 16, color: Colors.amberAccent),
                             const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.amberAccent.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
-                              ),
+                            Flexible(
                               child: Text(
-                                'AD',
+                                'HINT',
                                 style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 8,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.amberAccent,
                                 ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            if (showHintAdBadge) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Colors.amberAccent.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color: Colors.amberAccent
+                                          .withValues(alpha: 0.4)),
+                                ),
+                                child: Text(
+                                  'AD',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.amberAccent,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-            
+
             // Right Controls: Grid, Zoom
             Row(
               children: [
@@ -142,7 +147,11 @@ class GameBottomToolbar extends StatelessWidget {
     );
   }
 
-  Widget _buildSmallBtn({required String label, required IconData icon, required bool active, required VoidCallback onTap}) {
+  Widget _buildSmallBtn(
+      {required String label,
+      required IconData icon,
+      required bool active,
+      required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -152,7 +161,8 @@ class GameBottomToolbar extends StatelessWidget {
         decoration: BoxDecoration(
           color: active ? accent.withValues(alpha: 0.2) : AppColors.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: active ? accent : Colors.white.withValues(alpha: 0.1)),
+          border: Border.all(
+              color: active ? accent : Colors.white.withValues(alpha: 0.1)),
         ),
         child: Icon(
           icon,

@@ -45,8 +45,7 @@ void main() {
 
   test('relay step: pair is deadlocked until the relay rotates the row', () {
     final level = tutorialLevels[6];
-    final relay =
-        level.nodes.singleWhere((n) => n.kind == NodeKind.relay);
+    final relay = level.nodes.singleWhere((n) => n.kind == NodeKind.relay);
     expect(LevelSolver.canRemove(relay, level.nodes, level), isTrue);
     for (final node in level.nodes.where((n) => n.id != relay.id)) {
       expect(LevelSolver.canRemove(node, level.nodes, level), isFalse,
@@ -58,8 +57,7 @@ void main() {
 
   test('locked step: padlock opens after its neighbors clear', () {
     final level = tutorialLevels[7];
-    final locked =
-        level.nodes.singleWhere((n) => n.kind == NodeKind.locked);
+    final locked = level.nodes.singleWhere((n) => n.kind == NodeKind.locked);
     expect(LevelSolver.canRemove(locked, level.nodes, level), isFalse,
         reason: 'locked while neighbors are occupied');
     expect(LevelSolver.isSolvable(level), isTrue);
@@ -97,8 +95,8 @@ void main() {
     expect(level.nodes.where((n) => n.isCore).length, greaterThanOrEqualTo(2));
     // A plain arrow with no special property, so all five types are present.
     expect(
-      level.nodes.where((n) =>
-          n.kind == NodeKind.normal && !n.isCore && n.phaseGroup == 0),
+      level.nodes.where(
+          (n) => n.kind == NodeKind.normal && !n.isCore && n.phaseGroup == 0),
       isNotEmpty,
     );
     expect(LevelValidator().validate(level).isValid, isTrue,
@@ -124,7 +122,8 @@ void main() {
     // Removing every other act-one arrow must still leave node 2 stuck: only
     // the relay's row rotation can turn it toward an open edge.
     final withoutPeers = level.nodes
-        .where((n) => n.id == blocked.id || n.id == relay.id || n.phaseGroup > 0)
+        .where(
+            (n) => n.id == blocked.id || n.id == relay.id || n.phaseGroup > 0)
         .toList();
     expect(LevelSolver.canRemove(blocked, withoutPeers, level), isFalse,
         reason: 'node 2 must depend on the rotation, not on tap order');

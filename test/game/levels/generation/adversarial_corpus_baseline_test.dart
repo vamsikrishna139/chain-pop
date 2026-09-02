@@ -24,7 +24,7 @@
 //
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'package:chain_pop/game/levels/generation/generation_version.dart';
@@ -181,8 +181,7 @@ void main() {
         '(must be 0; >62 nodes)');
 
     print('\n===== CSVs =====');
-    writeAdversarialCsv(
-        '$_kOutDir/medium_severity_baseline.csv', severity);
+    writeAdversarialCsv('$_kOutDir/medium_severity_baseline.csv', severity);
     writeAdversarialCsv(
         '$_kOutDir/medium_representative_baseline.csv', representative);
     writeAdversarialCsv('$_kOutDir/hard_control_baseline.csv', hard);

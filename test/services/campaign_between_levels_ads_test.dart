@@ -4,7 +4,7 @@ import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/services/ads/ad_placements.dart';
 import 'package:chain_pop/services/ads/campaign_between_levels_ads.dart';
 import 'package:chain_pop/services/ads/campaign_interstitial_frustration_gate.dart';
-import 'package:chain_pop/services/ads/recording_ad_service.dart';
+import 'ads/recording_ad_service.dart';
 import 'package:chain_pop/services/session_campaign_streak.dart';
 import 'package:chain_pop/services/storage_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -25,7 +25,8 @@ void main() {
         SessionCampaignStreak.onWin();
         SessionCampaignStreak.onWin();
         final ads = RecordingAdService();
-        final shown = await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
+        final shown =
+            await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
           ads: ads,
           difficulty: DifficultyMode.easy,
           isTutorial: false,
@@ -43,7 +44,8 @@ void main() {
         SessionCampaignStreak.onWin();
         SessionCampaignStreak.onWin();
         final ads = RecordingAdService();
-        final shown = await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
+        final shown =
+            await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
           ads: ads,
           difficulty: DifficultyMode.easy,
           isTutorial: false,
@@ -65,7 +67,8 @@ void main() {
         SessionCampaignStreak.onWin();
         SessionCampaignStreak.onWin();
         final ads = RecordingAdService(interstitialResult: false);
-        final shown = await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
+        final shown =
+            await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
           ads: ads,
           difficulty: DifficultyMode.easy,
           isTutorial: false,
@@ -147,16 +150,19 @@ void main() {
         CampaignInterstitialFrustrationGate.resetForTests();
       });
 
-      test('lifetime onboarding gate suppresses streak-qualified transitions', () async {
+      test('lifetime onboarding gate suppresses streak-qualified transitions',
+          () async {
         SessionCampaignStreak.onWin();
         SessionCampaignStreak.onWin();
         SessionCampaignStreak.onWin();
         SessionCampaignStreak.onWin();
         final ads = RecordingAdService();
 
-        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isFalse);
+        expect(
+            StorageService.campaignInterstitialLifetimeGateSatisfied, isFalse);
 
-        final shown = await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
+        final shown =
+            await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
           ads: ads,
           difficulty: DifficultyMode.easy,
           isTutorial: false,
@@ -187,7 +193,8 @@ void main() {
         SessionCampaignStreak.onWin();
         await StorageService.seedLifetimeEngagementGateForTests();
         final ads = RecordingAdService();
-        final shown = await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
+        final shown =
+            await CampaignBetweenLevelsAds.maybePresentForCampaignTransition(
           ads: ads,
           difficulty: DifficultyMode.easy,
           isTutorial: false,

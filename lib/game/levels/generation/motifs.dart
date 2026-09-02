@@ -217,8 +217,8 @@ class _LockCluster implements Motif {
       if (cells.length < 5 || cells.length > 7) continue;
       if (!_allDistinct(cells)) continue;
       if (!_allInSilhouette(cells, silhouette)) continue;
-      if (cells.any((c) =>
-          c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
+      if (cells.any(
+          (c) => c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
         continue;
       }
 
@@ -284,8 +284,7 @@ class _EscapeChord implements Motif {
         case 1:
           dir = Direction.down;
           sx = 1 + random.nextInt(max(1, gridWidth - length - 1));
-          sy = (gridHeight - 2)
-              .clamp(1, max(1, gridHeight - 2));
+          sy = (gridHeight - 2).clamp(1, max(1, gridHeight - 2));
           dx = 1;
           dy = 0;
         case 2:
@@ -304,8 +303,8 @@ class _EscapeChord implements Motif {
       final cells = <Point<int>>[
         for (var i = 0; i < length; i++) Point(sx + i * dx, sy + i * dy),
       ];
-      if (cells.any((c) =>
-          c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
+      if (cells.any(
+          (c) => c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
         continue;
       }
       if (!_allDistinct(cells)) continue;
@@ -351,8 +350,8 @@ class _DiamondIntersection implements Motif {
       final left = Point<int>(cx - 1, cy);
       final right = Point<int>(cx + 1, cy);
       final cells = [top, bottom, left, right];
-      if (cells.any((c) =>
-          c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
+      if (cells.any(
+          (c) => c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
         continue;
       }
       if (!_allInSilhouette(cells, silhouette)) continue;
@@ -452,8 +451,8 @@ class _Staircase implements Motif {
       final cells = <Point<int>>[
         for (var i = 0; i < steps; i++) Point(sx + i, sy + i),
       ];
-      if (cells.any((c) =>
-          c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
+      if (cells.any(
+          (c) => c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
         continue;
       }
       if (!_allInSilhouette(cells, silhouette)) continue;
@@ -501,37 +500,55 @@ class _CascadeHub implements Motif {
     if (fallbackAnchor == null) return null;
 
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      final cx = (fallbackAnchor.x + random.nextInt(5) - 2).clamp(1, gridWidth - 2);
-      final cy = (fallbackAnchor.y + random.nextInt(5) - 2).clamp(1, gridHeight - 2);
-      
+      final cx =
+          (fallbackAnchor.x + random.nextInt(5) - 2).clamp(1, gridWidth - 2);
+      final cy =
+          (fallbackAnchor.y + random.nextInt(5) - 2).clamp(1, gridHeight - 2);
+
       final dirs = Direction.values.toList()..shuffle(random);
-      final openDir = dirs.removeLast(); // The direction the center cell will escape through
-      
+      final openDir = dirs
+          .removeLast(); // The direction the center cell will escape through
+
       final spokes = <Point<int>>[];
       final reservations = <MotifReservation>[];
-      
+
       // Center cell MUST point towards the open direction
-      reservations.add(MotifReservation(position: Point<int>(cx, cy), direction: openDir));
-      
+      reservations.add(
+          MotifReservation(position: Point<int>(cx, cy), direction: openDir));
+
       for (final d in dirs) {
         Point<int> p;
         Direction inward;
         switch (d) {
-          case Direction.up: p = Point(cx, cy - 1); inward = Direction.down; break;
-          case Direction.down: p = Point(cx, cy + 1); inward = Direction.up; break;
-          case Direction.left: p = Point(cx - 1, cy); inward = Direction.right; break;
-          case Direction.right: p = Point(cx + 1, cy); inward = Direction.left; break;
+          case Direction.up:
+            p = Point(cx, cy - 1);
+            inward = Direction.down;
+            break;
+          case Direction.down:
+            p = Point(cx, cy + 1);
+            inward = Direction.up;
+            break;
+          case Direction.left:
+            p = Point(cx - 1, cy);
+            inward = Direction.right;
+            break;
+          case Direction.right:
+            p = Point(cx + 1, cy);
+            inward = Direction.left;
+            break;
         }
         spokes.add(p);
         reservations.add(MotifReservation(position: p, direction: inward));
       }
-      
-      if (spokes.any((c) => c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
+
+      if (spokes.any(
+          (c) => c.x < 0 || c.x >= gridWidth || c.y < 0 || c.y >= gridHeight)) {
         continue;
       }
-      
-      if (!_allInSilhouette([...spokes, Point<int>(cx, cy)], silhouette)) continue;
-      
+
+      if (!_allInSilhouette([...spokes, Point<int>(cx, cy)], silhouette))
+        continue;
+
       // We must reverse the reservations so that spokes are placed first in retrograde
       // (meaning they are removed LAST in forward game) and center is placed last
       // (removed FIRST in forward game). Wait! Center must be removed FIRST in forward game.

@@ -17,6 +17,8 @@ import 'services/ads/admob_config.dart';
 import 'services/ads/ad_service_factory.dart';
 import 'services/ads/ads_locator.dart';
 import 'services/ads/ump_consent.dart';
+import 'services/analytics/analytics_locator.dart';
+import 'services/analytics/analytics_service_factory.dart';
 import 'services/crash_reporting.dart';
 import 'services/game_audio.dart';
 import 'services/game_audio_scope.dart';
@@ -72,6 +74,7 @@ Future<void> main() async {
     runApp(const AutoplayApp());
     return;
   }
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   runApp(const ChainPopApp());
 }
 
@@ -81,7 +84,8 @@ Future<void> main() async {
 /// `MobileAds.instance.initialize()` here, then [AdService.bootstrap] only preloads.
 Future<void> _bootstrapThirdPartySdks() async {
   // 1. Initialize Subscription Service
-  final subService = kIsWeb ? NoOpSubscriptionService() : RevenueCatSubscriptionService();
+  final subService =
+      kIsWeb ? NoOpSubscriptionService() : RevenueCatSubscriptionService();
   SubscriptionLocator.install(subService);
   await subService.init();
 
@@ -89,16 +93,21 @@ Future<void> _bootstrapThirdPartySdks() async {
     const mockAds = bool.fromEnvironment('MOCK_ADS', defaultValue: false);
     final isPremium = subService.isPremium.value;
 
-    if (!mockAds && !isPremium &&
+    if (!mockAds &&
+        !isPremium &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS)) {
       await requestAdsConsentIfApplicable();
       await MobileAds.instance.updateRequestConfiguration(
-        RequestConfiguration(testDeviceIds: kAdmobTestDeviceIds),
+        RequestConfiguration(
+          testDeviceIds: kDebugMode ? kAdmobTestDeviceIds : null,
+          maxAdContentRating: MaxAdContentRating.g,
+        ),
       );
       await MobileAds.instance.initialize();
       if (kDebugMode) {
-        debugPrint('MobileAds SDK initialized after consent + test device ids.');
+        debugPrint(
+            'MobileAds SDK initialized after consent + test device ids.');
       }
     } else if (isPremium && kDebugMode) {
       debugPrint('MobileAds SDK initialization skipped (Premium User).');
@@ -107,6 +116,9 @@ Future<void> _bootstrapThirdPartySdks() async {
 
   final ads = createDefaultAdService();
   AdsLocator.install(ads);
+
+  final analytics = createDefaultAnalyticsService();
+  AnalyticsLocator.install(analytics);
   adDebug(
     'main: AdService=${ads.runtimeType} '
     '(GoogleMobileAdService on device / NoOp on web-desktop)',
@@ -114,6 +126,7 @@ Future<void> _bootstrapThirdPartySdks() async {
   await ads.bootstrap();
   adDebug('main: ads.bootstrap() finished');
 }
+
 class ChainPopApp extends StatefulWidget {
   const ChainPopApp({super.key});
 
@@ -121,14 +134,31 @@ class ChainPopApp extends StatefulWidget {
   State<ChainPopApp> createState() => _ChainPopAppState();
 }
 
-class _ChainPopAppState extends State<ChainPopApp> {
+class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
   late final GameAudioController _menuUiAudio =
       GameAudioController(voiceCount: 2);
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    AnalyticsLocator.instance.logSessionStart();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(_menuUiAudio.dispose());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      AnalyticsLocator.instance.logSessionStart();
+    } else if (state == AppLifecycleState.paused) {
+      AnalyticsLocator.instance.logSessionEnd();
+    }
   }
 
   @override

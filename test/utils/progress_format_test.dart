@@ -35,8 +35,10 @@ void main() {
 
     test('avgStarsPerClearedStage', () {
       expect(ProgressFormat.avgStarsPerClearedStage(0, 0), isNull);
-      expect(ProgressFormat.avgStarsPerClearedStage(54, 18), closeTo(3.0, 0.001));
-      expect(ProgressFormat.avgStarsPerClearedStage(36, 18), closeTo(2.0, 0.001));
+      expect(
+          ProgressFormat.avgStarsPerClearedStage(54, 18), closeTo(3.0, 0.001));
+      expect(
+          ProgressFormat.avgStarsPerClearedStage(36, 18), closeTo(2.0, 0.001));
     });
   });
 

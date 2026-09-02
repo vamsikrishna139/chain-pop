@@ -33,8 +33,9 @@ class PlayGamesSignInResult {
   String get displayText => message.isEmpty ? code : '$code: $message';
 
   @override
-  String toString() =>
-      success ? 'PlayGamesSignInResult(ok)' : 'PlayGamesSignInResult($code, $message)';
+  String toString() => success
+      ? 'PlayGamesSignInResult(ok)'
+      : 'PlayGamesSignInResult($code, $message)';
 }
 
 /// Singleton owner of the games_services authentication stream.

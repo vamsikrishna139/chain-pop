@@ -7,7 +7,9 @@ abstract final class StorageLocator {
   static ChainPopStorage? _instance;
 
   static ChainPopStorage get instance =>
-      _instance ?? (throw StateError('StorageLocator not installed — call StorageService.init()'));
+      _instance ??
+      (throw StateError(
+          'StorageLocator not installed — call StorageService.init()'));
 
   static void install(ChainPopStorage persistence) {
     _instance = persistence;

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../../config/subscription_config.dart';
+import '../analytics/analytics_locator.dart';
 import 'subscription_service.dart';
 
 class RevenueCatSubscriptionService implements SubscriptionService {
@@ -40,14 +41,19 @@ class RevenueCatSubscriptionService implements SubscriptionService {
       await Purchases.configure(configuration);
       developer.log('RevenueCat configured successfully.', name: _logName);
 
+      Purchases.addCustomerInfoUpdateListener(_updatePremiumState);
+
       try {
         final customerInfo = await Purchases.getCustomerInfo();
         _updatePremiumState(customerInfo);
-        Purchases.addCustomerInfoUpdateListener(_updatePremiumState);
       } catch (e) {
-        developer.log('Failed to fetch initial customer info: $e', name: _logName);
+        developer.log('Failed to fetch initial customer info: $e',
+            name: _logName);
       }
     } else {
+      if (!kDebugMode) {
+        throw StateError('RevenueCat API key not found in release mode.');
+      }
       developer.log(
         'RevenueCat API key not found in environment. Subscriptions disabled.',
         name: _logName,
@@ -56,8 +62,8 @@ class RevenueCatSubscriptionService implements SubscriptionService {
   }
 
   void _updatePremiumState(CustomerInfo customerInfo) {
-    final hasPremium = customerInfo
-            .entitlements.all[SubscriptionConfig.premiumEntitlementId]?.isActive ==
+    final hasPremium = customerInfo.entitlements
+            .all[SubscriptionConfig.premiumEntitlementId]?.isActive ==
         true;
     if (_isPremiumNotifier.value != hasPremium) {
       _isPremiumNotifier.value = hasPremium;
@@ -75,24 +81,37 @@ class RevenueCatSubscriptionService implements SubscriptionService {
         return PurchasePremiumResult.unavailable;
       }
 
-      final package =
-          current.lifetime ?? current.availablePackages.first;
+      final package = current.lifetime ?? current.availablePackages.first;
+      final productId = package.storeProduct.identifier;
+      AnalyticsLocator.instance.logPurchaseStarted(productId: productId);
+
       final purchaseResult = await Purchases.purchase(
         PurchaseParams.package(package),
       );
       _updatePremiumState(purchaseResult.customerInfo);
-      return _isPremiumNotifier.value
-          ? PurchasePremiumResult.success
-          : PurchasePremiumResult.failed;
+      if (_isPremiumNotifier.value) {
+        AnalyticsLocator.instance.logPurchaseSuccess(productId: productId);
+        return PurchasePremiumResult.success;
+      } else {
+        AnalyticsLocator.instance.logPurchaseFailed(
+            productId: productId, error: 'not_premium_after_purchase');
+        return PurchasePremiumResult.failed;
+      }
     } on PlatformException catch (e) {
       if (PurchasesErrorHelper.getErrorCode(e) ==
           PurchasesErrorCode.purchaseCancelledError) {
+        AnalyticsLocator.instance
+            .logPurchaseFailed(productId: 'unknown', error: 'cancelled');
         return PurchasePremiumResult.cancelled;
       }
       developer.log('Failed to purchase premium: $e', name: _logName);
+      AnalyticsLocator.instance
+          .logPurchaseFailed(productId: 'unknown', error: e.toString());
       return PurchasePremiumResult.failed;
     } catch (e) {
       developer.log('Failed to purchase premium: $e', name: _logName);
+      AnalyticsLocator.instance
+          .logPurchaseFailed(productId: 'unknown', error: e.toString());
       return PurchasePremiumResult.failed;
     }
   }
@@ -102,9 +121,11 @@ class RevenueCatSubscriptionService implements SubscriptionService {
     try {
       final customerInfo = await Purchases.restorePurchases();
       _updatePremiumState(customerInfo);
-      return _isPremiumNotifier.value
-          ? RestorePurchasesResult.restored
-          : RestorePurchasesResult.noneFound;
+      if (_isPremiumNotifier.value) {
+        AnalyticsLocator.instance.logPremiumRestored();
+        return RestorePurchasesResult.restored;
+      }
+      return RestorePurchasesResult.noneFound;
     } catch (e) {
       developer.log('Failed to restore purchases: $e', name: _logName);
       return RestorePurchasesResult.failed;

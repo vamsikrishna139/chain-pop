@@ -21,7 +21,8 @@ import '../theme/app_colors.dart';
 /// not: a non-Android platform, a declined or failed sign-in, or a Play Games
 /// error. That fallback is the whole point of the local-first tracker — the
 /// catalog stays browsable with no Google dependency at all.
-Future<void> openAchievements(BuildContext context, {PlayGamesAuth? auth}) async {
+Future<void> openAchievements(BuildContext context,
+    {PlayGamesAuth? auth}) async {
   final navigator = Navigator.of(context);
   final messenger = ScaffoldMessenger.of(context);
   final resolved = auth ?? PlayGamesAuth.instance;
@@ -74,9 +75,9 @@ class AchievementsScreen extends StatefulWidget {
 class _AchievementsScreenState extends State<AchievementsScreen> {
   late List<AchievementProgress> _entries;
   Map<String, gs.AchievementItemData> _remoteData = {};
-  
+
   late PlayGamesAuth _auth;
-  
+
   // Cache for decoded image bytes: playGamesId_locked/unlocked -> Uint8List
   final Map<String, Uint8List> _imageCache = {};
 
@@ -135,9 +136,8 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
 
   int get _earnedCount => _entries.where((e) => e.unlocked).length;
 
-  int get _earnedPoints => _entries
-      .where((e) => e.unlocked)
-      .fold(0, (sum, e) => sum + e.def.points);
+  int get _earnedPoints =>
+      _entries.where((e) => e.unlocked).fold(0, (sum, e) => sum + e.def.points);
 
   bool get _canShowPlayGames =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -180,7 +180,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     );
   }
 
-  Widget _buildRemoteImage(String playGamesId, gs.AchievementItemData data, bool unlocked, {double size = 40}) {
+  Widget _buildRemoteImage(
+      String playGamesId, gs.AchievementItemData data, bool unlocked,
+      {double size = 40}) {
     final cacheKey = '${playGamesId}_${unlocked ? 'unlocked' : 'locked'}';
     Uint8List? bytes = _imageCache[cacheKey];
 
@@ -191,7 +193,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
           bytes = base64Decode(base64String);
           _imageCache[cacheKey] = bytes;
         } catch (e) {
-          developer.log('Failed to decode base64 image for achievement $playGamesId', error: e);
+          developer.log(
+              'Failed to decode base64 image for achievement $playGamesId',
+              error: e);
         }
       }
     }
@@ -208,7 +212,9 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
     return Icon(
       unlocked ? Icons.check_circle : Icons.circle_outlined,
       size: size,
-      color: unlocked ? AppColors.nodeDefault : Colors.white.withValues(alpha: 0.22),
+      color: unlocked
+          ? AppColors.nodeDefault
+          : Colors.white.withValues(alpha: 0.22),
     );
   }
 
@@ -255,9 +261,13 @@ class _AchievementsScreenState extends State<AchievementsScreen> {
               for (final row in rows)
                 _AchievementRow(
                   entry: row,
-                  remoteData: _remoteData[row.def.playGamesId ?? playGamesIds[row.def.id]],
+                  remoteData: _remoteData[
+                      row.def.playGamesId ?? playGamesIds[row.def.id]],
                   imageBuilder: (data, unlocked, size) => _buildRemoteImage(
-                      row.def.playGamesId ?? playGamesIds[row.def.id]!, data, unlocked, size: size),
+                      row.def.playGamesId ?? playGamesIds[row.def.id]!,
+                      data,
+                      unlocked,
+                      size: size),
                 ),
               const SizedBox(height: 20),
             ],
@@ -389,13 +399,16 @@ class _TrackHeader extends StatelessWidget {
 }
 
 class _AchievementRow extends StatelessWidget {
-  const _AchievementRow({required this.entry, this.remoteData, required this.imageBuilder});
+  const _AchievementRow(
+      {required this.entry, this.remoteData, required this.imageBuilder});
 
   final AchievementProgress entry;
   final gs.AchievementItemData? remoteData;
-  final Widget Function(gs.AchievementItemData data, bool unlocked, double size) imageBuilder;
+  final Widget Function(gs.AchievementItemData data, bool unlocked, double size)
+      imageBuilder;
 
-  void _showDetails(BuildContext context, String title, String subtitle, bool unlocked, bool concealed) {
+  void _showDetails(BuildContext context, String title, String subtitle,
+      bool unlocked, bool concealed) {
     showDialog(
       context: context,
       builder: (context) {
@@ -414,7 +427,9 @@ class _AchievementRow extends StatelessWidget {
                 Icon(
                   unlocked
                       ? Icons.check_circle
-                      : (concealed ? Icons.help_outline : Icons.circle_outlined),
+                      : (concealed
+                          ? Icons.help_outline
+                          : Icons.circle_outlined),
                   size: 80,
                   color: unlocked
                       ? AppColors.nodeDefault
@@ -431,7 +446,8 @@ class _AchievementRow extends StatelessWidget {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close', style: TextStyle(color: AppColors.nodeDefault)),
+              child: const Text('Close',
+                  style: TextStyle(color: AppColors.nodeDefault)),
             ),
           ],
         );
@@ -481,7 +497,9 @@ class _AchievementRow extends StatelessWidget {
                   : Icon(
                       unlocked
                           ? Icons.check_circle
-                          : (concealed ? Icons.help_outline : Icons.circle_outlined),
+                          : (concealed
+                              ? Icons.help_outline
+                              : Icons.circle_outlined),
                       size: 40,
                       color: unlocked
                           ? AppColors.nodeDefault

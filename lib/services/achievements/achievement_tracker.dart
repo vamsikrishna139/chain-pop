@@ -222,8 +222,10 @@ final class AchievementTracker {
       if (dayKey < last) return;
     }
 
-    final current = s.achievementCounter(AchievementCounter.currentPlayStreakDays);
-    final extended = last != 0 && DayKey.isValid(last) && DayKey.isNextDay(last, dayKey);
+    final current =
+        s.achievementCounter(AchievementCounter.currentPlayStreakDays);
+    final extended =
+        last != 0 && DayKey.isValid(last) && DayKey.isNextDay(last, dayKey);
     final next = extended ? current + 1 : 1;
 
     await s.setAchievementCounter(
@@ -309,7 +311,8 @@ final class AchievementTracker {
       phaseGatesCleared: c(AchievementCounter.phaseGatesCleared),
       portalsTraversed: c(AchievementCounter.portalsTraversed),
       guardiansCleared: guardians,
-      bestSectorGuardiansThreeStarred: c(AchievementCounter.bestSectorGuardians),
+      bestSectorGuardiansThreeStarred:
+          c(AchievementCounter.bestSectorGuardians),
       dailyCompleted: c(AchievementCounter.dailyCompleted),
       dailyArchived: c(AchievementCounter.dailyArchived),
       bestPlayStreakDays: c(AchievementCounter.bestPlayStreakDays),
@@ -427,7 +430,8 @@ final class AchievementTracker {
           }
         }
         connectionLost ??= e;
-        if (kDebugMode) debugPrint('[Sync] ${def.id} connection lost, stopping');
+        if (kDebugMode)
+          debugPrint('[Sync] ${def.id} connection lost, stopping');
         break;
       } catch (e) {
         // Leave the cursor behind so this entry is retried next time. Never
@@ -444,7 +448,8 @@ final class AchievementTracker {
       // every achievement at once and would otherwise flood crash reporting.
       debugPrint('[Sync] sent=$sent failed=$failed — $firstFailure');
       recordNonFatal(
-        StateError('Achievement sync failed for $failed entries: $firstFailure'),
+        StateError(
+            'Achievement sync failed for $failed entries: $firstFailure'),
         StackTrace.current,
       );
     }

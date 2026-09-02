@@ -75,8 +75,7 @@ class RestoredNetworkComponent extends PositionComponent {
     }
   }
 
-  double _fadeOf(_RestoredCell c) =>
-      (c.age / _fadeInDuration).clamp(0.0, 1.0);
+  double _fadeOf(_RestoredCell c) => (c.age / _fadeInDuration).clamp(0.0, 1.0);
 
   @override
   void render(Canvas canvas) {
@@ -133,8 +132,7 @@ class RestoredNetworkComponent extends PositionComponent {
         ),
         _fillPaint,
       );
-      _dotPaint.color =
-          theme.accent.withValues(alpha: 0.35 * fade * pulse);
+      _dotPaint.color = theme.accent.withValues(alpha: 0.35 * fade * pulse);
       canvas.drawCircle(
         Offset((c.x + 0.5) * cellSize, (c.y + 0.5) * cellSize),
         math.max(1.5, cellSize * 0.045),

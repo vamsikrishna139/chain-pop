@@ -6,16 +6,17 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('recentStrictMarginCount covering window matches legacy novelty', () {
     const window = 12;
-    final legacy =
-        DiversityLedger(windowSize: window, hammingThreshold: 5, sameVisualFamilyHammingMargin: 3);
+    final legacy = DiversityLedger(
+        windowSize: window,
+        hammingThreshold: 5,
+        sameVisualFamilyHammingMargin: 3);
     final wideStrict = DiversityLedger(
       windowSize: window,
       hammingThreshold: 5,
       sameVisualFamilyHammingMargin: 3,
       recentStrictMarginCount: window + 48,
     );
-    expect(wideStrict.recentStrictMarginCount,
-        greaterThanOrEqualTo(window));
+    expect(wideStrict.recentStrictMarginCount, greaterThanOrEqualTo(window));
 
     final rng = Random(31415);
     for (var step = 0; step < 400; step++) {

@@ -80,10 +80,10 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   bool hasWon = false;
   bool isGameOver = false;
-  
+
   int movesTaken = 0;
   int undosUsed = 0;
-  
+
   late PositionComponent board;
   double _cellSize = 0;
 
@@ -197,8 +197,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   int networkIntegrity = 100;
 
   /// Total core nodes on this level (0 when classic clear-all win).
-  int get totalCores =>
-      levelData.nodes.where((n) => n.isCore).length;
+  int get totalCores => levelData.nodes.where((n) => n.isCore).length;
 
   /// Cores already extracted.
   int get coresRestored => levelData.nodes
@@ -274,7 +273,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   @override
   Future<void> onLoad() async {
     // Use pre-generated level if provided — avoids a second generator run.
-    levelData = preloadedLevel ?? LevelManager.getLevel(levelId, mode: difficulty);
+    levelData =
+        preloadedLevel ?? LevelManager.getLevel(levelId, mode: difficulty);
 
     for (final node in levelData.nodes) {
       activeNodes.add(node.clone());
@@ -324,7 +324,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   void _applyBoardTransform() {
     if (!_boardLaidOut) return;
-    board.position.setFrom(_boardCenter - _occupiedOffset * _displayZoom + _pan);
+    board.position
+        .setFrom(_boardCenter - _occupiedOffset * _displayZoom + _pan);
     board.scale.setAll(_displayZoom);
   }
 
@@ -373,9 +374,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       widthFill: kBoardWidthFill,
       heightFill: kBoardHeightFill,
     );
-    if (cellSize <= 0 &&
-        levelData.gridWidth > 0 &&
-        levelData.gridHeight > 0) {
+    if (cellSize <= 0 && levelData.gridWidth > 0 && levelData.gridHeight > 0) {
       cellSize = 1.0;
     }
     _cellSize = cellSize;
@@ -771,8 +770,10 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   void _startCascadeFinale() {
     final remaining = List<NodeData>.of(activeNodes)
       ..sort((a, b) {
-        final da = (a.x - _lastExtractedX).abs() + (a.y - _lastExtractedY).abs();
-        final db = (b.x - _lastExtractedX).abs() + (b.y - _lastExtractedY).abs();
+        final da =
+            (a.x - _lastExtractedX).abs() + (a.y - _lastExtractedY).abs();
+        final db =
+            (b.x - _lastExtractedX).abs() + (b.y - _lastExtractedY).abs();
         return da.compareTo(db);
       });
     final step = (1.2 / remaining.length).clamp(0.05, 0.09);

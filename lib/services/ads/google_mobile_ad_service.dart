@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import '../analytics/analytics_locator.dart';
 import '../crash_reporting.dart';
 import 'ad_debug_log.dart';
 import 'admob_config.dart';
@@ -39,6 +40,10 @@ final class GoogleMobileAdService implements AdService {
 
   static Duration get _interstitialCooldown =>
       kDebugMode ? const Duration(seconds: 60) : const Duration(minutes: 5);
+
+  /// Watchdog for a rewarded presentation whose callbacks never arrive. Long
+  /// enough that a real ad pod can never race it.
+  static const Duration _rewardedWatchdog = Duration(minutes: 5);
 
   static DateTime? _lastInterstitialShownAt;
 
@@ -218,25 +223,53 @@ final class GoogleMobileAdService implements AdService {
       },
     );
 
-    await ad.show(
-      onUserEarnedReward: (_, __) {
-        earned = true;
-        adDebug('showRewarded($placement): onUserEarnedReward');
-      },
-    );
+    AnalyticsLocator.instance.logRewardedOfferShown(placement: placement);
+    AnalyticsLocator.instance.logRewardedStarted(placement: placement);
 
-    final result = await done.future;
-    adDebug('showRewarded($placement): completed result=$result');
-    return result;
+    try {
+      await ad.show(
+        onUserEarnedReward: (_, __) {
+          earned = true;
+          AnalyticsLocator.instance.logRewardedCompleted(placement: placement);
+          adDebug('showRewarded($placement): onUserEarnedReward');
+        },
+      );
+    } catch (e) {
+      adDebug('showRewarded($placement): ad.show threw $e');
+      if (!done.isCompleted) done.complete(false);
+      AnalyticsLocator.instance
+          .logRewardedFailed(placement: placement, error: e.toString());
+      // We don't rethrow; we safely fail and let the player continue
+    }
+
+    // Only the dismissal callback tells us the ad is off screen, so that is
+    // what we wait for: returning earlier resumes the game underneath a still
+    // visible ad. The bound is a watchdog for a presentation that never calls
+    // back at all, not a limit on how long a player may watch — a rewarded pod
+    // plus its end card routinely runs well past a minute. If it ever does
+    // fire we still honour a reward the SDK already granted.
+    try {
+      final result = await done.future.timeout(_rewardedWatchdog);
+      adDebug('showRewarded($placement): completed result=$result');
+      return result;
+    } on TimeoutException {
+      adDebug('showRewarded($placement): watchdog fired earned=$earned');
+      if (!earned) {
+        AnalyticsLocator.instance
+            .logRewardedFailed(placement: placement, error: 'timeout');
+      }
+      return earned;
+    }
   }
 
   @override
   Future<bool> showInterstitialIfReady({required String placement}) async {
     adDebug('showInterstitialIfReady(placement=$placement): invoked');
+    AnalyticsLocator.instance.logInterstitialCandidate(placement: placement);
     final inflight = _interstitialShowInFlight;
     if (inflight != null) return inflight;
 
-    final run = _showInterstitialBody();
+    final run = _showInterstitialBody(placement);
     _interstitialShowInFlight = run;
     try {
       return await run;
@@ -247,7 +280,7 @@ final class GoogleMobileAdService implements AdService {
     }
   }
 
-  Future<bool> _showInterstitialBody() async {
+  Future<bool> _showInterstitialBody(String placement) async {
     final last = _lastInterstitialShownAt;
     if (last != null &&
         DateTime.now().difference(last) < _interstitialCooldown) {
@@ -279,6 +312,7 @@ final class GoogleMobileAdService implements AdService {
         _lastInterstitialShownAt = DateTime.now();
         shownAd.dispose();
         adDebug('showInterstitial: dismissed (shown)');
+        AnalyticsLocator.instance.logInterstitialClosed(placement: placement);
         if (!done.isCompleted) done.complete(true);
         unawaited(_loadInterstitial());
       },
@@ -291,6 +325,7 @@ final class GoogleMobileAdService implements AdService {
       },
     );
 
+    AnalyticsLocator.instance.logInterstitialShown(placement: placement);
     await ad.show();
     final out = await done.future;
     adDebug('showInterstitial: completed result=$out');
@@ -312,10 +347,10 @@ final class GoogleMobileAdService implements AdService {
       );
 
   @override
-  Widget buildGameScreenBanner(BuildContext context) => DailyChallengeBannerSlot(
+  Widget buildGameScreenBanner(BuildContext context) =>
+      DailyChallengeBannerSlot(
         adUnitId: _bannerUnitId(),
         debugPlacementTag: AdPlacements.gameScreenBanner,
-        useStandardSize: true,
         fadeInDuration: const Duration(milliseconds: 320),
       );
 }

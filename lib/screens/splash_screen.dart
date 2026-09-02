@@ -372,14 +372,18 @@ class _EscapingArrowPainter extends CustomPainter {
       final mag = dir.distance;
       final unit = Offset(dir.dx / mag, dir.dy / mag);
       final tip = arrowEnd;
-      final wingA = tip - unit * headLen + Offset(-unit.dy, unit.dx) * headLen * 0.55;
-      final wingB = tip - unit * headLen - Offset(-unit.dy, unit.dx) * headLen * 0.55;
+      final wingA =
+          tip - unit * headLen + Offset(-unit.dy, unit.dx) * headLen * 0.55;
+      final wingB =
+          tip - unit * headLen - Offset(-unit.dy, unit.dx) * headLen * 0.55;
 
       final head = Path()
         ..moveTo(tip.dx, tip.dy)
-        ..lineTo(lerpDouble(wingA.dx, tip.dx, headT)!, lerpDouble(wingA.dy, tip.dy, headT)!)
+        ..lineTo(lerpDouble(wingA.dx, tip.dx, headT)!,
+            lerpDouble(wingA.dy, tip.dy, headT)!)
         ..moveTo(tip.dx, tip.dy)
-        ..lineTo(lerpDouble(wingB.dx, tip.dx, headT)!, lerpDouble(wingB.dy, tip.dy, headT)!);
+        ..lineTo(lerpDouble(wingB.dx, tip.dx, headT)!,
+            lerpDouble(wingB.dy, tip.dy, headT)!);
 
       canvas.drawPath(head, glowPaint);
       canvas.drawPath(head, arrowPaint);

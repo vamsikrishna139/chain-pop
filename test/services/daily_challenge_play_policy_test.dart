@@ -11,7 +11,8 @@ void main() {
 
   group('DailyChallengePlayPolicy', () {
     setUpAll(() async {
-      final dir = await Directory.systemTemp.createTemp('chain_pop_daily_policy_');
+      final dir =
+          await Directory.systemTemp.createTemp('chain_pop_daily_policy_');
       Hive.init(dir.path);
       await StorageService.init();
     });
@@ -47,7 +48,8 @@ void main() {
       const noAds = DailyChallengePlayPolicy.standard;
       final today = DateTime(2026, 5, 13);
       final past = DateTime(2026, 5, 10);
-      await StorageService.markDailyUnlockedViaAd(DailyChallenge.dateKeyLocal(past));
+      await StorageService.markDailyUnlockedViaAd(
+          DailyChallenge.dateKeyLocal(past));
       expect(noAds.mayBePlayable(past, today), isTrue);
     });
 
@@ -63,15 +65,18 @@ void main() {
       final today = DateTime(2026, 5, 13);
       final past = DateTime(2026, 5, 10);
       expect(policy.needsRewardedUnlockBeforePlay(today, today), isFalse);
-      expect(policy.needsRewardedUnlockBeforePlay(DateTime(2026, 5, 20), today), isFalse);
+      expect(policy.needsRewardedUnlockBeforePlay(DateTime(2026, 5, 20), today),
+          isFalse);
       expect(policy.needsRewardedUnlockBeforePlay(past, today), isTrue);
     });
 
-    test('needsRewardedUnlockBeforePlay: false when already unlocked', () async {
+    test('needsRewardedUnlockBeforePlay: false when already unlocked',
+        () async {
       final policy = DailyChallengePlayPolicy(showRewardedAd: () async => true);
       final today = DateTime(2026, 5, 13);
       final past = DateTime(2026, 5, 10);
-      await StorageService.markDailyUnlockedViaAd(DailyChallenge.dateKeyLocal(past));
+      await StorageService.markDailyUnlockedViaAd(
+          DailyChallenge.dateKeyLocal(past));
       expect(policy.needsRewardedUnlockBeforePlay(past, today), isFalse);
     });
 
@@ -115,7 +120,8 @@ void main() {
       expect(calls, 1);
     });
 
-    test('ensureCanStart past day does not persist when ad not completed', () async {
+    test('ensureCanStart past day does not persist when ad not completed',
+        () async {
       final policy = DailyChallengePlayPolicy(
         showRewardedAd: () async => false,
       );

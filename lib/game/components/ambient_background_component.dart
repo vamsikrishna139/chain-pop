@@ -190,8 +190,7 @@ class AmbientBackgroundComponent extends PositionComponent
 
     for (final m in _motes) {
       final twinkle = 0.6 + 0.4 * math.sin(_clock * 0.8 + m.phase);
-      _motePaint.color =
-          theme.accent.withValues(alpha: 0.04 + 0.04 * twinkle);
+      _motePaint.color = theme.accent.withValues(alpha: 0.04 + 0.04 * twinkle);
       canvas.drawCircle(Offset(m.pos.x, m.pos.y), m.radius, _motePaint);
     }
 
@@ -209,8 +208,7 @@ class AmbientBackgroundComponent extends PositionComponent
     }
 
     if (_streakGlow > 0.02) {
-      _edgeGlowPaint.color =
-          theme.accent.withValues(alpha: 0.10 * _streakGlow);
+      _edgeGlowPaint.color = theme.accent.withValues(alpha: 0.10 * _streakGlow);
       canvas.drawRect(Rect.fromLTWH(-6, -6, w + 12, h + 12), _edgeGlowPaint);
     }
 
@@ -223,8 +221,8 @@ class AmbientBackgroundComponent extends PositionComponent
     if (game.networkIntegrity < 30) {
       // Slow red breathing at critically low integrity — atmosphere, not panic.
       final breath = 0.5 + 0.5 * math.sin(_clock * (math.pi * 2 / 4.0));
-      _integrityGlowPaint.color = const Color(0xFFFF5F6D)
-          .withValues(alpha: 0.05 * breath);
+      _integrityGlowPaint.color =
+          const Color(0xFFFF5F6D).withValues(alpha: 0.05 * breath);
       canvas.drawRect(
         Rect.fromLTWH(-8, -8, w + 16, h + 16),
         _integrityGlowPaint,

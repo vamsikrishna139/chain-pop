@@ -5,7 +5,6 @@ import 'package:chain_pop/game/levels/generation/silhouettes.dart';
 
 export 'corpus_version.dart';
 
-
 /// Default §4.5 emission window copied for rolling Hamming summaries.
 const int kDiversityFingerprintWindowSize = 20;
 
@@ -57,10 +56,20 @@ DistinctWindowStats macroBucketWindowStats({
   required int window,
 }) {
   if (macroSequence.isEmpty || window <= 0) {
-    return (minDistinct: 0, maxDistinct: 0, avgDistinct: 0.0, latticeOnlyWindows: 0);
+    return (
+      minDistinct: 0,
+      maxDistinct: 0,
+      avgDistinct: 0.0,
+      latticeOnlyWindows: 0
+    );
   }
   if (macroSequence.length < window) {
-    return (minDistinct: 0, maxDistinct: 0, avgDistinct: 0.0, latticeOnlyWindows: 0);
+    return (
+      minDistinct: 0,
+      maxDistinct: 0,
+      avgDistinct: 0.0,
+      latticeOnlyWindows: 0
+    );
   }
   final distinctCounts = <int>[];
   var latticeWindows = 0;
@@ -101,7 +110,8 @@ Map<SilhouetteVisualFamily, int> silhouetteMacroHistogram(
   return m;
 }
 
-List<SilhouetteVisualFamily> macroSequence(List<GenerationEmissionEvent> events) =>
+List<SilhouetteVisualFamily> macroSequence(
+        List<GenerationEmissionEvent> events) =>
     [for (final e in events) silhouetteVisualFamily(e.silhouette)];
 
 double medianOfSortedInts(List<int> sorted) {

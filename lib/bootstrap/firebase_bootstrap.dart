@@ -16,6 +16,16 @@ Future<void> initFirebaseChainPop() async {
       return;
     }
     await Firebase.initializeApp();
+
+    final isPlaceholder =
+        Firebase.app().options.projectId.contains('placeholder');
+    if (isPlaceholder && !kDebugMode) {
+      throw StateError(
+        'Firebase config is placeholder (project_id contains "placeholder"). '
+        'Cannot build release without a real google-services.json config.',
+      );
+    }
+
     await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
       !kDebugMode ||
           const bool.fromEnvironment(

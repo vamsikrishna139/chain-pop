@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:games_services/games_services.dart' as gs;
 
+import '../analytics/analytics_locator.dart';
 import 'achievement_catalog.dart';
 import 'achievement_sink.dart';
 
@@ -84,6 +85,7 @@ final class PlayGamesAchievementSink implements AchievementSink {
   Future<void> unlock(AchievementDef def) async {
     final id = _resolveId(def);
     if (id == null) return;
+    AnalyticsLocator.instance.logAchievementUnlock(achievementId: def.id);
     await _guarded(() => gs.Achievements.unlock(
           achievement: gs.Achievement(androidID: id, percentComplete: 100),
         ));
@@ -117,8 +119,7 @@ final class PlayGamesAchievementSink implements AchievementSink {
       // 26502 CLIENT_RECONNECT_REQUIRED. Cached values are good enough here —
       // rewinding a cursor too far only causes a redundant setSteps, which is
       // absolute and never reduces remote progress.
-      final items = await gs.Achievements
-          .loadAchievements(ignoreImages: true)
+      final items = await gs.Achievements.loadAchievements(ignoreImages: true)
           .timeout(const Duration(seconds: 10));
       if (items == null) return null;
 

@@ -38,7 +38,8 @@ class BoardIdentity {
 
   String get header => '$key/${gridWidth}x$gridHeight/$nodeCount';
 
-  static BoardIdentity of(LevelData level, DifficultyMode mode) => BoardIdentity(
+  static BoardIdentity of(LevelData level, DifficultyMode mode) =>
+      BoardIdentity(
         levelId: level.levelId,
         mode: mode,
         gridWidth: level.gridWidth,
@@ -100,7 +101,8 @@ class CorpusFingerprint {
     for (var i = 0; i < identities.length; i++) {
       final a = identities[i];
       final b = other.identities[i];
-      if (a.key != b.key) return 'board order differs at $i: ${a.key} vs ${b.key}';
+      if (a.key != b.key)
+        return 'board order differs at $i: ${a.key} vs ${b.key}';
       final diff = a.firstDifference(b);
       if (diff != null) return '${a.key}: $diff';
     }

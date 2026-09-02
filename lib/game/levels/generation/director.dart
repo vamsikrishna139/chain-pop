@@ -164,7 +164,6 @@ const List<SilhouetteId> _denseSilhouettes = [
   SilhouetteId.rectangle,
 ];
 
-
 /// Concrete generation plan the Director hands to one Retrograde (or legacy)
 /// attempt. Immutable; the Director produces a fresh [GenerationPlan] on
 /// each call to [Director.choosePlan] or [Director.renegotiate].
@@ -327,7 +326,8 @@ class Director {
   }) {
     final tier =
         overrideTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
-    final archetype = overrideArchetype ?? GenerationArchetypeSpec.sampleForTier(random, tier);
+    final archetype = overrideArchetype ??
+        GenerationArchetypeSpec.sampleForTier(random, tier);
     // Dense Strategy Phase 1B: clamp isolation penalty + temperature for
     // Hard/Expert so high-isolation or high-temperature archetypes don't
     // produce sparse boards.
@@ -459,8 +459,8 @@ class Director {
   ) {
     if (previous.renegotiationDepth >= maxRenegotiations) return null;
 
-    final downscaled =
-        max(config.difficulty.minNodes, (previous.targetNodeCount * 0.9).round());
+    final downscaled = max(
+        config.difficulty.minNodes, (previous.targetNodeCount * 0.9).round());
     SilhouetteId nextSilhouette = previous.silhouette;
     Set<int> nextMask = previous.silhouetteMask;
     // Every other renegotiation, swap silhouette as well to escape silhouette
@@ -644,8 +644,7 @@ class Director {
     var attempts = 0;
     while (placed.length < desiredTotal && attempts < desiredTotal * 8) {
       attempts++;
-      final hasLockCluster =
-          placed.any((p) => p.id == MotifId.lockCluster);
+      final hasLockCluster = placed.any((p) => p.id == MotifId.lockCluster);
       final motif = sampleMotifForTier(
         tier,
         random,
@@ -838,12 +837,12 @@ class Director {
         // Prefer GREEN alternatives, but keep the demoted ones as a last
         // resort: `cleanAuthored` has no off-family member at all, so on that
         // archetype this whole block is a no-op by design.
-        final preferred = (tier == DifficultyTier.hard ||
-                tier == DifficultyTier.expert)
-            ? offFamily
-                .where((s) => !_demotedForDenseTiers.contains(s))
-                .toList()
-            : offFamily;
+        final preferred =
+            (tier == DifficultyTier.hard || tier == DifficultyTier.expert)
+                ? offFamily
+                    .where((s) => !_demotedForDenseTiers.contains(s))
+                    .toList()
+                : offFamily;
         final breakers = preferred.isNotEmpty ? preferred : offFamily;
         final picked = breakers[random.nextInt(breakers.length)];
         onSilhouettePicked?.call(spec.kind, picked, false);
@@ -1086,12 +1085,12 @@ class Director {
     final lo = max(profile.nodeCount.min, config.difficulty.minNodes);
     final hi = min(profile.nodeCount.max, mask.length);
 
-      if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
-        if (hi <= lo) return hi.clamp(1, mask.length);
-        final fillRatio = 0.32 + random.nextDouble() * 0.12;
-        final densityTarget = (mask.length * fillRatio).round();
-        return densityTarget.clamp(lo, hi);
-      }
+    if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
+      if (hi <= lo) return hi.clamp(1, mask.length);
+      final fillRatio = 0.32 + random.nextDouble() * 0.12;
+      final densityTarget = (mask.length * fillRatio).round();
+      return densityTarget.clamp(lo, hi);
+    }
 
     // Easy/Medium: sample uniformly in the §6 node-count band.
     if (hi <= lo) return lo.clamp(1, mask.length);
@@ -1109,8 +1108,7 @@ class Director {
     required int target,
     required Random random,
   }) {
-    final isDenseTier =
-        seed.difficultyTier == DifficultyTier.hard ||
+    final isDenseTier = seed.difficultyTier == DifficultyTier.hard ||
         seed.difficultyTier == DifficultyTier.expert;
     if (seed.motifMixId == null) {
       return _reserveMotifs(

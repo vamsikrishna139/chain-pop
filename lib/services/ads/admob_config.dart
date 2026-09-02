@@ -10,8 +10,7 @@ const String admobProductionAppIdAndroid =
 const String admobIosNativeAppId = 'ca-app-pub-3940256099942544~1458002511';
 
 /// Google demo application IDs (Android) when [kAdmobUseSampleUnits] is true.
-const String admobSampleAppIdAndroid =
-    'ca-app-pub-3940256099942544~3347511713';
+const String admobSampleAppIdAndroid = 'ca-app-pub-3940256099942544~3347511713';
 
 /// Set `--dart-define=ADMOB_USE_SAMPLE_UNITS=true` to use Google’s demo ad **units**
 /// on **Android** (“Test ad”). **iOS** always defaults to Google’s official test unit IDs
@@ -73,7 +72,9 @@ String admobAppIdMetaForLogs() {
   return switch (defaultTargetPlatform) {
     // iOS plist uses [admobIosNativeAppId] until a production iOS AdMob app exists.
     TargetPlatform.iOS => admobIosNativeAppId,
-    _ => kAdmobUseSampleUnits ? admobSampleAppIdAndroid : admobProductionAppIdAndroid,
+    _ => kAdmobUseSampleUnits
+        ? admobSampleAppIdAndroid
+        : admobProductionAppIdAndroid,
   };
 }
 

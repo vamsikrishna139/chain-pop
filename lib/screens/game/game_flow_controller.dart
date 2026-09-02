@@ -12,6 +12,7 @@ import '../../services/achievements/achievements_locator.dart';
 import '../../services/achievements/game_event.dart';
 import '../../services/ads/campaign_interstitial_frustration_gate.dart';
 import '../../services/ads/campaign_between_levels_ads.dart';
+import '../../services/analytics/analytics_locator.dart';
 import '../../services/game_sfx.dart';
 import '../../services/session_campaign_streak.dart';
 import '../game_screen.dart';
@@ -116,12 +117,20 @@ final class GameFlowController {
       mode: _host.difficulty,
       isTutorial: _host.isTutorial,
     );
+
+    AnalyticsLocator.instance.logLevelComplete(params: _host.analyticsParams);
+
     final earned = result.earnedStars;
     if (_host.isTutorial) {
       if (_host.tutorialIndex == tutorialLevels.length - 1) {
+        AnalyticsLocator.instance.logTutorialComplete();
         await _host.progress.setTutorialCompleted(true);
       }
     } else if (_host.isDailyChallenge) {
+      final dateStr =
+          _host.dailyDayKey.toString(); // Just the key for simplicity
+      AnalyticsLocator.instance
+          .logDailyComplete(dateStr: dateStr, params: _host.analyticsParams);
       await _host.progress.saveDailyStars(_host.dailyDayKey!, earned);
       unawaited(_recordDailyAchievementEvent(earned));
     } else {
@@ -166,8 +175,7 @@ final class GameFlowController {
       return;
     }
 
-    if (_host.isTutorial &&
-        _host.tutorialIndex == tutorialLevels.length - 1) {
+    if (_host.isTutorial && _host.tutorialIndex == tutorialLevels.length - 1) {
       _host.timers.tutorialExitTimer?.cancel();
       _host.timers.tutorialExitTimer = Timer(const Duration(seconds: 3), () {
         if (_host.mounted) _host.goMenu();
@@ -347,6 +355,9 @@ final class GameFlowController {
   }
 
   void goMenu() {
+    if (!_host.hasWon && !_host.engine.isGameOver) {
+      AnalyticsLocator.instance.logLevelAbandon(params: _host.analyticsParams);
+    }
     _host.streak.resetSession();
     _host.pacing.resetSession();
     _host.goals.resetSession();

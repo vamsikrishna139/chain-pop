@@ -43,8 +43,7 @@ void main() {
       GenerationArchetypeSpec.distribution.forEach((arch, expectedShare) {
         final observed = counts[arch]! / n;
         expect((observed - expectedShare).abs(), lessThan(0.03),
-            reason:
-                'archetype=$arch observed=${observed.toStringAsFixed(3)} '
+            reason: 'archetype=$arch observed=${observed.toStringAsFixed(3)} '
                 'expected=$expectedShare');
       });
     });
@@ -60,8 +59,8 @@ void main() {
     });
 
     test('Expert tier distribution mirrors Hard weights', () {
-      final hard =
-          GenerationArchetypeSpec.distributionForDifficulty(DifficultyMode.hard);
+      final hard = GenerationArchetypeSpec.distributionForDifficulty(
+          DifficultyMode.hard);
       final expert =
           GenerationArchetypeSpec.distributionForTier(DifficultyTier.expert);
       expect(expert, equals(hard));
@@ -71,8 +70,8 @@ void main() {
 
   group('forArchetype', () {
     test('Experimental sets a non-zero legacy-greedy probability', () {
-      final spec =
-          GenerationArchetypeSpec.forArchetype(GenerationArchetype.experimental);
+      final spec = GenerationArchetypeSpec.forArchetype(
+          GenerationArchetype.experimental);
       expect(spec.legacyGreedyProbability, greaterThan(0));
     });
 

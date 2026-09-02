@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'package:chain_pop/game/levels/level.dart';
 
-
 /// Share of the playfield band width the board is fitted into.
 ///
 /// Was a single `targetFill: 0.80` applied to **both** axes and then reduced by
@@ -67,10 +66,14 @@ class OccupiedBounds {
       if (node.y > rawMaxY) rawMaxY = node.y;
     }
 
-    final frameMinX = (rawMinX - pad).clamp(0, math.max(0, level.gridWidth - 1)).toInt();
-    final frameMaxX = (rawMaxX + pad).clamp(0, math.max(0, level.gridWidth - 1)).toInt();
-    final frameMinY = (rawMinY - pad).clamp(0, math.max(0, level.gridHeight - 1)).toInt();
-    final frameMaxY = (rawMaxY + pad).clamp(0, math.max(0, level.gridHeight - 1)).toInt();
+    final frameMinX =
+        (rawMinX - pad).clamp(0, math.max(0, level.gridWidth - 1)).toInt();
+    final frameMaxX =
+        (rawMaxX + pad).clamp(0, math.max(0, level.gridWidth - 1)).toInt();
+    final frameMinY =
+        (rawMinY - pad).clamp(0, math.max(0, level.gridHeight - 1)).toInt();
+    final frameMaxY =
+        (rawMaxY + pad).clamp(0, math.max(0, level.gridHeight - 1)).toInt();
 
     return OccupiedBounds(
       minX: frameMinX,
@@ -222,7 +225,8 @@ class BoardLayoutMetrics {
     double cellMax = 96.0,
   }) {
     final usableW = math.max(0.0, screenW - outerMargin * 2);
-    final usableH = math.max(0.0, screenH - topReserved - bottomReserved - outerMargin);
+    final usableH =
+        math.max(0.0, screenH - topReserved - bottomReserved - outerMargin);
 
     final layoutW = (usableW - innerGutter * 2).clamp(0.0, double.infinity);
     final layoutH = (usableH - innerGutter * 2).clamp(0.0, double.infinity);

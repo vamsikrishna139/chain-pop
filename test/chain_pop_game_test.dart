@@ -85,7 +85,8 @@ void main() {
 
   group('Chain Pop Mechanics Logic Tests', () {
     test('Level 2 Mechanic Checks', () {
-      final game = ChainPopGame(levelId: 2, difficulty: DifficultyMode.easy, onWin: () {});
+      final game = ChainPopGame(
+          levelId: 2, difficulty: DifficultyMode.easy, onWin: () {});
       // Manually trigger board setup ignoring flame components loading constraints
       final nodes = [
         NodeData(id: 1, x: 2, y: 2, dir: Direction.left),
@@ -102,15 +103,17 @@ void main() {
       game.activeNodes.addAll(nodes);
 
       game.refreshExtractableIdsForTest();
-      expect(game.isExtractable(1), isFalse, reason: 'Node 1 is blocked by Node 2');
+      expect(game.isExtractable(1), isFalse,
+          reason: 'Node 1 is blocked by Node 2');
       expect(game.isExtractable(2), isTrue, reason: 'Node 2 is free');
       expect(game.isExtractable(3), isTrue, reason: 'Node 3 is free');
-      
+
       // Simulate popping Node 2
       game.registerExtraction(nodes[1]);
-      
+
       // Node 1 should now be free
-      expect(game.isExtractable(1), isTrue, reason: 'Node 1 should be freed after Node 2 pops');
+      expect(game.isExtractable(1), isTrue,
+          reason: 'Node 1 should be freed after Node 2 pops');
 
       // Chain telegraph: the newly-freed delta holds exactly the node that
       // became extractable because of this extraction (node 1), not node 3
@@ -120,8 +123,8 @@ void main() {
     });
 
     test('newlyExtractable delta is empty when nothing new is unblocked', () {
-      final game =
-          ChainPopGame(levelId: 2, difficulty: DifficultyMode.easy, onWin: () {});
+      final game = ChainPopGame(
+          levelId: 2, difficulty: DifficultyMode.easy, onWin: () {});
       // Two independent free nodes far apart — popping one frees nothing new.
       final nodes = [
         NodeData(id: 1, x: 0, y: 0, dir: Direction.up),
@@ -275,7 +278,8 @@ void main() {
     });
 
     test('Level 3 Mechanics Checks', () {
-      final game = ChainPopGame(levelId: 3, difficulty: DifficultyMode.easy, onWin: () {});
+      final game = ChainPopGame(
+          levelId: 3, difficulty: DifficultyMode.easy, onWin: () {});
       final nodes = [
         NodeData(id: 1, x: 2, y: 1, dir: Direction.down),
         NodeData(id: 2, x: 2, y: 2, dir: Direction.right),
@@ -292,24 +296,30 @@ void main() {
       );
       game.activeNodes.addAll(nodes);
 
-      expect(game.canExtract(nodes[0]), isFalse, reason: 'Node 1 blocked by Node 2 and Node 5');
-      expect(game.canExtract(nodes[1]), isFalse, reason: 'Node 2 blocked by Node 4');
-      expect(game.canExtract(nodes[2]), isFalse, reason: 'Node 3 blocked by Node 2');
-      expect(game.canExtract(nodes[3]), isTrue,  reason: 'Node 4 is free');
-      expect(game.canExtract(nodes[4]), isTrue,  reason: 'Node 5 is free');
+      expect(game.canExtract(nodes[0]), isFalse,
+          reason: 'Node 1 blocked by Node 2 and Node 5');
+      expect(game.canExtract(nodes[1]), isFalse,
+          reason: 'Node 2 blocked by Node 4');
+      expect(game.canExtract(nodes[2]), isFalse,
+          reason: 'Node 3 blocked by Node 2');
+      expect(game.canExtract(nodes[3]), isTrue, reason: 'Node 4 is free');
+      expect(game.canExtract(nodes[4]), isTrue, reason: 'Node 5 is free');
 
       // Pop Node 4 Sequence
       game.registerExtraction(nodes[3]);
-      expect(game.canExtract(nodes[1]), isTrue, reason: 'Node 2 should now be free');
+      expect(game.canExtract(nodes[1]), isTrue,
+          reason: 'Node 2 should now be free');
 
       // Pop Node 2 Sequence
       game.registerExtraction(nodes[1]);
-      expect(game.canExtract(nodes[0]), isFalse, reason: 'Node 1 is still blocked by Node 5');
+      expect(game.canExtract(nodes[0]), isFalse,
+          reason: 'Node 1 is still blocked by Node 5');
       expect(game.canExtract(nodes[2]), isTrue, reason: 'Node 3 is now free');
 
       // Pop Node 5 Sequence
       game.registerExtraction(nodes[4]);
-      expect(game.canExtract(nodes[0]), isTrue, reason: 'Node 1 is completely free');
+      expect(game.canExtract(nodes[0]), isTrue,
+          reason: 'Node 1 is completely free');
     });
   });
 
@@ -418,8 +428,8 @@ void main() {
         difficulty: DifficultyMode.hard,
         onWin: () {},
       );
-      final relay =
-          NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay);
+      final relay = NodeData(
+          id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay);
       final other = NodeData(id: 1, x: 2, y: 0, dir: Direction.up);
       game.levelData = LevelData(
         levelId: 58,
@@ -440,8 +450,8 @@ void main() {
         difficulty: DifficultyMode.hard,
         onWin: () {},
       );
-      final relay =
-          NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay);
+      final relay = NodeData(
+          id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay);
       final other = NodeData(id: 1, x: 2, y: 0, dir: Direction.up);
       game.levelData = LevelData(
         levelId: 58,
@@ -464,8 +474,8 @@ void main() {
 
   group('jam guidance', () {
     ChainPopGame buildBlockedBoard() {
-      final game =
-          ChainPopGame(levelId: 1, difficulty: DifficultyMode.easy, onWin: () {});
+      final game = ChainPopGame(
+          levelId: 1, difficulty: DifficultyMode.easy, onWin: () {});
       // Node 1 faces left into node 2 (a blocker); node 3 is free elsewhere.
       final blocked = NodeData(id: 1, x: 2, y: 2, dir: Direction.left);
       final blocker = NodeData(id: 2, x: 1, y: 2, dir: Direction.up);

@@ -280,8 +280,7 @@ void main() {
         const MotifReservation(
             position: Point<int>(cx - 1, cy), direction: Direction.left),
         const MotifReservation(
-            position: Point<int>(cx + 1, cy),
-            direction: Direction.right),
+            position: Point<int>(cx + 1, cy), direction: Direction.right),
       ];
       final ctor = RetrogradeConstructor(
         gridWidth: 6,
@@ -324,8 +323,7 @@ void main() {
     test('returns null when reservations exceed the target node count', () {
       final reservations = <MotifReservation>[
         for (var i = 0; i < 5; i++)
-          MotifReservation(
-              position: Point<int>(i, 0), direction: Direction.up),
+          MotifReservation(position: Point<int>(i, 0), direction: Direction.up),
       ];
       final ctor = RetrogradeConstructor(
         gridWidth: 5,

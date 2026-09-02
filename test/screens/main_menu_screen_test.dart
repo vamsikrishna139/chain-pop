@@ -16,7 +16,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
-    final tempDir = await Directory.systemTemp.createTemp('chain_pop_menu_test_');
+    final tempDir =
+        await Directory.systemTemp.createTemp('chain_pop_menu_test_');
     Hive.init(tempDir.path);
     await StorageService.init();
   });
@@ -56,7 +57,8 @@ void main() {
   }
 
   group('MainMenuScreen tutorial entry', () {
-    testWidgets('shows Tutorial when onboarding is not completed', (tester) async {
+    testWidgets('shows Tutorial when onboarding is not completed',
+        (tester) async {
       expect(StorageService.tutorialCompleted, isFalse);
       await pumpMenu(tester);
 
@@ -93,7 +95,8 @@ void main() {
       );
     });
 
-    testWidgets('Tutorial tap opens GameScreen in tutorial mode', (tester) async {
+    testWidgets('Tutorial tap opens GameScreen in tutorial mode',
+        (tester) async {
       await pumpMenu(tester);
 
       await tester.tap(find.textContaining('Tutorial'));

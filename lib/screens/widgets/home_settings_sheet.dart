@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-
 import 'privacy_ads_settings_section.dart';
 import 'purchases_settings_section.dart';
 
@@ -64,7 +63,8 @@ Future<void> showHomeSettingsSheet({
                           color: Colors.white.withValues(alpha: 0.05),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.close_rounded, size: 16, color: Colors.white70),
+                        child: const Icon(Icons.close_rounded,
+                            size: 16, color: Colors.white70),
                       ),
                     ),
                   ],
@@ -72,13 +72,11 @@ Future<void> showHomeSettingsSheet({
                 const SizedBox(height: 8),
                 Divider(color: Colors.white.withValues(alpha: 0.1)),
                 const SizedBox(height: 16),
-                
+
                 // Content
                 PurchasesSettingsSection(accent: accent),
                 const SizedBox(height: 16),
                 PrivacyAdsSettingsSection(accent: accent),
-                
-
               ],
             ),
           ),

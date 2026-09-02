@@ -78,8 +78,7 @@ void main() {
         for (var y = 0; y < 4; y++)
           for (var x = 0; x < 4; x++) gridCellKey(x, y),
       };
-      expect(
-          silhouetteToPlayCells(mask, gridWidth: 4, gridHeight: 4), isNull);
+      expect(silhouetteToPlayCells(mask, gridWidth: 4, gridHeight: 4), isNull);
     });
 
     test('round-trips a partial mask back to string form', () {
@@ -88,8 +87,7 @@ void main() {
         gridCellKey(1, 2),
         gridCellKey(3, 1),
       };
-      final cells =
-          silhouetteToPlayCells(mask, gridWidth: 4, gridHeight: 4);
+      final cells = silhouetteToPlayCells(mask, gridWidth: 4, gridHeight: 4);
       expect(cells, isNotNull);
       expect(cells, containsAll(['0,0', '1,2', '3,1']));
       expect(cells!.length, equals(3));

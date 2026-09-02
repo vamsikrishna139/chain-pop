@@ -128,7 +128,8 @@ Set<int>? buildSilhouetteMask({
 
   Set<int>? cells;
   if (kind != null) {
-    cells = _fromLayoutMask(kind, gridWidth, gridHeight, random, jitter: jitter);
+    cells =
+        _fromLayoutMask(kind, gridWidth, gridHeight, random, jitter: jitter);
   } else {
     switch (id) {
       case SilhouetteId.rectangle:

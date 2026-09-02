@@ -21,7 +21,8 @@ class UndoRestartButton extends StatefulWidget {
   State<UndoRestartButton> createState() => _UndoRestartButtonState();
 }
 
-class _UndoRestartButtonState extends State<UndoRestartButton> with TickerProviderStateMixin {
+class _UndoRestartButtonState extends State<UndoRestartButton>
+    with TickerProviderStateMixin {
   static const _holdDuration = Duration(milliseconds: 700);
 
   late final AnimationController _holdCtrl;
@@ -100,7 +101,8 @@ class _UndoRestartButtonState extends State<UndoRestartButton> with TickerProvid
                       alignment: Alignment.centerLeft,
                       child: FractionallySizedBox(
                         widthFactor: v,
-                        child: Container(color: Colors.redAccent.withValues(alpha: 0.3)),
+                        child: Container(
+                            color: Colors.redAccent.withValues(alpha: 0.3)),
                       ),
                     ),
                   ),
@@ -110,10 +112,13 @@ class _UndoRestartButtonState extends State<UndoRestartButton> with TickerProvid
                     if (v > 0)
                       Transform.rotate(
                         angle: v * 2 * 3.14159265,
-                        child: const Icon(Icons.refresh_rounded, color: Colors.redAccent, size: 16),
+                        child: const Icon(Icons.refresh_rounded,
+                            color: Colors.redAccent, size: 16),
                       )
                     else
-                      Icon(Icons.undo_rounded, color: hasUndo ? Colors.white70 : Colors.white24, size: 16),
+                      Icon(Icons.undo_rounded,
+                          color: hasUndo ? Colors.white70 : Colors.white24,
+                          size: 16),
                     const SizedBox(width: 6),
                     Text(
                       v > 0.2 ? 'HOLD TO RESTART' : 'UNDO',

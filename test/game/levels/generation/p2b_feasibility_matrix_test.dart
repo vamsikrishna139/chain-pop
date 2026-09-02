@@ -104,9 +104,7 @@ void _maskLayer() {
         : cells[(cells.length * f).floor().clamp(0, cells.length - 1)];
     final miss = under == 0 && over == 0
         ? '-'
-        : (under >= over
-            ? 'too small ($under)'
-            : 'too large ($over)');
+        : (under >= over ? 'too small ($under)' : 'too large ($over)');
     print('${id.name.padRight(13)}'
         '${silhouetteVisualFamily(id).name.padRight(17)}'
         '${_pct(built, kMaskRolls).padLeft(7)}'
@@ -145,8 +143,8 @@ void _productionLayers() {
   final gen = LevelGenerator(director: director, analyticsSink: sink);
   final shippedMetrics = <SilhouetteId, List<LevelMetrics>>{};
   for (var id = 1; id <= kSweepLevels; id++) {
-    final r = gen.generate(id, mode: DifficultyMode.hard,
-        timeBudget: kProdBudget);
+    final r =
+        gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
     if (!r.isSuccess) continue;
     if (sink.events.isEmpty) continue;
     final sid = sink.events.last.silhouette;
@@ -167,18 +165,14 @@ void _productionLayers() {
     final surv = survived[id] ?? 0;
     final ms = shippedMetrics[id] ?? const <LevelMetrics>[];
     final n = ms.length;
-    final nodes = n == 0
-        ? 0.0
-        : ms.map((m) => m.nodeCount).reduce((a, b) => a + b) / n;
+    final nodes =
+        n == 0 ? 0.0 : ms.map((m) => m.nodeCount).reduce((a, b) => a + b) / n;
     final fsr = n == 0
         ? 0.0
         : ms.map((m) => m.forcedSequenceRatio).reduce((a, b) => a + b) / n;
     final bf = n == 0
         ? 0.0
-        : ms
-                .map((m) => m.averageBranchingFactor)
-                .reduce((a, b) => a + b) /
-            n;
+        : ms.map((m) => m.averageBranchingFactor).reduce((a, b) => a + b) / n;
     // GREEN  reliably survives routing AND ships a sane difficulty profile.
     // YELLOW ships, but thinly or with a strained profile.
     // RED    effectively never reaches a player on Hard.

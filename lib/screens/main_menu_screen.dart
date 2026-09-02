@@ -35,7 +35,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
   }
 
   Future<void> _selectDifficulty(DifficultyMode mode) async {
-    if (_selected != mode && StorageLocator.instance.gameSettings.soundEnabled) {
+    if (_selected != mode &&
+        StorageLocator.instance.gameSettings.soundEnabled) {
       unawaited(
         ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.1),
       );
@@ -52,16 +53,16 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     final frontier = StorageLocator.instance.highestUnlocked(_selected);
     Navigator.of(context)
         .push(
-          MaterialPageRoute<void>(
-            builder: (_) => GameScreen(level: frontier, difficulty: _selected),
-          ),
-        )
+      MaterialPageRoute<void>(
+        builder: (_) => GameScreen(level: frontier, difficulty: _selected),
+      ),
+    )
         .then((_) {
-          if (!mounted) return;
-          setState(() {
-            _selected = StorageLocator.instance.selectedDifficulty;
-          });
-        });
+      if (!mounted) return;
+      setState(() {
+        _selected = StorageLocator.instance.selectedDifficulty;
+      });
+    });
   }
 
   void _openTutorial() {
@@ -70,20 +71,20 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     }
     Navigator.of(context)
         .push<void>(
-          MaterialPageRoute<void>(
-            builder: (_) => GameScreen(
-              level: 1,
-              difficulty: DifficultyMode.easy,
-              fixedLevel: tutorialLevels.first,
-              isTutorial: true,
-              tutorialIndex: 0,
-            ),
-          ),
-        )
+      MaterialPageRoute<void>(
+        builder: (_) => GameScreen(
+          level: 1,
+          difficulty: DifficultyMode.easy,
+          fixedLevel: tutorialLevels.first,
+          isTutorial: true,
+          tutorialIndex: 0,
+        ),
+      ),
+    )
         .then((_) {
-          if (!mounted) return;
-          setState(() {});
-        });
+      if (!mounted) return;
+      setState(() {});
+    });
   }
 
   void _openDailyChallenge() {
@@ -120,7 +121,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceDialog,
         icon: Icon(Icons.restart_alt_rounded, color: scheme.error),
-        title: Text('Reset all progress?', style: GoogleFonts.rajdhani(fontWeight: FontWeight.bold)),
+        title: Text('Reset all progress?',
+            style: GoogleFonts.rajdhani(fontWeight: FontWeight.bold)),
         content: Text(
           'All stars, unlocks, and difficulty progress on this device will be cleared. This cannot be undone.',
           style: GoogleFonts.rajdhani(),
@@ -128,7 +130,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: GoogleFonts.rajdhani(color: Colors.white70)),
+            child: Text('Cancel',
+                style: GoogleFonts.rajdhani(color: Colors.white70)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -136,7 +139,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               backgroundColor: scheme.error,
               foregroundColor: scheme.onError,
             ),
-            child: Text('Reset', style: GoogleFonts.rajdhani(fontWeight: FontWeight.bold)),
+            child: Text('Reset',
+                style: GoogleFonts.rajdhani(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -154,16 +158,16 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     }
     Navigator.of(context)
         .push(
-          MaterialPageRoute<void>(
-            builder: (_) => LevelSelectScreen(initialDifficulty: _selected),
-          ),
-        )
+      MaterialPageRoute<void>(
+        builder: (_) => LevelSelectScreen(initialDifficulty: _selected),
+      ),
+    )
         .then((_) {
-          if (!mounted) return;
-          setState(() {
-            _selected = StorageLocator.instance.selectedDifficulty;
-          });
-        });
+      if (!mounted) return;
+      setState(() {
+        _selected = StorageLocator.instance.selectedDifficulty;
+      });
+    });
   }
 
   @override
@@ -184,7 +188,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               _buildTopBar(accent),
               const SizedBox(height: 12),
               _buildDifficultySwitcher(),
-              
+
               // 2. Main Center Hero Progression Card & Play CTA
               Expanded(
                 child: Column(
@@ -267,7 +271,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     );
   }
 
-  Widget _buildIconButton({required IconData icon, required Color color, required VoidCallback onTap}) {
+  Widget _buildIconButton(
+      {required IconData icon,
+      required Color color,
+      required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -305,7 +312,12 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   color: isSelected ? color : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: isSelected
-                      ? [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 10, spreadRadius: -2)]
+                      ? [
+                          BoxShadow(
+                              color: color.withValues(alpha: 0.5),
+                              blurRadius: 10,
+                              spreadRadius: -2)
+                        ]
                       : [],
                 ),
                 alignment: Alignment.center,
@@ -329,10 +341,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     final frontier = StorageLocator.instance.highestUnlocked(_selected);
     final totalStars = _totalStarsForMode(_selected);
     final maxStars = frontier * 3;
-    final progressFrac = maxStars > 0 ? (totalStars / maxStars).clamp(0.0, 1.0) : 0.0;
-    
+    final progressFrac =
+        maxStars > 0 ? (totalStars / maxStars).clamp(0.0, 1.0) : 0.0;
+
     final avg = ProgressFormat.avgStarsPerClearedStage(totalStars, frontier);
-    
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -340,7 +353,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
         boxShadow: [
-          BoxShadow(color: accent.withValues(alpha: 0.2), blurRadius: 30, spreadRadius: -10),
+          BoxShadow(
+              color: accent.withValues(alpha: 0.2),
+              blurRadius: 30,
+              spreadRadius: -10),
         ],
       ),
       child: Stack(
@@ -370,7 +386,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isHard ? 'HARD · GATEWAY' : isMedium ? 'MEDIUM · SECTOR' : 'EASY · CAMPAIGN',
+                        isHard
+                            ? 'HARD · GATEWAY'
+                            : isMedium
+                                ? 'MEDIUM · SECTOR'
+                                : 'EASY · CAMPAIGN',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 11,
                           letterSpacing: 1.5,
@@ -409,7 +429,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.star_rounded, color: AppColors.starGold, size: 16),
+                          const Icon(Icons.star_rounded,
+                              color: AppColors.starGold, size: 16),
                           const SizedBox(width: 4),
                           Text(
                             '$totalStars / $maxStars',
@@ -440,7 +461,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 decoration: BoxDecoration(
                   color: AppColors.background,
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.05)),
                 ),
                 child: Row(
                   children: [
@@ -468,14 +490,17 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 child: Container(
                   padding: const EdgeInsets.only(top: 16),
                   decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+                    border: Border(
+                        top: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.05))),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.grid_view_rounded, size: 14, color: accent),
+                          Icon(Icons.grid_view_rounded,
+                              size: 14, color: accent),
                           const SizedBox(width: 6),
                           Text(
                             'Browse All Levels',
@@ -486,7 +511,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                           ),
                         ],
                       ),
-                      const Icon(Icons.chevron_right_rounded, size: 16, color: Colors.white54),
+                      const Icon(Icons.chevron_right_rounded,
+                          size: 16, color: Colors.white54),
                     ],
                   ),
                 ),
@@ -511,7 +537,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           color: accent,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
-            BoxShadow(color: accent.withValues(alpha: 0.6), blurRadius: 28, spreadRadius: -4),
+            BoxShadow(
+                color: accent.withValues(alpha: 0.6),
+                blurRadius: 28,
+                spreadRadius: -4),
           ],
         ),
         child: Row(
@@ -538,7 +567,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     final dayKey = DailyChallenge.dateKeyLocal(DateTime.now());
     final starsToday = StorageLocator.instance.dailyStarsForDayKey(dayKey);
     final isCompleted = starsToday > 0;
-    
+
     return InkWell(
       onTap: _openDailyChallenge,
       borderRadius: BorderRadius.circular(12),
@@ -559,9 +588,11 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.accentEasy.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.accentEasy.withValues(alpha: 0.3)),
+                    border: Border.all(
+                        color: AppColors.accentEasy.withValues(alpha: 0.3)),
                   ),
-                  child: const Icon(Icons.bolt_rounded, size: 16, color: AppColors.accentEasy),
+                  child: const Icon(Icons.bolt_rounded,
+                      size: 16, color: AppColors.accentEasy),
                 ),
                 const SizedBox(width: 12),
                 Column(
@@ -579,16 +610,21 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 2),
                           decoration: BoxDecoration(
-                            color: isCompleted ? Colors.green.withValues(alpha: 0.2) : AppColors.accentMedium.withValues(alpha: 0.2),
+                            color: isCompleted
+                                ? Colors.green.withValues(alpha: 0.2)
+                                : AppColors.accentMedium.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             isCompleted ? 'COMPLETED' : 'FREE',
                             style: GoogleFonts.jetBrainsMono(
                               fontSize: 10,
-                              color: isCompleted ? Colors.greenAccent : AppColors.accentMedium,
+                              color: isCompleted
+                                  ? Colors.greenAccent
+                                  : AppColors.accentMedium,
                             ),
                           ),
                         ),
@@ -606,7 +642,8 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 ),
               ],
             ),
-            const Icon(Icons.chevron_right_rounded, size: 18, color: Colors.white54),
+            const Icon(Icons.chevron_right_rounded,
+                size: 18, color: Colors.white54),
           ],
         ),
       ),
@@ -615,7 +652,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
 
   Widget _buildTutorialCard() {
     final tutorialCompleted = StorageLocator.instance.tutorialCompleted;
-    
+
     return InkWell(
       onTap: _openTutorial,
       borderRadius: BorderRadius.circular(12),
@@ -625,7 +662,9 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
           color: tutorialCompleted ? Colors.transparent : AppColors.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: tutorialCompleted ? Colors.white.withValues(alpha: 0.1) : AppColors.accentEasy.withValues(alpha: 0.3),
+            color: tutorialCompleted
+                ? Colors.white.withValues(alpha: 0.1)
+                : AppColors.accentEasy.withValues(alpha: 0.3),
           ),
         ),
         child: Row(
@@ -636,13 +675,17 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: tutorialCompleted ? Colors.white.withValues(alpha: 0.05) : AppColors.accentEasy.withValues(alpha: 0.1),
+                    color: tutorialCompleted
+                        ? Colors.white.withValues(alpha: 0.05)
+                        : AppColors.accentEasy.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
                     Icons.explore_rounded,
                     size: 16,
-                    color: tutorialCompleted ? Colors.white54 : AppColors.accentEasy,
+                    color: tutorialCompleted
+                        ? Colors.white54
+                        : AppColors.accentEasy,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -654,12 +697,15 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                       style: GoogleFonts.rajdhani(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: tutorialCompleted ? Colors.white70 : Colors.white,
+                        color:
+                            tutorialCompleted ? Colors.white70 : Colors.white,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      tutorialCompleted ? 'Mastered' : 'Learn directional extraction rules',
+                      tutorialCompleted
+                          ? 'Mastered'
+                          : 'Learn directional extraction rules',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 10,
                         color: Colors.white54,
@@ -670,9 +716,12 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               ],
             ),
             Icon(
-              tutorialCompleted ? Icons.check_circle_rounded : Icons.chevron_right_rounded,
+              tutorialCompleted
+                  ? Icons.check_circle_rounded
+                  : Icons.chevron_right_rounded,
               size: 18,
-              color: tutorialCompleted ? Colors.greenAccent : AppColors.accentEasy,
+              color:
+                  tutorialCompleted ? Colors.greenAccent : AppColors.accentEasy,
             ),
           ],
         ),

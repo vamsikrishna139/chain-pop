@@ -48,8 +48,7 @@ class LevelBank {
       throw const FormatException('LevelBank: "entries" must be a list');
     }
     final entries = <MapElitesEntry>[
-      for (final e in entriesRaw)
-        _decodeEntry(e as Map<String, Object?>),
+      for (final e in entriesRaw) _decodeEntry(e as Map<String, Object?>),
     ];
     return LevelBank(
       archive: MapElitesArchive.fromEntries(entries, version: version),
@@ -83,8 +82,7 @@ class LevelBank {
     final gridHeight = raw['gridHeight'] as int;
     final nodesRaw = raw['nodes'] as List;
     final nodes = <NodeData>[
-      for (final n in nodesRaw)
-        _decodeNode(n as Map<String, Object?>),
+      for (final n in nodesRaw) _decodeNode(n as Map<String, Object?>),
     ];
     Set<String>? playCells;
     final playRaw = raw['playCells'];

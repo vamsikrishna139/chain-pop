@@ -50,8 +50,7 @@ void main() {
             placedAtLeastOnce = true;
             // All reservations must live inside the silhouette and be unique.
             expect(p.reservations.length, greaterThanOrEqualTo(3));
-            final keys =
-                p.reservations.map((r) => r.cellKey).toSet();
+            final keys = p.reservations.map((r) => r.cellKey).toSet();
             expect(keys.length, p.reservations.length,
                 reason: '${motif.id} produced duplicate cells');
             for (final r in p.reservations) {
@@ -108,14 +107,14 @@ void main() {
         if (motif.id == MotifId.lockCluster) lockCount++;
       }
       expect(lockCount, inInclusiveRange(40, 80),
-          reason: 'Hard tier should sample lock cluster ~30% (r in [0.40, 0.70))');
+          reason:
+              'Hard tier should sample lock cluster ~30% (r in [0.40, 0.70))');
     });
   });
 
   group('sampleMotif', () {
     test('only returns motifs from the catalogue', () {
-      final catalogueIds =
-          motifCatalogue().map((m) => m.id).toSet();
+      final catalogueIds = motifCatalogue().map((m) => m.id).toSet();
       for (var seed = 0; seed < 50; seed++) {
         final motif = sampleMotif(Random(seed));
         expect(catalogueIds.contains(motif.id), isTrue);

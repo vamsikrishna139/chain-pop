@@ -138,7 +138,8 @@ void _printBatch(
 }) {
   // ignore: avoid_print
   print('--- $label ---');
-  if (levelIds.length > 1 && levelIds.last - levelIds.first + 1 != levelIds.length) {
+  if (levelIds.length > 1 &&
+      levelIds.last - levelIds.first + 1 != levelIds.length) {
     // ignore: avoid_print
     print('  levels: ${levelIds.join(", ")}');
   }
@@ -166,10 +167,10 @@ void _printBatch(
         after.blockingDirCandidatesPicked - before.blockingDirCandidatesPicked;
     final retries = after.constructionSolvabilityRetries -
         before.constructionSolvabilityRetries;
-    final crunchPick = after.crunchZoneBlockingPicked -
-        before.crunchZoneBlockingPicked;
-    final releasePick = after.releaseZoneFallbackPicked -
-        before.releaseZoneFallbackPicked;
+    final crunchPick =
+        after.crunchZoneBlockingPicked - before.crunchZoneBlockingPicked;
+    final releasePick =
+        after.releaseZoneFallbackPicked - before.releaseZoneFallbackPicked;
     final winRetry = gen.lastWinningBlockingRetryIndex;
 
     final level = r.value;

@@ -225,8 +225,7 @@ void main() {
       expect(DifficultyProfile.fsrCapForNodeCount(100), equals(0.35));
     });
 
-    test('Expert@29 nodes with FSR 0.55 is now feasible (was impossible)',
-        () {
+    test('Expert@29 nodes with FSR 0.55 is now feasible (was impossible)', () {
       // Expert FSR floor is 0.50; at 29 nodes the banded cap is ~0.639.
       // Old flat cap of 0.40 made FSR ≥ 0.50 impossible above 28 nodes.
       final m = _metrics(

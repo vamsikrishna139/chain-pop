@@ -13,7 +13,8 @@ final class GameTimerController {
   void startCountdown() {
     if (_host.timeLimitSec == null) return;
     _host.timers.countdownTimer?.cancel();
-    _host.timers.countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _host.timers.countdownTimer =
+        Timer.periodic(const Duration(seconds: 1), (_) {
       if (!_host.mounted || _host.hasWon || _host.isPaused) return;
       // Engine wins before the Flutter overlay during the cascade finale —
       // don't let the countdown expire a level that is already won.
@@ -43,8 +44,7 @@ final class GameTimerController {
     if (_host.difficulty != DifficultyMode.easy) return;
     // Coach-mark: the first two tutorial boards pulse the only legal node
     // sooner so a new player sees what "tap an arrow" means without text.
-    final isEarlyTutorial =
-        _host.isTutorial && _host.tutorialIndex <= 1;
+    final isEarlyTutorial = _host.isTutorial && _host.tutorialIndex <= 1;
     final delay = isEarlyTutorial
         ? GameScreenConstants.tutorialCoachHintDelaySeconds
         : GameScreenConstants.ghostHintDelaySeconds;

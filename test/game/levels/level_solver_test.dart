@@ -6,10 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('LevelSolver.canRemove', () {
-    test('returns true when ray exits grid with no blockers (all directions)', () {
+    test('returns true when ray exits grid with no blockers (all directions)',
+        () {
       const gw = 5;
       const gh = 5;
-      final level = LevelData(levelId: 1, gridWidth: gw, gridHeight: gh, nodes: []);
+      final level =
+          LevelData(levelId: 1, gridWidth: gw, gridHeight: gh, nodes: []);
 
       expect(
         LevelSolver.canRemove(
@@ -46,19 +48,22 @@ void main() {
     });
 
     test('returns false when another node blocks the ray', () {
-      final level = LevelData(levelId: 1, gridWidth: 5, gridHeight: 5, nodes: []);
+      final level =
+          LevelData(levelId: 1, gridWidth: 5, gridHeight: 5, nodes: []);
       final a = NodeData(id: 0, x: 2, y: 3, dir: Direction.up);
       final b = NodeData(id: 1, x: 2, y: 1, dir: Direction.down);
       expect(LevelSolver.canRemove(a, [a, b], level), isFalse);
     });
 
     test('ignores self when checking blockers', () {
-      final level = LevelData(levelId: 1, gridWidth: 5, gridHeight: 5, nodes: []);
+      final level =
+          LevelData(levelId: 1, gridWidth: 5, gridHeight: 5, nodes: []);
       final n = NodeData(id: 0, x: 2, y: 2, dir: Direction.right);
       expect(LevelSolver.canRemove(n, [n], level), isTrue);
     });
 
-    test('playCells does not clip ray — void outside play area still blocks', () {
+    test('playCells does not clip ray — void outside play area still blocks',
+        () {
       final level = LevelData(
         levelId: 1,
         gridWidth: 5,
@@ -74,7 +79,8 @@ void main() {
 
   group('LevelSolver.canRemoveWithPositions', () {
     test('matches canRemove when others set excludes self', () {
-      final level = LevelData(levelId: 1, gridWidth: 6, gridHeight: 6, nodes: []);
+      final level =
+          LevelData(levelId: 1, gridWidth: 6, gridHeight: 6, nodes: []);
       final a = NodeData(id: 0, x: 1, y: 1, dir: Direction.right);
       final b = NodeData(id: 1, x: 3, y: 1, dir: Direction.left);
       final c = NodeData(id: 2, x: 5, y: 5, dir: Direction.down);
@@ -101,7 +107,12 @@ void main() {
         gridWidth: 4,
         gridHeight: 4,
         nodes: [
-          NodeData(id: 0, x: 1, y: 3, dir: Direction.up, color: const Color(0xFF4FACFE)),
+          NodeData(
+              id: 0,
+              x: 1,
+              y: 3,
+              dir: Direction.up,
+              color: const Color(0xFF4FACFE)),
         ],
       );
       expect(LevelSolver.countRemovalWaves(level), 1);
@@ -178,14 +189,16 @@ void main() {
     });
 
     test('returns null for empty active list', () {
-      final level = LevelData(levelId: 1, gridWidth: 3, gridHeight: 3, nodes: []);
+      final level =
+          LevelData(levelId: 1, gridWidth: 3, gridHeight: 3, nodes: []);
       expect(LevelSolver.getHint([], level), isNull);
     });
   });
 
   group('LevelSolver.traceRay', () {
     test('ray exits grid when path is clear', () {
-      final level = LevelData(levelId: 1, gridWidth: 5, gridHeight: 5, nodes: []);
+      final level =
+          LevelData(levelId: 1, gridWidth: 5, gridHeight: 5, nodes: []);
       final node = NodeData(id: 0, x: 2, y: 2, dir: Direction.up);
       final trace = LevelSolver.traceRay(node, [node], level);
       expect(trace.blockerNodeId, isNull);

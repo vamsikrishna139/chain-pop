@@ -57,9 +57,7 @@ class GenerationError {
       [String detail = '']) {
     return GenerationError._(
       'greedy_direction_assignment_failed',
-      detail.isEmpty
-          ? 'Greedy direction assignment failed'
-          : detail,
+      detail.isEmpty ? 'Greedy direction assignment failed' : detail,
     );
   }
 

@@ -18,7 +18,7 @@ Future<void> requestAdsConsentIfApplicable() async {
 
   adDebug('UMP: requestConsentInfoUpdate starting');
   final done = Completer<void>();
-  
+
   final params = ConsentRequestParameters(
     consentDebugSettings: kDebugMode
         ? ConsentDebugSettings(
@@ -42,7 +42,7 @@ Future<void> requestAdsConsentIfApplicable() async {
       if (!done.isCompleted) done.complete();
     },
   );
-  
+
   await done.future.timeout(
     const Duration(seconds: 10),
     onTimeout: () {
@@ -70,7 +70,8 @@ Future<void> _presentConsentThen(Completer<void> done) async {
 
 /// Checks if the privacy options form is required to be shown (e.g., in GDPR regions).
 Future<bool> isPrivacyOptionsRequired() async {
-  final status = await ConsentInformation.instance.getPrivacyOptionsRequirementStatus();
+  final status =
+      await ConsentInformation.instance.getPrivacyOptionsRequirementStatus();
   return status == PrivacyOptionsRequirementStatus.required;
 }
 
@@ -86,7 +87,8 @@ Future<void> showPrivacyOptionsForm() async {
     } else {
       // The MobileAds SDK automatically uses the updated consent status
       // for the next ad request. No hard restart is strictly required.
-      adDebug('UMP: privacy options form closed. Next ad request will use updated consent.');
+      adDebug(
+          'UMP: privacy options form closed. Next ad request will use updated consent.');
     }
     if (!done.isCompleted) done.complete();
   });

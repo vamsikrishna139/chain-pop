@@ -14,6 +14,8 @@ import '../game/levels/level_manager.dart';
 
 import '../game/levels/level_directive.dart';
 import '../game/levels/tutorial_levels.dart';
+import '../game/levels/generation/generation_version.dart';
+import '../services/analytics/analytics_locator.dart';
 import '../utils/progress_format.dart';
 import '../models/game_settings.dart';
 import '../services/achievements/achievements_locator.dart';
@@ -131,7 +133,7 @@ class GameScreen extends StatefulWidget {
     this.suppressGameplayTimers = false,
     this.autoplay = false,
     this.onAutoplayWin,
-  }) : assert(
+  })  : assert(
           !isDailyChallenge || (dailyDayKey != null && fixedLevel != null),
         ),
         assert(!isTutorial || fixedLevel != null),
@@ -379,6 +381,23 @@ class GameScreenState extends State<GameScreen>
   @override
   SessionPacingController get pacing => _pacing;
 
+  int _attemptNumber = 1;
+
+  @override
+  Map<String, Object> get analyticsParams {
+    return {
+      'levelId': widget.level,
+      'mode': widget.difficulty.name,
+      'isDaily': widget.isDailyChallenge,
+      'isTutorial': widget.isTutorial,
+      'attemptNumber': _attemptNumber,
+      'generationVersion': kGenerationVersion,
+      'worldOrSector': widget.level ~/ 100, // naive sector bucket
+      if (_levelData?.silhouetteId != null)
+        'silhouette': _levelData!.silhouetteId!.name,
+    };
+  }
+
   @override
   SessionGoalsController get goals => _goals;
 
@@ -401,7 +420,11 @@ class GameScreenState extends State<GameScreen>
   void resetGhostHintTimer() => _timerController.resetGhostHintTimer();
 
   @override
-  void resetForRetry() => _gameFlow.resetForRetry();
+  void resetForRetry() {
+    _attemptNumber++;
+    AnalyticsLocator.instance.logLevelRetry(params: analyticsParams);
+    _gameFlow.resetForRetry();
+  }
 
   @override
   void goMenu() => _gameFlow.goMenu();
@@ -478,7 +501,6 @@ class GameScreenState extends State<GameScreen>
   /// Stack-local Y for tutorial hint banner (below measured [GameHeaderHud]).
   double _hudBannerTop = 118;
 
-
   @override
   void initState() {
     super.initState();
@@ -496,8 +518,8 @@ class GameScreenState extends State<GameScreen>
     }
 
     _gameStorage = widget.storage ?? StorageLocator.instance;
-    _progress = widget.progressStore ??
-        HiveChainPopProgressStore(widget.storage);
+    _progress =
+        widget.progressStore ?? HiveChainPopProgressStore(widget.storage);
 
     _stopwatch = Stopwatch();
     _settings = _gameStorage.gameSettings;
@@ -564,8 +586,6 @@ class GameScreenState extends State<GameScreen>
           .clamp(SessionPacing.timedSurgeFloorSec, _timeLimitSec!);
     }
 
-
-
     _timeLeftSec = _timeLimitSec;
 
     if (!_stopwatch.isRunning) _stopwatch.start();
@@ -580,6 +600,11 @@ class GameScreenState extends State<GameScreen>
 
     _adCoordinator.preloadForLevelStartup();
     _adCoordinator.scheduleRewardedHintsEntryCoachIfNeeded();
+
+    AnalyticsLocator.instance.logLevelStart(params: analyticsParams);
+    if (widget.isTutorial && widget.tutorialIndex == 0) {
+      AnalyticsLocator.instance.logTutorialStart();
+    }
 
     if (widget.autoplay) {
       _autoplayTimer?.cancel();
@@ -661,8 +686,8 @@ class GameScreenState extends State<GameScreen>
     if (widget.isTutorial || widget.autoplay) return;
     unawaited(
       AchievementsLocator.instance.record(ComboReached(streak)).catchError(
-        (_) {},
-      ),
+            (_) {},
+          ),
     );
   }
 
@@ -722,7 +747,7 @@ class GameScreenState extends State<GameScreen>
   Future<void> debugSimulateWinForTest() => _gameFlow.handleWin();
 
   void _togglePause() {
-    if (_hasWon || _engine.isGameOver) return;
+    if (_hasWon || _engine.hasWon || _engine.isGameOver) return;
     _engine.playSfx(GameSfx.uiTap);
     if (_isPaused) {
       setState(() => _isPaused = false);
@@ -766,7 +791,7 @@ class GameScreenState extends State<GameScreen>
     if (_isPaused) return;
     _engine.playSfx(GameSfx.uiTap);
     if (!mounted) return;
-    
+
     _stopwatch.stop();
     _timers.countdownTimer?.cancel();
     _timers.ghostHintTimer?.cancel();
@@ -885,7 +910,9 @@ class GameScreenState extends State<GameScreen>
                 stars: _earnedStars,
                 levelLabel: 'LEVEL ${ProgressFormat.level(widget.level)} CLEAR',
                 directiveLabel: _isCampaign
-                    ? directiveFor(levelId: widget.level, mode: widget.difficulty).label
+                    ? directiveFor(
+                            levelId: widget.level, mode: widget.difficulty)
+                        .label
                     : null,
                 sessionWins: _pacing.winsThisSession,
                 accent: accent,
@@ -901,8 +928,7 @@ class GameScreenState extends State<GameScreen>
             missionLabel: _missionLabel(),
             removedNodes: _removedNodes,
             totalNodes: _totalNodes,
-            coresRestored:
-                _engine.usesCoreWin ? _engine.coresRestored : null,
+            coresRestored: _engine.usesCoreWin ? _engine.coresRestored : null,
             totalCores: _engine.usesCoreWin ? _engine.totalCores : null,
             // Tutorial: surface Integrity from the cores step on, so the player
             // sees it react live (drops on a misfire, rises as cores restore).
@@ -913,9 +939,15 @@ class GameScreenState extends State<GameScreen>
             timeLimitSec: _timeLimitSec,
             elapsed: _stopwatch.elapsed,
             onTogglePause: _togglePause,
-            sessionGoalLabel: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.activeGoal.label : null,
-            sessionGoalProgress: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.progress : null,
-            sessionGoalTarget: _isCampaign && !_hasWon && !_goals.isComplete ? _goals.target : null,
+            sessionGoalLabel: _isCampaign && !_hasWon && !_goals.isComplete
+                ? _goals.activeGoal.label
+                : null,
+            sessionGoalProgress: _isCampaign && !_hasWon && !_goals.isComplete
+                ? _goals.progress
+                : null,
+            sessionGoalTarget: _isCampaign && !_hasWon && !_goals.isComplete
+                ? _goals.target
+                : null,
           ),
 
           if (widget.isTutorial && !_hasWon)
@@ -958,7 +990,7 @@ class GameScreenState extends State<GameScreen>
                 ),
               ),
             ),
-          if (!_hasWon)
+          if (!(_hasWon || _engine.hasWon))
             Positioned(
               bottom: 0,
               left: 0,
@@ -1038,10 +1070,14 @@ class GameScreenState extends State<GameScreen>
                           ? 'TUTORIAL ${widget.tutorialIndex + 1} CLEAR'
                           : 'LEVEL ${ProgressFormat.level(widget.level)}'),
                   directiveLabel: _isCampaign
-                      ? directiveFor(levelId: widget.level, mode: widget.difficulty).label
+                      ? directiveFor(
+                              levelId: widget.level, mode: widget.difficulty)
+                          .label
                       : null,
-                  missionLabel: _isCampaign ? missionShortForLevel(widget.level) : null,
-                  sessionGoalLabel: _isCampaign ? _goals.activeGoal.label : null,
+                  missionLabel:
+                      _isCampaign ? missionShortForLevel(widget.level) : null,
+                  sessionGoalLabel:
+                      _isCampaign ? _goals.activeGoal.label : null,
                   sessionGoalProgress: _isCampaign ? _goals.progress : null,
                   sessionGoalTarget: _isCampaign ? _goals.target : null,
                   sessionGoalComplete: _isCampaign ? _goals.isComplete : null,

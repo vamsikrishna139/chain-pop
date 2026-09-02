@@ -9,7 +9,8 @@ void main() {
       expect(ads.isRewardedReady(AdPlacements.hint), isFalse);
       expect(await ads.showRewarded(placement: AdPlacements.hint), isFalse);
       expect(
-        await ads.showInterstitialIfReady(placement: AdPlacements.betweenLevelsStreak),
+        await ads.showInterstitialIfReady(
+            placement: AdPlacements.betweenLevelsStreak),
         isFalse,
       );
     });
@@ -22,7 +23,8 @@ void main() {
       expect(notifications, 1);
     });
 
-    test('clearInventoryListenerIfSame only clears matching listener', () async {
+    test('clearInventoryListenerIfSame only clears matching listener',
+        () async {
       final ads = NoOpAdService();
       var n = 0;
       void l1() => n++;

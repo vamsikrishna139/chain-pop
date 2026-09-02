@@ -32,10 +32,12 @@ void main() {
     });
 
     test('works with complex types', () {
-      final successResult = Result<List<int>, Map<String, dynamic>>.success([1, 2, 3]);
+      final successResult =
+          Result<List<int>, Map<String, dynamic>>.success([1, 2, 3]);
       expect(successResult.value, equals([1, 2, 3]));
 
-      final errorResult = Result<List<int>, Map<String, dynamic>>.error({'code': 404});
+      final errorResult =
+          Result<List<int>, Map<String, dynamic>>.error({'code': 404});
       expect(errorResult.error, equals({'code': 404}));
     });
   });

@@ -205,7 +205,8 @@ void main() {
       expect(DayKey.isValid(20260230), isFalse);
       expect(DayKey.isValid(20261301), isFalse);
       expect(DayKey.isValid(20260800), isFalse);
-      expect(DayKey.isValid(20260229), isFalse, reason: '2026 is not a leap year');
+      expect(DayKey.isValid(20260229), isFalse,
+          reason: '2026 is not a leap year');
     });
 
     test('a backwards jump reports a negative span', () {

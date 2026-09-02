@@ -71,8 +71,7 @@ void main() {
     group('Hard campaign diversity (primary acceptance)', () {
       test(
           'levels 1–20: all hard levels generate successfully with '
-          'geometric lattice dominance from Phase 1C bias',
-          () {
+          'geometric lattice dominance from Phase 1C bias', () {
         final sink = InMemoryAnalyticsSink();
         final gen = LevelGenerator(
           enableDiversityGating: true,
@@ -106,8 +105,9 @@ void main() {
           reason: 'should see at least 2 families across 20 hard levels',
         );
         // Geometric lattice should dominate (Phase 1C intent).
-        final latticeCount =
-            families.where((f) => f == SilhouetteVisualFamily.geometricLattice).length;
+        final latticeCount = families
+            .where((f) => f == SilhouetteVisualFamily.geometricLattice)
+            .length;
         expect(
           latticeCount / families.length,
           greaterThanOrEqualTo(0.50),
@@ -222,7 +222,9 @@ void main() {
         }
       });
 
-      test('same level ID produces different levels on shared generator (ledger effect)', () {
+      test(
+          'same level ID produces different levels on shared generator (ledger effect)',
+          () {
         final shared = LevelGenerator();
         final result1 = shared.generate(44);
         final result2 = shared.generate(44);
@@ -233,22 +235,33 @@ void main() {
         // They must differ because the ledger rejects the identical fingerprint
         final level1 = result1.value;
         final level2 = result2.value;
-        
+
         bool isIdentical = level1.nodes.length == level2.nodes.length &&
             level1.gridWidth == level2.gridWidth &&
             level1.gridHeight == level2.gridHeight &&
             level1.nodes.every((n1) {
-              final n2 = level2.nodes.firstWhere((n2) => n2.id == n1.id, 
-                orElse: () => NodeData(id: -1, x: -1, y: -1, dir: Direction.up, color: const Color(0xFF000000), colorSlot: 0));
+              final n2 = level2.nodes.firstWhere((n2) => n2.id == n1.id,
+                  orElse: () => NodeData(
+                      id: -1,
+                      x: -1,
+                      y: -1,
+                      dir: Direction.up,
+                      color: const Color(0xFF000000),
+                      colorSlot: 0));
               return n2.x == n1.x && n2.y == n1.y && n2.dir == n1.dir;
             });
-            
-        expect(isIdentical, isFalse, reason: 'Ledger should force diversity on same shared generator');
+
+        expect(isIdentical, isFalse,
+            reason: 'Ledger should force diversity on same shared generator');
       });
 
-      test('same level ID with same mode produces identical levels on neutral generator', () {
-        final result1 = LevelGenerator.neutral().generate(10, mode: DifficultyMode.hard);
-        final result2 = LevelGenerator.neutral().generate(10, mode: DifficultyMode.hard);
+      test(
+          'same level ID with same mode produces identical levels on neutral generator',
+          () {
+        final result1 =
+            LevelGenerator.neutral().generate(10, mode: DifficultyMode.hard);
+        final result2 =
+            LevelGenerator.neutral().generate(10, mode: DifficultyMode.hard);
 
         expect(result1.isSuccess, isTrue);
         expect(result2.isSuccess, isTrue);
@@ -411,24 +424,26 @@ void main() {
       test('generates correct number of positions', () {
         // Test with different node counts
         for (final nodeCount in [5, 10, 20]) {
-          final result = generator.generate(100 + nodeCount, mode: DifficultyMode.medium);
-          
+          final result =
+              generator.generate(100 + nodeCount, mode: DifficultyMode.medium);
+
           expect(result.isSuccess, isTrue);
           final level = result.value;
-          
+
           // The generated level should have the expected number of nodes
           // (or close to it, accounting for configuration calculations)
           expect(level.nodes.length, greaterThanOrEqualTo(3));
-          expect(level.nodes.length, lessThanOrEqualTo(level.gridWidth * level.gridHeight));
+          expect(level.nodes.length,
+              lessThanOrEqualTo(level.gridWidth * level.gridHeight));
         }
       });
 
       test('all positions are unique', () {
         final result = generator.generate(200, mode: DifficultyMode.medium);
-        
+
         expect(result.isSuccess, isTrue);
         final level = result.value;
-        
+
         // Create a set of position keys
         final positionKeys = <String>{};
         for (final node in level.nodes) {
@@ -437,17 +452,17 @@ void main() {
               reason: 'Position ($key) should be unique');
           positionKeys.add(key);
         }
-        
+
         // Verify all positions are unique
         expect(positionKeys.length, equals(level.nodes.length));
       });
 
       test('all positions within grid bounds', () {
         final result = generator.generate(300, mode: DifficultyMode.hard);
-        
+
         expect(result.isSuccess, isTrue);
         final level = result.value;
-        
+
         for (final node in level.nodes) {
           expect(node.x, greaterThanOrEqualTo(0),
               reason: 'Node x coordinate should be >= 0');
@@ -465,21 +480,21 @@ void main() {
         // We test by generating levels with the same difficulty but different IDs,
         // and verify that the seeded random generator is being used (even if
         // positions might occasionally be identical due to the random nature).
-        
+
         // Generate two levels with very different seeds
         final result1 = generator.generate(12345, mode: DifficultyMode.medium);
         final result2 = generator.generate(67890, mode: DifficultyMode.medium);
-        
+
         expect(result1.isSuccess, isTrue);
         expect(result2.isSuccess, isTrue);
-        
+
         final level1 = result1.value;
         final level2 = result2.value;
-        
+
         // Both levels should be valid
         expect(level1.nodes, isNotEmpty);
         expect(level2.nodes, isNotEmpty);
-        
+
         // Positions should be within bounds (this verifies the selection works)
         for (final node in level1.nodes) {
           expect(node.x, greaterThanOrEqualTo(0));
@@ -487,20 +502,21 @@ void main() {
           expect(node.y, greaterThanOrEqualTo(0));
           expect(node.y, lessThan(level1.gridHeight));
         }
-        
+
         for (final node in level2.nodes) {
           expect(node.x, greaterThanOrEqualTo(0));
           expect(node.x, lessThan(level2.gridWidth));
           expect(node.y, greaterThanOrEqualTo(0));
           expect(node.y, lessThan(level2.gridHeight));
         }
-        
+
         // The key test: verify that the same seed produces the same positions
         // (this proves the random seed is being used)
-        final result1Again = generator.generate(12345, mode: DifficultyMode.medium);
+        final result1Again =
+            generator.generate(12345, mode: DifficultyMode.medium);
         expect(result1Again.isSuccess, isTrue);
         final level1Again = result1Again.value;
-        
+
         // Same seed should produce identical positions
         expect(level1.nodes.length, equals(level1Again.nodes.length));
         for (int i = 0; i < level1.nodes.length; i++) {
@@ -513,18 +529,18 @@ void main() {
         // Test with a small grid and many nodes to verify position selection
         // handles high density scenarios
         final result = generator.generate(600, mode: DifficultyMode.hard);
-        
+
         expect(result.isSuccess, isTrue);
         final level = result.value;
-        
+
         // Calculate density
         final totalCells = level.gridWidth * level.gridHeight;
         final density = level.nodes.length / totalCells;
-        
+
         // Verify density is reasonable (not exceeding 100%)
         expect(density, lessThanOrEqualTo(1.0),
             reason: 'Density should not exceed 100%');
-        
+
         // Verify all positions are unique even in high density
         final positionKeys = level.nodes.map((n) => '${n.x},${n.y}').toSet();
         expect(positionKeys.length, equals(level.nodes.length),
@@ -535,17 +551,17 @@ void main() {
     group('solution path creation', () {
       test('solution path contains all positions', () {
         final result = generator.generate(400, mode: DifficultyMode.medium);
-        
+
         expect(result.isSuccess, isTrue);
         final level = result.value;
-        
+
         // Extract all positions from nodes
         final nodePositions = level.nodes.map((n) => '${n.x},${n.y}').toSet();
-        
+
         // Verify we have the expected number of unique positions
         expect(nodePositions.length, equals(level.nodes.length),
             reason: 'All node positions should be unique');
-        
+
         // Verify all nodes have valid IDs (0 to n-1)
         final nodeIds = level.nodes.map((n) => n.id).toList()..sort();
         for (int i = 0; i < nodeIds.length; i++) {
@@ -559,21 +575,21 @@ void main() {
         // Note: With the current stub implementation of _assignDirections,
         // validation may fail and fallback levels may be generated.
         // The key test is that the same seed produces the same result (deterministic).
-        
+
         // Generate the same level twice to verify shuffling is deterministic
         final result1 = generator.generate(500, mode: DifficultyMode.medium);
         final result2 = generator.generate(500, mode: DifficultyMode.medium);
-        
+
         expect(result1.isSuccess, isTrue);
         expect(result2.isSuccess, isTrue);
-        
+
         final level1 = result1.value;
         final level2 = result2.value;
-        
+
         // Both levels should have nodes
         expect(level1.nodes, isNotEmpty);
         expect(level2.nodes, isNotEmpty);
-        
+
         // Extract solution paths (node positions in ID order)
         final path1 = List<String>.generate(
           level1.nodes.length,
@@ -582,7 +598,7 @@ void main() {
             return '${node.x},${node.y}';
           },
         );
-        
+
         final path2 = List<String>.generate(
           level2.nodes.length,
           (i) {
@@ -590,20 +606,21 @@ void main() {
             return '${node.x},${node.y}';
           },
         );
-        
+
         // Verify both paths are valid (all positions unique)
         expect(path1.toSet().length, equals(path1.length),
             reason: 'Path 1 should have unique positions');
         expect(path2.toSet().length, equals(path2.length),
             reason: 'Path 2 should have unique positions');
-        
+
         // Same seed should produce identical paths (verifies deterministic shuffling)
         expect(path1.length, equals(path2.length));
         for (int i = 0; i < path1.length; i++) {
           expect(path1[i], equals(path2[i]),
-              reason: 'Same seed should produce identical solution path at index $i');
+              reason:
+                  'Same seed should produce identical solution path at index $i');
         }
-        
+
         // The shuffling mechanism is working correctly if the same seed
         // produces the same result. This is the core requirement for
         // solution path creation.
@@ -613,16 +630,16 @@ void main() {
         // Generate the same level twice
         final result1 = generator.generate(600, mode: DifficultyMode.medium);
         final result2 = generator.generate(600, mode: DifficultyMode.medium);
-        
+
         expect(result1.isSuccess, isTrue);
         expect(result2.isSuccess, isTrue);
-        
+
         final level1 = result1.value;
         final level2 = result2.value;
-        
+
         // Both levels should have the same number of nodes
         expect(level1.nodes.length, equals(level2.nodes.length));
-        
+
         // Extract solution paths (node positions in ID order)
         final path1 = List<String>.generate(
           level1.nodes.length,
@@ -631,7 +648,7 @@ void main() {
             return '${node.x},${node.y}';
           },
         );
-        
+
         final path2 = List<String>.generate(
           level2.nodes.length,
           (i) {
@@ -639,19 +656,20 @@ void main() {
             return '${node.x},${node.y}';
           },
         );
-        
+
         // Same seed should produce identical solution paths
         expect(path1.length, equals(path2.length));
         for (int i = 0; i < path1.length; i++) {
           expect(path1[i], equals(path2[i]),
-              reason: 'Same seed should produce identical solution path at index $i');
+              reason:
+                  'Same seed should produce identical solution path at index $i');
         }
-        
+
         // Also verify node IDs match positions
         for (int i = 0; i < level1.nodes.length; i++) {
           final node1 = level1.nodes.firstWhere((n) => n.id == i);
           final node2 = level2.nodes.firstWhere((n) => n.id == i);
-          
+
           expect(node1.x, equals(node2.x),
               reason: 'Node $i should have same x coordinate');
           expect(node1.y, equals(node2.y),

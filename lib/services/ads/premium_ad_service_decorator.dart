@@ -3,7 +3,7 @@ import '../subscription/subscription_locator.dart';
 import 'ad_service.dart';
 
 /// Wraps an [AdService] and intercepts calls if the user is premium.
-/// 
+///
 /// For premium users:
 /// - Rewarded ads are considered instantly "ready" and "shown successfully" (to unblock gameplay features).
 /// - Interstitials and banners are bypassed.

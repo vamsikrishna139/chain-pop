@@ -147,7 +147,10 @@ void main() {
       final level = _level(
         gridW: 4,
         gridH: 4,
-        cells: [for (var y = 0; y < 4; y++) for (var x = 0; x < 4; x++) (x, y)],
+        cells: [
+          for (var y = 0; y < 4; y++)
+            for (var x = 0; x < 4; x++) (x, y)
+        ],
       );
       final c = CompositionMetrics.compute(level);
       expect(c.largestEmptyRowRun, 0);
@@ -157,7 +160,8 @@ void main() {
     });
 
     test('an empty level degrades gracefully', () {
-      final c = CompositionMetrics.compute(_level(gridW: 5, gridH: 5, cells: []));
+      final c =
+          CompositionMetrics.compute(_level(gridW: 5, gridH: 5, cells: []));
       expect(c.largestEmptyRegion, 0);
       expect(c.meanLocalDensity, 0);
     });

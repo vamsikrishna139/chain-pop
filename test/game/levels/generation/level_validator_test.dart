@@ -247,8 +247,7 @@ void main() {
       });
 
       test('detects blocking node to the right (Direction.right)', () {
-        final nodeToRemove =
-            NodeData(id: 0, x: 1, y: 2, dir: Direction.right);
+        final nodeToRemove = NodeData(id: 0, x: 1, y: 2, dir: Direction.right);
         final blockingNode = NodeData(id: 1, x: 3, y: 2, dir: Direction.left);
         final allNodes = [nodeToRemove, blockingNode];
 
@@ -308,7 +307,8 @@ void main() {
           gridWidth: 4,
           gridHeight: 4,
           nodes: [
-            NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay),
+            NodeData(
+                id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay),
             NodeData(id: 1, x: 2, y: 0, dir: Direction.up),
             NodeData(id: 2, x: 3, y: 0, dir: Direction.down),
           ],
@@ -329,7 +329,8 @@ void main() {
           gridWidth: 4,
           gridHeight: 4,
           nodes: [
-            NodeData(id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay),
+            NodeData(
+                id: 0, x: 0, y: 0, dir: Direction.left, kind: NodeKind.relay),
             NodeData(id: 1, x: 2, y: 0, dir: Direction.down),
             NodeData(id: 2, x: 2, y: 1, dir: Direction.left),
           ],

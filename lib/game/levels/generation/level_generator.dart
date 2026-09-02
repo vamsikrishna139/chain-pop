@@ -657,6 +657,7 @@ class LevelGenerator {
         // exhausts its attempts). It only ever *shortens* the seeded search,
         // and only once there is a retained board to ship.
         final seedWatch = timeBudget != null ? (Stopwatch()..start()) : null;
+
         /// Valid + solvable seeded board that could not seat the level's full
         /// lock/relay budget. Shipping it keeps the milestone's pinned identity
         /// (silhouette, archetype, telemetry seed id); the alternative —
@@ -749,7 +750,8 @@ class LevelGenerator {
         // is one: a milestone that is one lock short still reads as the
         // milestone, whereas a procedural board does not.
         if (seedMechanicShort != null) {
-          _seedEmissionCounts[seed.id] = (_seedEmissionCounts[seed.id] ?? 0) + 1;
+          _seedEmissionCounts[seed.id] =
+              (_seedEmissionCounts[seed.id] ?? 0) + 1;
           _assertGeneratedLayout(seedMechanicShort);
           _pendingEmission = seedMechanicShortEmission;
           _commitPendingEmission();
@@ -786,8 +788,10 @@ class LevelGenerator {
     // runs the same [timeBudget] on its own stopwatch instead, so a fall-
     // through arrives here with a full clock.
     final budgetWatch = timeBudget != null ? (Stopwatch()..start()) : null;
+
     /// Valid + solvable, but missed the ideal removal-wave band.
     LevelData? budgetFallback;
+
     /// Valid + solvable, but short of the level's lock/relay budget. Strictly
     /// worse than [budgetFallback], so only shipped when nothing else exists.
     LevelData? mechanicShortFallback;
@@ -1797,7 +1801,8 @@ class LevelGenerator {
       final scorer = CandidateScorer(weights: plan.spec.scorerWeights);
       final tier =
           targetTier ?? DifficultyProfile.tierFromMode(config.difficulty.mode);
-      final budget = budgetFor(levelId: config.levelId, mode: config.difficulty.mode);
+      final budget =
+          budgetFor(levelId: config.levelId, mode: config.difficulty.mode);
       final constructor = RetrogradeConstructor(
         gridWidth: config.gridWidth,
         gridHeight: config.gridHeight,

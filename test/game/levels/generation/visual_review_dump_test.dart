@@ -1,6 +1,7 @@
 // ignore_for_file: avoid_print
 @Tags(['report'])
 library;
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:chain_pop/game/levels/analytics/generation_analytics.dart';
@@ -54,15 +55,18 @@ void main() {
           'nodesData': [
             for (final n in l.nodes)
               {
-                'x': n.x, 'y': n.y, 'd': n.dir.name,
-                'k': n.kind.name, 'c': n.isCore ? 1 : 0,
+                'x': n.x,
+                'y': n.y,
+                'd': n.dir.name,
+                'k': n.kind.name,
+                'c': n.isCore ? 1 : 0,
               }
           ],
         });
       }
     }
-    final f = File(Platform.environment['REVIEW_DUMP_PATH'] ??
-        'build/review_boards.json');
+    final f = File(
+        Platform.environment['REVIEW_DUMP_PATH'] ?? 'build/review_boards.json');
     f.parent.createSync(recursive: true);
     f.writeAsStringSync(jsonEncode(out));
     print('wrote ${out.length} boards to ${f.path}');

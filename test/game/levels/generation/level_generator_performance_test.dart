@@ -21,7 +21,8 @@ void main() {
     var total = Duration.zero;
     for (int i = 0; i < runs; i++) {
       final sw = Stopwatch()..start();
-      generator.generate(levelId + i); // vary ID slightly for realistic measurement
+      generator
+          .generate(levelId + i); // vary ID slightly for realistic measurement
       sw.stop();
       total += sw.elapsed;
     }
@@ -63,7 +64,7 @@ void main() {
       // Informational — always passes; shows timings in test output.
       final rows = <String>[];
       for (final entry in {
-        'Easy   (level 5)':  5,
+        'Easy   (level 5)': 5,
         'Medium (level 20)': 20,
         'Hard   (level 50)': 50,
         'Hard   (level 100)': 100,

@@ -29,8 +29,10 @@ Vector2 _local(NodeComponent c, Vector2 board) =>
     board - c.position + c.size / 2;
 
 /// Every node whose hit region claims [board].
-List<NodeComponent> _hits(List<NodeComponent> nodes, Vector2 board) =>
-    [for (final n in nodes) if (n.containsLocalPoint(_local(n, board))) n];
+List<NodeComponent> _hits(List<NodeComponent> nodes, Vector2 board) => [
+      for (final n in nodes)
+        if (n.containsLocalPoint(_local(n, board))) n
+    ];
 
 void main() {
   group('node hit box covers the whole cell', () {

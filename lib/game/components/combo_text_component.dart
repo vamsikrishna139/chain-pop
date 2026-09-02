@@ -51,7 +51,8 @@ class ComboTextComponent extends PositionComponent {
       _painter.width + 8,
       _painter.height + 8,
     );
-    canvas.saveLayer(rect, Paint()..color = Colors.white.withValues(alpha: fade));
+    canvas.saveLayer(
+        rect, Paint()..color = Colors.white.withValues(alpha: fade));
     _painter.paint(
       canvas,
       Offset(-_painter.width / 2, -_painter.height / 2),

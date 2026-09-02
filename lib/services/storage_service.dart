@@ -132,7 +132,8 @@ class StorageService {
   static Future<void> unlockLevelLegacy(int level) =>
       unlockLevel(selectedDifficulty, level);
 
-  static Future<void> clearProgress() => StorageLocator.instance.clearProgress();
+  static Future<void> clearProgress() =>
+      StorageLocator.instance.clearProgress();
 
   static Future<void> clearProgressForMode(DifficultyMode mode) =>
       StorageLocator.instance.clearProgressForMode(mode);

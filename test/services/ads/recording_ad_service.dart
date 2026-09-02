@@ -1,15 +1,17 @@
 import 'package:flutter/widgets.dart';
 
-import 'ad_service.dart';
+import 'package:chain_pop/services/ads/ad_service.dart';
 
 /// Observing [AdService] for tests (no SDK). Counts interstitial presentations.
 final class RecordingAdService implements AdService {
   RecordingAdService({
     this.interstitialResult = true,
+    this.rewardedResult = false,
     Future<void> Function()? beforeInterstitialReturns,
   }) : _beforeInterstitialReturns = beforeInterstitialReturns;
 
   final bool interstitialResult;
+  final bool rewardedResult;
   final Future<void> Function()? _beforeInterstitialReturns;
 
   final List<String> rewardedPreloadPlacements = [];
@@ -40,7 +42,8 @@ final class RecordingAdService implements AdService {
   }
 
   @override
-  Future<bool> showRewarded({required String placement}) async => false;
+  Future<bool> showRewarded({required String placement}) async =>
+      rewardedResult;
 
   @override
   Future<bool> showInterstitialIfReady({required String placement}) async {
@@ -52,7 +55,8 @@ final class RecordingAdService implements AdService {
   }
 
   @override
-  Widget buildDailyChallengeBanner(BuildContext context) => const SizedBox.shrink();
+  Widget buildDailyChallengeBanner(BuildContext context) =>
+      const SizedBox.shrink();
 
   @override
   Widget buildGamePauseBanner(BuildContext context) => const SizedBox.shrink();

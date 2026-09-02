@@ -94,7 +94,8 @@ void _recalibrate(DifficultyMode mode, DifficultyTier tier, double oldFloor) {
   }
 
   print('\n═══ ${mode.name.toUpperCase()} — old floor $oldFloor ═══');
-  _describe('discovery  L1-$kDiscoveryEnd  (EXCLUDED from derivation)', discovery);
+  _describe(
+      'discovery  L1-$kDiscoveryEnd  (EXCLUDED from derivation)', discovery);
   _describe('CALIBRATION L$kCalibStart-$kCalibEnd', calib);
   _describe('validation L$kValidStart-$kValidEnd (held out)', valid);
 
@@ -131,7 +132,8 @@ void _recalibrate(DifficultyMode mode, DifficultyTier tier, double oldFloor) {
     final below = e.$2.where((s) => s < proposed).length;
     final oldBelow = e.$2.where((s) => s < oldFloor).length;
     final sorted = [...e.$2]..sort();
-    print('  vs ${e.$1.padRight(20)} p10=${_at(sorted, 0.10).toStringAsFixed(4)}  '
+    print(
+        '  vs ${e.$1.padRight(20)} p10=${_at(sorted, 0.10).toStringAsFixed(4)}  '
         'clears proposed: ${_at(sorted, 0.10) >= proposed ? "YES" : "NO"}   '
         'below proposed $below/${e.$2.length}   '
         'below old $oldFloor: $oldBelow/${e.$2.length}');

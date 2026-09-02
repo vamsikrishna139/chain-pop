@@ -23,7 +23,8 @@ Future<void> showGameSettingsSheet({
           return Container(
             decoration: BoxDecoration(
               color: const Color(0xFF14141C),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(24)),
               border: Border(
                 top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
               ),
@@ -69,7 +70,8 @@ Future<void> showGameSettingsSheet({
                               color: Colors.white.withValues(alpha: 0.05),
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.close_rounded, size: 16, color: Colors.white70),
+                            child: const Icon(Icons.close_rounded,
+                                size: 16, color: Colors.white70),
                           ),
                         ),
                       ],
@@ -77,7 +79,7 @@ Future<void> showGameSettingsSheet({
                     const SizedBox(height: 8),
                     Divider(color: Colors.white.withValues(alpha: 0.1)),
                     const SizedBox(height: 16),
-                    
+
                     Text(
                       'GAME TOGGLES',
                       style: GoogleFonts.jetBrainsMono(
@@ -88,7 +90,7 @@ Future<void> showGameSettingsSheet({
                       ),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     _buildToggle(
                       title: 'Sound Effects',
                       subtitle: 'Harmonic node chimes & feedback',
@@ -153,11 +155,11 @@ Future<void> showGameSettingsSheet({
                         setModalState(() {});
                       },
                     ),
-                    
+
                     const SizedBox(height: 16),
                     Divider(color: Colors.white.withValues(alpha: 0.1)),
                     const SizedBox(height: 16),
-                    
+
                     PrivacyAdsSettingsSection(accent: accent),
                   ],
                 ),

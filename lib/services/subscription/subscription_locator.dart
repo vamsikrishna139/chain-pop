@@ -8,7 +8,8 @@ class SubscriptionLocator {
 
   static SubscriptionService get instance {
     if (_instance == null) {
-      throw StateError('SubscriptionService not installed. Call SubscriptionLocator.install() first.');
+      throw StateError(
+          'SubscriptionService not installed. Call SubscriptionLocator.install() first.');
     }
     return _instance!;
   }

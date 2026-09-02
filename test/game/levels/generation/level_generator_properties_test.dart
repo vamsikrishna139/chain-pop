@@ -25,9 +25,9 @@ void main() {
 
   // Sample of level IDs spanning all difficulties: easy (1-9), medium (10-29), hard (30+)
   final sampleIds = [
-    1, 3, 5, 8,           // easy
-    10, 15, 20, 28,       // medium
-    30, 50, 75, 100,      // hard
+    1, 3, 5, 8, // easy
+    10, 15, 20, 28, // medium
+    30, 50, 75, 100, // hard
   ];
 
   // ─── Property 1: Guaranteed Solvability ──────────────────────────────────
@@ -69,8 +69,10 @@ void main() {
     // The assertions are unchanged. Do not weaken this to a validity check.
     test('Same level ID always produces identical levels', () {
       for (final id in sampleIds) {
-        final r1 = LevelGenerator.neutral(enableDiversityGating: false).generate(id);
-        final r2 = LevelGenerator.neutral(enableDiversityGating: false).generate(id);
+        final r1 =
+            LevelGenerator.neutral(enableDiversityGating: false).generate(id);
+        final r2 =
+            LevelGenerator.neutral(enableDiversityGating: false).generate(id);
         expect(r1.isSuccess, isTrue);
         expect(r2.isSuccess, isTrue);
 
@@ -96,12 +98,15 @@ void main() {
         final l2 = generator.generate(id + 1).value;
 
         // Compare node positions as a fingerprint
-        final sig1 = l1.nodes.map((n) => '${n.x},${n.y},${n.dir.name}').join('|');
-        final sig2 = l2.nodes.map((n) => '${n.x},${n.y},${n.dir.name}').join('|');
+        final sig1 =
+            l1.nodes.map((n) => '${n.x},${n.y},${n.dir.name}').join('|');
+        final sig2 =
+            l2.nodes.map((n) => '${n.x},${n.y},${n.dir.name}').join('|');
         if (sig1 == sig2) duplicates++;
       }
       // Allow at most 1 collision in 20 pairs (practically 0)
-      expect(duplicates, lessThan(2), reason: 'Too many duplicate level layouts');
+      expect(duplicates, lessThan(2),
+          reason: 'Too many duplicate level layouts');
     });
   });
 
@@ -133,9 +138,9 @@ void main() {
     test('Grid dimensions respect difficulty constraints', () {
       // Easy: 4–8, Medium: 6–9, Hard: 7–10 (log growth)
       final bounds = {
-        DifficultyMode.easy:   (4, 8),
+        DifficultyMode.easy: (4, 8),
         DifficultyMode.medium: (6, 9),
-        DifficultyMode.hard:   (7, 10),
+        DifficultyMode.hard: (7, 10),
       };
       for (final entry in bounds.entries) {
         final level = generator.generate(1, mode: entry.key).value;

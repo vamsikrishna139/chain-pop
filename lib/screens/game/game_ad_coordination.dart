@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/ads/ad_placements.dart';
 import '../../services/ads/campaign_interstitial_frustration_gate.dart';
+import '../../services/analytics/analytics_locator.dart';
 import '../../services/game_sfx.dart';
 import 'game_screen_controller_host.dart';
 import 'widgets/game_dialogs.dart';
@@ -62,6 +63,7 @@ final class GameAdCoordinator {
     _host.timers.ghostHintTimer?.cancel();
     _host.engine.isGameOver = true;
     _host.engine.playSfx(GameSfx.gameOver);
+    AnalyticsLocator.instance.logLevelFail(params: _host.analyticsParams);
     if (!_host.isTutorial && !_host.isDailyChallenge) {
       CampaignInterstitialFrustrationGate.noteFailedRunEnded();
     }
@@ -111,6 +113,7 @@ final class GameAdCoordinator {
 
     _host.engine.isGameOver = true;
     _host.engine.playSfx(GameSfx.gameOver);
+    AnalyticsLocator.instance.logLevelFail(params: _host.analyticsParams);
     if (!_host.isTutorial && !_host.isDailyChallenge) {
       CampaignInterstitialFrustrationGate.noteFailedRunEnded();
     }
@@ -181,9 +184,28 @@ final class GameAdCoordinator {
         _host.engine.playSfx(GameSfx.uiTap);
         return;
       }
-      final ok = await _host.ads.showRewarded(placement: AdPlacements.undo);
+      _host.timers.countdownTimer?.cancel();
+      _host.timers.ghostHintTimer?.cancel();
+      if (_host.stopwatch.isRunning) _host.stopwatch.stop();
+      _host.engine.pauseEngine();
+
+      bool ok = false;
+      try {
+        ok = await _host.ads.showRewarded(placement: AdPlacements.undo);
+      } finally {
+        if (_host.mounted && !_host.isPaused) {
+          _host.engine.resumeEngine();
+          if (!_host.stopwatch.isRunning) _host.stopwatch.start();
+          _host.startCountdown();
+          if (_host.engine.hasAvailableHint()) {
+            _host.resetGhostHintTimer();
+          }
+        }
+      }
+
       if (!_host.mounted || !ok) return;
       if (!_host.engine.undo()) return;
+      AnalyticsLocator.instance.logUndoUsed(params: _host.analyticsParams);
       _host.undoAdPolicy.recordRewardedUndo();
       _host.engine.playSfx(GameSfx.uiTap);
       _host.resetGhostHintTimer();
@@ -193,6 +215,7 @@ final class GameAdCoordinator {
     }
 
     if (_host.engine.undo()) {
+      AnalyticsLocator.instance.logUndoUsed(params: _host.analyticsParams);
       _host.undoAdPolicy.recordFreeUndo();
       _host.engine.playSfx(GameSfx.uiTap);
       _host.resetGhostHintTimer();
@@ -212,6 +235,7 @@ final class GameAdCoordinator {
 
     if (!_host.gateHintsWithAds) {
       _host.engine.showHint();
+      AnalyticsLocator.instance.logHintUsed(params: _host.analyticsParams);
       _host.resetGhostHintTimer();
       return;
     }
@@ -234,9 +258,28 @@ final class GameAdCoordinator {
         _host.engine.playSfx(GameSfx.uiTap);
         return;
       }
-      final ok = await _host.ads.showRewarded(placement: AdPlacements.hint);
+      _host.timers.countdownTimer?.cancel();
+      _host.timers.ghostHintTimer?.cancel();
+      if (_host.stopwatch.isRunning) _host.stopwatch.stop();
+      _host.engine.pauseEngine();
+
+      bool ok = false;
+      try {
+        ok = await _host.ads.showRewarded(placement: AdPlacements.hint);
+      } finally {
+        if (_host.mounted && !_host.isPaused) {
+          _host.engine.resumeEngine();
+          if (!_host.stopwatch.isRunning) _host.stopwatch.start();
+          _host.startCountdown();
+          if (_host.engine.hasAvailableHint()) {
+            _host.resetGhostHintTimer();
+          }
+        }
+      }
+
       if (!_host.mounted || !ok) return;
       if (!_host.engine.showHint()) return;
+      AnalyticsLocator.instance.logHintUsed(params: _host.analyticsParams);
       _host.hintAdPolicy.recordRewardedHint();
       _host.resetGhostHintTimer();
       _host.markDirty(() {});
@@ -245,6 +288,7 @@ final class GameAdCoordinator {
     }
 
     if (!_host.engine.showHint()) return;
+    AnalyticsLocator.instance.logHintUsed(params: _host.analyticsParams);
     _host.hintAdPolicy.recordFreeHint();
     _host.resetGhostHintTimer();
     _host.markDirty(() {});

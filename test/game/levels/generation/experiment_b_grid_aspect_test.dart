@@ -150,9 +150,8 @@ void main() {
           gridHeight: gh,
         );
         agg.cell.add(cell);
-        agg.cover.add(100 *
-            (gw * gh * cell * cell) /
-            ReferenceDevice.iphone390.bandArea);
+        agg.cover.add(
+            100 * (gw * gh * cell * cell) / ReferenceDevice.iphone390.bandArea);
         agg.gridOcc.add(100 * m.nodeCount / (gw * gh));
       }
       results[label] = agg;
@@ -160,7 +159,8 @@ void main() {
           '${agg.failures} failed)');
     }
 
-    print('\n  ${"grid".padRight(8)}${"nodes".padLeft(8)}${"open p50".padLeft(9)}'
+    print(
+        '\n  ${"grid".padRight(8)}${"nodes".padLeft(8)}${"open p50".padLeft(9)}'
         '${"open max".padLeft(9)}${"openOK".padLeft(8)}${"FSR p50".padLeft(9)}'
         '${"CUD p50".padLeft(9)}${"waves".padLeft(8)}${"BF p50".padLeft(8)}'
         '${"inBand".padLeft(8)}${"gen p95".padLeft(9)}'
@@ -187,7 +187,8 @@ void main() {
           '${a.failures.toString().padLeft(6)}');
     }
     print('\n  openOK = openings inside the honest [3,11] band.');
-    print('  cover/cell measured on 390x844 under the shipped per-axis fitter.');
+    print(
+        '  cover/cell measured on 390x844 under the shipped per-axis fitter.');
     print('');
   }, timeout: const Timeout(Duration(minutes: 60)));
 }

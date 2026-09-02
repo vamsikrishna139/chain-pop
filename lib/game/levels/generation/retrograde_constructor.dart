@@ -181,19 +181,21 @@ class RetrogradeConstructor {
         }
         return true;
       }).toList();
-      
+
       availableCells.shuffle(random);
       int portalsCreated = 0;
-      
+
       while (portalsCreated < portalPairCount && availableCells.length >= 2) {
         final c1 = availableCells.removeLast();
         final c2 = availableCells.removeLast();
-        placedPortals.add(PortalPair(c1 % 1000, c1 ~/ 1000, c2 % 1000, c2 ~/ 1000));
+        placedPortals
+            .add(PortalPair(c1 % 1000, c1 ~/ 1000, c2 % 1000, c2 ~/ 1000));
         portalsCreated++;
       }
-      
+
       if (placedPortals.isNotEmpty) {
-        sightlines = SightlineTable.forGrid(gridWidth, gridHeight, portals: placedPortals);
+        sightlines = SightlineTable.forGrid(gridWidth, gridHeight,
+            portals: placedPortals);
       }
     }
 
@@ -233,8 +235,10 @@ class RetrogradeConstructor {
         baseline = candidate;
         final third = max(1, candidate.length ~/ 3);
         final lower = min(3, third);
-        final targetRemovalIdx =
-            (candidate.length * 0.30).round().clamp(lower, max(lower, third)).toInt();
+        final targetRemovalIdx = (candidate.length * 0.30)
+            .round()
+            .clamp(lower, max(lower, third))
+            .toInt();
         final startRemoval = max(0, targetRemovalIdx - 2);
         final endRemoval = min(candidate.length - 1, targetRemovalIdx + 2);
         if (startRemoval <= endRemoval) {
@@ -269,7 +273,7 @@ class RetrogradeConstructor {
         if (retry > 0) constructionSolvabilityRetries++;
         winningBlockingRetryIndex = retry;
         scorer.crunchZoneBlockingPicked = reassignmentCrunchFlips;
-        
+
         var finalResult = reassigned;
         if (tier != null) {
           final maxOpening = _maxOpeningByTier[tier];
@@ -333,8 +337,7 @@ class RetrogradeConstructor {
         liberationPosition: liberationPos,
       );
 
-      final candidates =
-          _enumerateCandidates(state, blacklist, const <int>{});
+      final candidates = _enumerateCandidates(state, blacklist, const <int>{});
       if (candidates.isEmpty) {
         if (rollbackDepth >= maxRollbackDepth) return null;
         if (totalRollbacks >= maxTotalRollbacks) return null;
@@ -369,7 +372,8 @@ class RetrogradeConstructor {
     return placements;
   }
 
-  List<RetrogradePlacement>? _constructDeferredMotifs({Point<int>? liberationPos}) {
+  List<RetrogradePlacement>? _constructDeferredMotifs(
+      {Point<int>? liberationPos}) {
     final allReservations = reservations;
     final seenKeys = <int>{};
     for (final r in allReservations) {
@@ -394,10 +398,9 @@ class RetrogradeConstructor {
       final threshold = m.id == MotifId.lockCluster
           ? kLockClusterMotifOccupancyThreshold
           : kDefaultMotifOccupancyThreshold;
-      final queue =
-          threshold == kLockClusterMotifOccupancyThreshold
-              ? lockClusterQueue
-              : genericQueue;
+      final queue = threshold == kLockClusterMotifOccupancyThreshold
+          ? lockClusterQueue
+          : genericQueue;
       for (final r in m.reservations) {
         queue.add(r);
         unplacedMotifKeys.add(r.cellKey);
@@ -527,8 +530,7 @@ class RetrogradeConstructor {
         final targetQueue = lockClusterQueue.isNotEmpty &&
                 bulkPrefixCompleteFor(lockClusterQueue)
             ? lockClusterQueue
-            : (genericQueue.isNotEmpty &&
-                    bulkPrefixCompleteFor(genericQueue)
+            : (genericQueue.isNotEmpty && bulkPrefixCompleteFor(genericQueue)
                 ? genericQueue
                 : null);
         if (targetQueue != null && targetQueue.isNotEmpty) {
@@ -544,8 +546,7 @@ class RetrogradeConstructor {
               break;
             }
             if (targetQueue.length > 1) {
-              final rotated = targetQueue.sublist(1)
-                ..add(targetQueue.first);
+              final rotated = targetQueue.sublist(1)..add(targetQueue.first);
               if (identical(targetQueue, lockClusterQueue)) {
                 lockClusterQueue = rotated;
               } else {
@@ -642,8 +643,7 @@ class RetrogradeConstructor {
 
     final motifKeys = <int>{
       for (final m in motifPlacements)
-        for (final r in m.reservations)
-          r.cellKey,
+        for (final r in m.reservations) r.cellKey,
     };
 
     final result = [
@@ -680,11 +680,13 @@ class RetrogradeConstructor {
       if (random.nextDouble() >= flipProbability) continue;
 
       final dep = _buildDependencyIndex(result);
-      
+
       bool pickedLiberation = false;
       if (liberationNodeId != null && liberationNodeId < i) {
         final libPos = result[liberationNodeId].position;
-        final libDirs = blockingDirs.where((d) => _pointsTowardLiberation(node.position, d, libPos)).toList();
+        final libDirs = blockingDirs
+            .where((d) => _pointsTowardLiberation(node.position, d, libPos))
+            .toList();
         if (libDirs.isNotEmpty && random.nextDouble() < 0.60) {
           result[i] = RetrogradePlacement(
             position: node.position,
@@ -697,7 +699,8 @@ class RetrogradeConstructor {
 
       if (pickedLiberation) continue;
 
-      final picked = _pickScoredBlockingDirection(i, blockingDirs, result, dep, liberationNodeId: liberationNodeId);
+      final picked = _pickScoredBlockingDirection(i, blockingDirs, result, dep,
+          liberationNodeId: liberationNodeId);
       result[i] = RetrogradePlacement(
         position: node.position,
         direction: picked,
@@ -720,12 +723,17 @@ class RetrogradeConstructor {
     );
   }
 
-  bool _pointsTowardLiberation(Point<int> from, Direction dir, Point<int> liberation) {
+  bool _pointsTowardLiberation(
+      Point<int> from, Direction dir, Point<int> liberation) {
     switch (dir) {
-      case Direction.right: return liberation.y == from.y && liberation.x > from.x;
-      case Direction.left:  return liberation.y == from.y && liberation.x < from.x;
-      case Direction.down:  return liberation.x == from.x && liberation.y > from.y;
-      case Direction.up:    return liberation.x == from.x && liberation.y < from.y;
+      case Direction.right:
+        return liberation.y == from.y && liberation.x > from.x;
+      case Direction.left:
+        return liberation.y == from.y && liberation.x < from.x;
+      case Direction.down:
+        return liberation.x == from.x && liberation.y > from.y;
+      case Direction.up:
+        return liberation.x == from.x && liberation.y < from.y;
     }
   }
 
@@ -893,7 +901,6 @@ class RetrogradeConstructor {
       final opening = _waveZeroWidth(current);
       if (opening <= maxOpening && opening >= minOpening) break;
 
-
       final freeIndices = _rayFreeIndices(current);
       freeIndices.sort((a, b) => b.compareTo(a));
 
@@ -962,7 +969,8 @@ class RetrogradeConstructor {
     return freeIndices;
   }
 
-  bool _validatesRemovalOrderIdSequence(List<RetrogradePlacement> removalOrder) {
+  bool _validatesRemovalOrderIdSequence(
+      List<RetrogradePlacement> removalOrder) {
     final nodes = <NodeData>[
       for (var i = 0; i < removalOrder.length; i++)
         NodeData(
@@ -979,7 +987,8 @@ class RetrogradeConstructor {
       nodes: nodes,
     );
     final remaining = nodes.map((n) => n.clone()).toList();
-    final byId = List<NodeData>.from(nodes)..sort((a, b) => a.id.compareTo(b.id));
+    final byId = List<NodeData>.from(nodes)
+      ..sort((a, b) => a.id.compareTo(b.id));
     for (final n in byId) {
       if (!LevelSolver.canRemove(n, remaining, level)) return false;
       remaining.removeWhere((r) => r.id == n.id);

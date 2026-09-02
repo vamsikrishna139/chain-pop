@@ -260,8 +260,9 @@ class CandidateScorer {
               state.gridHeight,
             ) *
             kRayInterceptWeight;
-        
-        total += _calculateLiberationAxisBonus(c, state.liberationPosition, occ);
+
+        total +=
+            _calculateLiberationAxisBonus(c, state.liberationPosition, occ);
       } else if (occ > 0.65 && c.isBlockingRay) {
         total -= kBlockingDirectionPenalty;
       }
@@ -269,15 +270,18 @@ class CandidateScorer {
     return total;
   }
 
-  double _calculateLiberationAxisBonus(Candidate candidate, Point<int>? liberationPos, double occupancy) {
-    if (liberationPos == null || occupancy < 0.35 || occupancy > 0.65) return 0.0;
-    
+  double _calculateLiberationAxisBonus(
+      Candidate candidate, Point<int>? liberationPos, double occupancy) {
+    if (liberationPos == null || occupancy < 0.35 || occupancy > 0.65)
+      return 0.0;
+
     // Check if the candidate coordinate shares a clean X or Y axis with the liberation hub
-    bool sharesAxis = candidate.cell.x == liberationPos.x || candidate.cell.y == liberationPos.y;
-    
+    bool sharesAxis = candidate.cell.x == liberationPos.x ||
+        candidate.cell.y == liberationPos.y;
+
     if (sharesAxis) {
-      int manhattanDistance = (candidate.cell.x - liberationPos.x).abs() + 
-                              (candidate.cell.y - liberationPos.y).abs();
+      int manhattanDistance = (candidate.cell.x - liberationPos.x).abs() +
+          (candidate.cell.y - liberationPos.y).abs();
       // Heavily reward close proximity along the same orthogonal lanes
       if (manhattanDistance <= 4) return 3.5;
       return 1.5;
@@ -308,10 +312,7 @@ class CandidateScorer {
     for (final off in _offsetsFor(state.eightConnected)) {
       final nx = x + off.$1;
       final ny = y + off.$2;
-      if (nx < 0 ||
-          nx >= state.gridWidth ||
-          ny < 0 ||
-          ny >= state.gridHeight) {
+      if (nx < 0 || nx >= state.gridWidth || ny < 0 || ny >= state.gridHeight) {
         continue;
       }
       final nkey = gridCellKey(nx, ny);

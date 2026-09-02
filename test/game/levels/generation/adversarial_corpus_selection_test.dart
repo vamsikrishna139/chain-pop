@@ -33,7 +33,7 @@
 //
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'dart:math';
@@ -169,7 +169,8 @@ void main() {
       final cells = <String, List<BoardRow>>{};
       for (final r in members) {
         cells
-            .putIfAbsent('${_sectorBand(r.sector)}/c${r.cores}', () => <BoardRow>[])
+            .putIfAbsent(
+                '${_sectorBand(r.sector)}/c${r.cores}', () => <BoardRow>[])
             .add(r);
       }
       final keys = cells.keys.toList()..sort();
@@ -193,7 +194,8 @@ void main() {
       }
       expect(picked, hasLength(kPerQuintile),
           reason: 'Q$q could not fill $kPerQuintile boards');
-      print('\n  Q$q cells: ${keys.map((k) => "$k=${cells[k]!.length}").join("  ")}');
+      print(
+          '\n  Q$q cells: ${keys.map((k) => "$k=${cells[k]!.length}").join("  ")}');
       severity.addAll(picked);
     }
 
@@ -233,8 +235,10 @@ void main() {
       }
       final sk = bySector.keys.toList()..sort();
       final ck = byCores.keys.toList()..sort();
-      print('  $label sectors: ${sk.map((s) => "S$s=${bySector[s]}").join("  ")}');
-      print('  $label cores  : ${ck.map((c) => "$c=${byCores[c]}").join("  ")}');
+      print(
+          '  $label sectors: ${sk.map((s) => "S$s=${bySector[s]}").join("  ")}');
+      print(
+          '  $label cores  : ${ck.map((c) => "$c=${byCores[c]}").join("  ")}');
     }
 
     print('\n===== REALISED COMPOSITION =====');

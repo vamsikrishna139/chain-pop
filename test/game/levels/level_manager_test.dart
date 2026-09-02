@@ -74,9 +74,7 @@ void main() {
       expect(a.nodes.length, b.nodes.length);
 
       String sig(LevelData l) {
-        final parts = l.nodes
-            .map((n) => '${n.x},${n.y},${n.dir.name}')
-            .toList()
+        final parts = l.nodes.map((n) => '${n.x},${n.y},${n.dir.name}').toList()
           ..sort();
         return parts.join('|');
       }
@@ -85,13 +83,12 @@ void main() {
       expect(LevelSolver.isSolvable(a), isTrue);
     });
 
-    test('distinct calendar days produce distinct layouts (not fallback strip)', () {
+    test('distinct calendar days produce distinct layouts (not fallback strip)',
+        () {
       final d1 = LevelManager.getDailyChallenge(DateTime(2026, 4, 1));
       final d2 = LevelManager.getDailyChallenge(DateTime(2026, 4, 2));
       String sig(LevelData l) {
-        final parts = l.nodes
-            .map((n) => '${n.x},${n.y},${n.dir.name}')
-            .toList()
+        final parts = l.nodes.map((n) => '${n.x},${n.y},${n.dir.name}').toList()
           ..sort();
         return '${l.nodes.length}|${parts.join('|')}';
       }

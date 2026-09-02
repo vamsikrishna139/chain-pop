@@ -46,8 +46,8 @@ void main() {
 
     for (final mode in DifficultyMode.values) {
       for (var id = 1; id <= 1500; id += 7) {
-        final result = LevelGenerator.neutral()
-            .generate(id, mode: mode, timeBudget: null);
+        final result =
+            LevelGenerator.neutral().generate(id, mode: mode, timeBudget: null);
         if (!result.isSuccess) {
           broken.add('L$id/${mode.name}: ${result.error}');
           continue;
@@ -59,6 +59,7 @@ void main() {
     }
 
     expect(broken, isEmpty, reason: 'levels that will not generate');
-    expect(unsolvable, isEmpty, reason: 'levels that generate but cannot be won');
+    expect(unsolvable, isEmpty,
+        reason: 'levels that generate but cannot be won');
   }, timeout: const Timeout(Duration(minutes: 60)));
 }

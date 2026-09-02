@@ -1,12 +1,14 @@
 import 'package:chain_pop/services/ads/ad_placements.dart';
-import 'package:chain_pop/services/ads/recording_ad_service.dart';
+import 'ads/recording_ad_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('RecordingAdService', () {
-    test('showInterstitialIfReady records placement and honors result flag', () async {
+    test('showInterstitialIfReady records placement and honors result flag',
+        () async {
       final ok = RecordingAdService();
-      expect(await ok.showInterstitialIfReady(placement: AdPlacements.hint), isTrue);
+      expect(await ok.showInterstitialIfReady(placement: AdPlacements.hint),
+          isTrue);
       expect(ok.betweenLevelsInterstitialShows, 1);
       expect(ok.interstitialPlacements.single, AdPlacements.hint);
 
@@ -21,7 +23,8 @@ void main() {
     test('preload paths are observable', () async {
       final ads = RecordingAdService();
       await ads.preloadRewarded(AdPlacements.dailyUnlockPast);
-      expect(ads.rewardedPreloadPlacements.single, AdPlacements.dailyUnlockPast);
+      expect(
+          ads.rewardedPreloadPlacements.single, AdPlacements.dailyUnlockPast);
       await ads.preloadInterstitial();
       expect(ads.preloadInterstitialCalls, 1);
     });
@@ -33,7 +36,8 @@ void main() {
           ran = true;
         },
       );
-      await ads.showInterstitialIfReady(placement: AdPlacements.betweenLevelsStreak);
+      await ads.showInterstitialIfReady(
+          placement: AdPlacements.betweenLevelsStreak);
       expect(ran, isTrue);
     });
   });
