@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../../config/subscription_config.dart';
+import '../ads/ads_locator.dart';
 import '../analytics/analytics_locator.dart';
+import '../storage/storage_locator.dart';
 import 'subscription_service.dart';
 
 class RevenueCatSubscriptionService implements SubscriptionService {
@@ -19,6 +21,8 @@ class RevenueCatSubscriptionService implements SubscriptionService {
 
   @override
   Future<void> init() async {
+    _isPremiumNotifier.value = StorageLocator.instance.cachedPremium;
+
     await Purchases.setLogLevel(
       kDebugMode ? LogLevel.debug : LogLevel.info,
     );
@@ -67,6 +71,10 @@ class RevenueCatSubscriptionService implements SubscriptionService {
         true;
     if (_isPremiumNotifier.value != hasPremium) {
       _isPremiumNotifier.value = hasPremium;
+      StorageLocator.instance.setCachedPremium(hasPremium);
+      if (hasPremium) {
+        AdsLocator.instance.disposeLoadedAds();
+      }
       developer.log('Premium state updated: $hasPremium', name: _logName);
     }
   }
@@ -129,6 +137,30 @@ class RevenueCatSubscriptionService implements SubscriptionService {
     } catch (e) {
       developer.log('Failed to restore purchases: $e', name: _logName);
       return RestorePurchasesResult.failed;
+    }
+  }
+
+  @override
+  Future<void> refresh() async {
+    try {
+      final customerInfo = await Purchases.getCustomerInfo();
+      _updatePremiumState(customerInfo);
+    } catch (e) {
+      developer.log('Failed to refresh customer info: $e', name: _logName);
+    }
+  }
+
+  @override
+  Future<String?> getPremiumPrice() async {
+    try {
+      final offerings = await Purchases.getOfferings();
+      final current = offerings.current;
+      if (current == null || current.availablePackages.isEmpty) return null;
+      final package = current.lifetime ?? current.availablePackages.first;
+      return package.storeProduct.priceString;
+    } catch (e) {
+      developer.log('Failed to fetch premium price: $e', name: _logName);
+      return null;
     }
   }
 }

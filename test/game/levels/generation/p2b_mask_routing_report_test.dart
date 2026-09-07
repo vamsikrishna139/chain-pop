@@ -192,8 +192,9 @@ void _window(
     // `rectangle`, which undercounted every full grid that arrived under
     // another label.
     if (level.playCells == null) plainRect++;
-    if (sid == SilhouetteId.rectangle && level.playCells == null)
+    if (sid == SilhouetteId.rectangle && level.playCells == null) {
       plainRectLabelled++;
+    }
   }
   final counts = <SilhouetteVisualFamily, int>{};
   for (final f in seq) {

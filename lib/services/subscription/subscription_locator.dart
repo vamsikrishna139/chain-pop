@@ -14,6 +14,8 @@ class SubscriptionLocator {
     return _instance!;
   }
 
+  static SubscriptionService? get instanceOrNull => _instance;
+
   static void install(SubscriptionService service) {
     _instance = service;
   }

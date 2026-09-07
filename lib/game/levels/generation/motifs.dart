@@ -546,8 +546,9 @@ class _CascadeHub implements Motif {
         continue;
       }
 
-      if (!_allInSilhouette([...spokes, Point<int>(cx, cy)], silhouette))
+      if (!_allInSilhouette([...spokes, Point<int>(cx, cy)], silhouette)) {
         continue;
+      }
 
       // We must reverse the reservations so that spokes are placed first in retrograde
       // (meaning they are removed LAST in forward game) and center is placed last

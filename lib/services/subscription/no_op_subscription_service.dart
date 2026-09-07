@@ -15,4 +15,10 @@ class NoOpSubscriptionService implements SubscriptionService {
   @override
   Future<RestorePurchasesResult> restorePurchases() async =>
       RestorePurchasesResult.noneFound;
+
+  @override
+  Future<void> refresh() async {}
+
+  @override
+  Future<String?> getPremiumPrice() async => '\$1.99';
 }

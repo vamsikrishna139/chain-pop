@@ -9,21 +9,35 @@ import 'ad_debug_log.dart';
 ///
 /// Depends on `google_mobile_ads` UMP bindings; Android integrates WebView via
 /// `webview_flutter` as documented for Flutter + AdMob consent flows.
-Future<void> requestAdsConsentIfApplicable() async {
+Future<bool> requestAdsConsentIfApplicable() async {
   if (!(defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS)) {
     adDebug('UMP: skip (not Android/iOS)');
-    return;
+    return true;
   }
 
   adDebug('UMP: requestConsentInfoUpdate starting');
-  final done = Completer<void>();
+
+  // Two separate stages, with separate bounds:
+  //  1. `infoUpdate` — a pure network round trip. Bounded tightly (10s) so a
+  //     dead network never blocks ad init for the session.
+  //  2. `formDone` — may include the user reading and dismissing the GDPR
+  //     form. Bounded only by a generous safety net so a slow reader is never
+  //     cut off (the old single-completer 10s guillotine killed ads for the
+  //     whole session for anyone who took their time on the form).
+  final infoUpdate = Completer<bool>();
+  final formDone = Completer<void>();
 
   final params = ConsentRequestParameters(
     consentDebugSettings: kDebugMode
         ? ConsentDebugSettings(
             debugGeography: DebugGeography.debugGeographyEea,
-            testIdentifiers: ['698E8E4CEB6E2D57599CAB6E8F9459A9'],
+            testIdentifiers: [
+              '698E8E4CEB6E2D57599CAB6E8F9459A9',
+              // Pixel 8a (akita) — without this the EEA debug geography above
+              // is inert on that device and the consent form never shows.
+              'FCFF773E74258AAE1B16B64A296FD9ED',
+            ],
           )
         : null,
   );
@@ -32,26 +46,52 @@ Future<void> requestAdsConsentIfApplicable() async {
     params,
     () {
       adDebug('UMP: consent info updated, may show form');
-      unawaited(_presentConsentThen(done));
+      if (!infoUpdate.isCompleted) infoUpdate.complete(true);
+      unawaited(_presentConsentThen(formDone));
     },
     (FormError error) {
       adDebug('UMP: consent info update failed: ${error.message}');
       if (kDebugMode) {
         debugPrint('UMP consent info update failed: ${error.message}');
       }
-      if (!done.isCompleted) done.complete();
+      if (!infoUpdate.isCompleted) infoUpdate.complete(false);
+      if (!formDone.isCompleted) formDone.complete();
     },
   );
 
-  await done.future.timeout(
-    const Duration(seconds: 10),
-    onTimeout: () {
-      adDebug('UMP: Consent timed out — proceeding.');
-      if (kDebugMode) debugPrint('UMP: Consent timed out — proceeding.');
-      if (!done.isCompleted) done.complete();
-    },
-  );
-  adDebug('UMP: flow finished (proceed to MobileAds.initialize)');
+  // Stage 1: network only.
+  bool infoOk;
+  try {
+    infoOk = await infoUpdate.future.timeout(const Duration(seconds: 10));
+  } on TimeoutException {
+    adDebug(
+        'UMP: consent info update timed out — not proceeding to MobileAds.initialize.');
+    if (kDebugMode) {
+      debugPrint(
+          'UMP: consent info update timed out — not proceeding to MobileAds.initialize.');
+    }
+    return false;
+  }
+
+  if (!infoOk) {
+    adDebug('UMP: consent not established — skipping MobileAds.initialize.');
+    return false;
+  }
+
+  // Stage 2: form load + human interaction. No short guillotine here; the
+  // long bound only exists so a wedged form can never hang startup forever.
+  try {
+    await formDone.future.timeout(const Duration(minutes: 5));
+    adDebug('UMP: flow finished (proceed to MobileAds.initialize)');
+  } on TimeoutException {
+    adDebug('UMP: consent form never resolved (5m) — proceeding anyway.');
+    if (kDebugMode) {
+      debugPrint('UMP: consent form never resolved (5m) — proceeding anyway.');
+    }
+  }
+  // Consent info was established successfully, so ad init is allowed even if
+  // the form stage misbehaved: the SDK applies whatever consent it holds.
+  return true;
 }
 
 Future<void> _presentConsentThen(Completer<void> done) async {

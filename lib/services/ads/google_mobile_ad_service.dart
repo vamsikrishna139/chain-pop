@@ -353,4 +353,18 @@ final class GoogleMobileAdService implements AdService {
         debugPlacementTag: AdPlacements.gameScreenBanner,
         fadeInDuration: const Duration(milliseconds: 320),
       );
+
+  @override
+  void disposeLoadedAds() {
+    adDebug('disposeLoadedAds() called (premium unlocked)');
+    for (final ad in _rewardedByPlacement.values) {
+      ad?.dispose();
+    }
+    _rewardedByPlacement.clear();
+    _rewardedLoadsInFlight.clear();
+    _interstitial?.dispose();
+    _interstitial = null;
+    _interstitialLoadInFlight = null;
+    _notifyInventory();
+  }
 }

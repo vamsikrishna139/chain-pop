@@ -121,10 +121,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceDialog,
         icon: Icon(Icons.restart_alt_rounded, color: scheme.error),
-        title: Text('Reset all progress?',
+        title: Text('Reset Game Data',
             style: GoogleFonts.rajdhani(fontWeight: FontWeight.bold)),
         content: Text(
-          'All stars, unlocks, and difficulty progress on this device will be cleared. This cannot be undone.',
+          'All stars, unlocks, and difficulty progress on this device will be cleared. This cannot be undone. Premium unlocked via purchases will not be affected.',
           style: GoogleFonts.rajdhani(),
         ),
         actions: [
@@ -139,7 +139,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
               backgroundColor: scheme.error,
               foregroundColor: scheme.onError,
             ),
-            child: Text('Reset',
+            child: Text('Reset Game Data',
                 style: GoogleFonts.rajdhani(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -262,6 +262,7 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
                 showHomeSettingsSheet(
                   context: context,
                   accent: _selected.color,
+                  onResetGameData: _confirmReset,
                 );
               },
             ),

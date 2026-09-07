@@ -22,6 +22,7 @@ import 'services/analytics/analytics_service_factory.dart';
 import 'services/crash_reporting.dart';
 import 'services/game_audio.dart';
 import 'services/game_audio_scope.dart';
+import 'services/notification_service.dart';
 import 'services/storage_service.dart';
 import 'services/subscription/no_op_subscription_service.dart';
 import 'services/subscription/revenue_cat_subscription_service.dart';
@@ -39,8 +40,6 @@ Future<void> bootstrapChainPop() async {
     yield LicenseEntryWithLineBreaks(['google_fonts'], license);
   });
 
-  await initFirebaseChainPop();
-
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
     recordFlutterFatal(details);
@@ -56,6 +55,8 @@ Future<void> bootstrapChainPop() async {
     return handleUncaughtZoneError(error, stack);
   };
 
+  await initFirebaseChainPop();
+
   await Hive.initFlutter();
   await StorageService.init();
 
@@ -68,14 +69,31 @@ Future<void> bootstrapChainPop() async {
 }
 
 Future<void> main() async {
-  await bootstrapChainPop();
-  // Dev on-device playtest harness (never enabled in shipped builds).
-  if (const bool.fromEnvironment('AUTOPLAY')) {
-    runApp(const AutoplayApp());
-    return;
+  try {
+    await bootstrapChainPop();
+    // Dev on-device playtest harness (never enabled in shipped builds).
+    if (const bool.fromEnvironment('AUTOPLAY')) {
+      runApp(const AutoplayApp());
+      return;
+    }
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    runApp(const ChainPopApp());
+  } catch (e, st) {
+    if (crashReportingReady) {
+      recordFlutterFatal(FlutterErrorDetails(exception: e, stack: st));
+    }
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Text(
+            'Initialization Failed:\n$e',
+            textDirection: TextDirection.ltr,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    ));
   }
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  runApp(const ChainPopApp());
 }
 
 /// Hook point for analytics, ads, etc. Keep async work bounded so cold start stays responsive.
@@ -91,26 +109,24 @@ Future<void> _bootstrapThirdPartySdks() async {
 
   if (!kIsWeb) {
     const mockAds = bool.fromEnvironment('MOCK_ADS', defaultValue: false);
-    final isPremium = subService.isPremium.value;
 
     if (!mockAds &&
-        !isPremium &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS)) {
-      await requestAdsConsentIfApplicable();
-      await MobileAds.instance.updateRequestConfiguration(
-        RequestConfiguration(
-          testDeviceIds: kDebugMode ? kAdmobTestDeviceIds : null,
-          maxAdContentRating: MaxAdContentRating.g,
-        ),
-      );
-      await MobileAds.instance.initialize();
-      if (kDebugMode) {
-        debugPrint(
-            'MobileAds SDK initialized after consent + test device ids.');
+      final canInitialize = await requestAdsConsentIfApplicable();
+      if (canInitialize) {
+        await MobileAds.instance.updateRequestConfiguration(
+          RequestConfiguration(
+            testDeviceIds: kDebugMode ? kAdmobTestDeviceIds : null,
+            maxAdContentRating: MaxAdContentRating.t,
+          ),
+        );
+        await MobileAds.instance.initialize();
+        if (kDebugMode) {
+          debugPrint(
+              'MobileAds SDK initialized after consent + test device ids.');
+        }
       }
-    } else if (isPremium && kDebugMode) {
-      debugPrint('MobileAds SDK initialization skipped (Premium User).');
     }
   }
 
@@ -125,6 +141,8 @@ Future<void> _bootstrapThirdPartySdks() async {
   );
   await ads.bootstrap();
   adDebug('main: ads.bootstrap() finished');
+
+  await NotificationService.instance.init();
 }
 
 class ChainPopApp extends StatefulWidget {
@@ -143,6 +161,7 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     AnalyticsLocator.instance.logSessionStart();
+    unawaited(NotificationService.instance.noteActivity());
   }
 
   @override
@@ -155,7 +174,11 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      SubscriptionLocator.instance.refresh();
       AnalyticsLocator.instance.logSessionStart();
+      // Pushes the "you have not played in a while" reminder back out. Cheap,
+      // fire-and-forget, never blocks the frame.
+      unawaited(NotificationService.instance.noteActivity());
     } else if (state == AppLifecycleState.paused) {
       AnalyticsLocator.instance.logSessionEnd();
     }

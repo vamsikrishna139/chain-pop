@@ -40,8 +40,10 @@ final class GameAdCoordinator {
           title: const Text('Extra hints'),
           content: Text(
             _host.isDailyChallenge
-                ? 'On Daily Challenge, hints use a quick video ad thanks for supporting Unbound!'
-                : 'Hard mode uses video ads for extra hints thanks for supporting Unbound!',
+                ? 'On a Daily Incident, extra hints are unlocked with a short '
+                    'video ad. Thanks for supporting Unbound.'
+                : 'On Hard, extra hints are unlocked with a short video ad. '
+                    'Thanks for supporting Unbound.',
             style: Theme.of(ctx).textTheme.bodyMedium,
           ),
           actions: [

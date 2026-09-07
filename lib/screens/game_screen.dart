@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../game/chain_pop_game.dart';
 import '../game/daily_challenge.dart';
@@ -33,6 +34,7 @@ import '../services/session_pacing.dart';
 import '../services/storage/chain_pop_progress_store.dart';
 import '../services/storage/chain_pop_storage.dart';
 import '../services/storage/storage_locator.dart';
+import '../services/subscription/subscription_locator.dart';
 import '../theme/app_colors.dart';
 import '../theme/world_theme.dart';
 import 'game/game_ad_coordination.dart';
@@ -55,6 +57,11 @@ import 'game/widgets/win_panel.dart';
 /// Combo length that earns the Chain Reaction achievement. Mirrors the
 /// tracker's own threshold; kept here so ordinary pops never reach the tracker.
 const int _kComboAchievementStreak = 5;
+
+/// Stand-in premium listenable for contexts where no [SubscriptionService] is
+/// installed (widget tests pump [GameScreen] without a locator). Constant and
+/// top-level so rebuilds never swap the listenable identity.
+final ValueNotifier<bool> _kNeverPremium = ValueNotifier<bool>(false);
 
 /// Full-screen game view for a single level.
 ///
@@ -504,6 +511,7 @@ class GameScreenState extends State<GameScreen>
   @override
   void initState() {
     super.initState();
+    WakelockPlus.enable();
     _hintAdPolicy = HintAdPolicy(
       freeBudget: _hardOrDailyFeatures ? 0 : 2,
     );
@@ -619,6 +627,7 @@ class GameScreenState extends State<GameScreen>
 
   @override
   void dispose() {
+    WakelockPlus.disable();
     WidgetsBinding.instance.removeObserver(this);
     _goingNext = false;
     _autoplayTimer?.cancel();
@@ -1023,7 +1032,13 @@ class GameScreenState extends State<GameScreen>
                     onUndo: () => unawaited(_adCoordinator.handleUndo()),
                     onRestart: _gameFlow.resetForRetry,
                   ),
-                  _ads.buildGameScreenBanner(context),
+                  ValueListenableBuilder<bool>(
+                    valueListenable:
+                        SubscriptionLocator.instanceOrNull?.isPremium ??
+                            _kNeverPremium,
+                    builder: (context, _, __) =>
+                        _ads.buildGameScreenBanner(context),
+                  ),
                 ],
               ),
             ),

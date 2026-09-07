@@ -430,8 +430,9 @@ final class AchievementTracker {
           }
         }
         connectionLost ??= e;
-        if (kDebugMode)
+        if (kDebugMode) {
           debugPrint('[Sync] ${def.id} connection lost, stopping');
+        }
         break;
       } catch (e) {
         // Leave the cursor behind so this entry is retried next time. Never

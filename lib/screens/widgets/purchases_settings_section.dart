@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/subscription/subscription_locator.dart';
 import '../../services/subscription/subscription_service.dart';
 import '../../theme/app_colors.dart';
+import 'paywall_sheet.dart';
 
 /// Remove-ads purchase and restore controls for settings sheets.
 class PurchasesSettingsSection extends StatelessWidget {
@@ -10,23 +11,7 @@ class PurchasesSettingsSection extends StatelessWidget {
 
   const PurchasesSettingsSection({super.key, required this.accent});
 
-  Future<void> _purchase(BuildContext context) async {
-    final result = await SubscriptionLocator.instance.purchasePremium();
-    if (!context.mounted) return;
-    switch (result) {
-      case PurchasePremiumResult.success:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Welcome to Unbound Premium!')),
-        );
-      case PurchasePremiumResult.failed:
-      case PurchasePremiumResult.unavailable:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Purchase could not be completed.')),
-        );
-      case PurchasePremiumResult.cancelled:
-        break;
-    }
-  }
+
 
   Future<void> _restore(BuildContext context) async {
     final result = await SubscriptionLocator.instance.restorePurchases();
@@ -85,18 +70,25 @@ class PurchasesSettingsSection extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
-                  onPressed: () => _purchase(context),
+                  onPressed: () => PaywallSheet.show(context),
                   icon: const Icon(
                     Icons.star_rounded,
                     color: AppColors.starGold,
                     size: 18,
                   ),
-                  label: const Text(
-                    'Remove Ads',
-                    style: TextStyle(
-                      color: AppColors.starGold,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  label: FutureBuilder<String?>(
+                    future: SubscriptionLocator.instance.getPremiumPrice(),
+                    builder: (context, snapshot) {
+                      final price = snapshot.data;
+                      final text = price != null ? 'Remove Ads ($price)' : 'Remove Ads';
+                      return Text(
+                        text,
+                        style: const TextStyle(
+                          color: AppColors.starGold,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),

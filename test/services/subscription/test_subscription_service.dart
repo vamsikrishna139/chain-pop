@@ -21,4 +21,10 @@ class TestSubscriptionService implements SubscriptionService {
   @override
   Future<RestorePurchasesResult> restorePurchases() async =>
       RestorePurchasesResult.noneFound;
+
+  @override
+  Future<String?> getPremiumPrice() async => '\$1.99';
+
+  @override
+  Future<void> refresh() async {}
 }

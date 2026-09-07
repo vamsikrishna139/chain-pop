@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:in_app_review/in_app_review.dart';
 
 import '../../game/daily_challenge.dart';
 import '../../game/difficulty_exports.dart';
@@ -158,6 +159,14 @@ final class GameFlowController {
       // After the stars and the unlock land, so the tracker's snapshot of
       // frontier and star total already includes this win.
       unawaited(_recordCampaignAchievementEvent(result, earned));
+      
+      if (_host.level == 10) {
+        try {
+          if (await InAppReview.instance.isAvailable()) {
+            unawaited(InAppReview.instance.requestReview());
+          }
+        } catch (_) {}
+      }
     }
 
     if (!_host.mounted) return;

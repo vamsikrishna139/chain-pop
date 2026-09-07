@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../subscription/subscription_locator.dart';
 import 'ad_service.dart';
 
@@ -10,17 +12,37 @@ import 'ad_service.dart';
 /// - Inner service initialization is bypassed.
 class PremiumAdServiceDecorator implements AdService {
   final AdService _inner;
+  bool _wasPremium = false;
 
-  PremiumAdServiceDecorator(this._inner);
+  /// The listenable we actually subscribed to, so [dispose] unsubscribes from
+  /// the same object even if the locator is later reinstalled.
+  ValueListenable<bool>? _premiumListenable;
 
-  bool get _isPremium {
-    try {
-      return SubscriptionLocator.instance.isPremium.value;
-    } catch (_) {
-      // If locator fails (e.g., tests), default to false.
-      return false;
+  PremiumAdServiceDecorator(this._inner) {
+    final sub = SubscriptionLocator.instanceOrNull;
+    if (sub != null) {
+      _wasPremium = sub.isPremium.value;
+      _premiumListenable = sub.isPremium;
+      sub.isPremium.addListener(_onPremiumChanged);
     }
   }
+
+  void _onPremiumChanged() {
+    final isNowPremium = _isPremium;
+    if (_wasPremium == false && isNowPremium == true) {
+      disposeLoadedAds();
+    } else if (_wasPremium == true && isNowPremium == false) {
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS)) {
+        MobileAds.instance.initialize();
+      }
+      _inner.bootstrap();
+    }
+    _wasPremium = isNowPremium;
+  }
+
+  bool get _isPremium => SubscriptionLocator.instanceOrNull?.isPremium.value ?? false;
 
   @override
   Future<void> bootstrap() async {
@@ -32,8 +54,11 @@ class PremiumAdServiceDecorator implements AdService {
 
   @override
   void setInventoryListener(void Function()? onChanged) {
-    // We only attach listeners to the inner service since premium state
-    // changes are handled via SubscriptionLocator's own listenable.
+    // Inventory listeners belong to the inner service only. Premium-state
+    // changes are surfaced separately: this decorator listens to
+    // SubscriptionService.isPremium itself (see [_onPremiumChanged]) and UI
+    // that must react in place (e.g. the game screen banner) watches that same
+    // listenable directly.
     _inner.setInventoryListener(onChanged);
   }
 
@@ -104,5 +129,23 @@ class PremiumAdServiceDecorator implements AdService {
       return const SizedBox.shrink();
     }
     return _inner.buildGameScreenBanner(context);
+  }
+
+  @override
+  void disposeLoadedAds() {
+    _inner.disposeLoadedAds();
+  }
+
+  /// Detaches the premium listener installed in the constructor.
+  ///
+  /// Deliberately **not** part of the [AdService] interface: that interface has
+  /// no default implementations, so adding `dispose()` there would force
+  /// empty overrides on every implementation (real, no-op, and test doubles)
+  /// for a leak that cannot occur in production — the decorator is installed
+  /// once into [AdsLocator] and lives for the whole process. This exists for
+  /// tests and for any future code that rebuilds the ad stack at runtime.
+  void dispose() {
+    _premiumListenable?.removeListener(_onPremiumChanged);
+    _premiumListenable = null;
   }
 }

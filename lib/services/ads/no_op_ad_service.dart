@@ -47,4 +47,7 @@ final class NoOpAdService implements AdService {
 
   @override
   Widget buildGameScreenBanner(BuildContext context) => const SizedBox.shrink();
+
+  @override
+  void disposeLoadedAds() {}
 }

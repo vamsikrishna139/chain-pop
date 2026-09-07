@@ -295,6 +295,19 @@ final class HiveChainPopPersistence implements ChainPopStorage {
     await _box.put(_tutorialCompletedKey, value);
   }
 
+  static const String _cachedPremiumKey = 'cached_premium';
+
+  @override
+  bool get cachedPremium => coerceHiveBool(
+        _box.get(_cachedPremiumKey),
+        fallback: false,
+      );
+
+  @override
+  Future<void> setCachedPremium(bool value) async {
+    await _box.put(_cachedPremiumKey, value);
+  }
+
   @override
   int get lifetimeCampaignClears => coerceHiveInt(
         _box.get(_lifetimeCampaignClearsKey),
@@ -449,8 +462,10 @@ final class HiveChainPopPersistence implements ChainPopStorage {
 
   @override
   Future<void> clearProgress() async {
+    final premiumState = cachedPremium;
     await _box.clear();
     await _box.put(_schemaKey, _schemaVersion);
+    await setCachedPremium(premiumState);
   }
 
   @override

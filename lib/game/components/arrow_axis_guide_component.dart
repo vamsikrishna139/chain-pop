@@ -43,8 +43,9 @@ class ArrowAxisGuideComponent extends PositionComponent
     void drawSegment(int cx, int cy, int nextX, int nextY) {
       final key = '$cx,$cy->$nextX,$nextY';
       final revKey = '$nextX,$nextY->$cx,$cy';
-      if (visitedSegments.contains(key) || visitedSegments.contains(revKey))
+      if (visitedSegments.contains(key) || visitedSegments.contains(revKey)) {
         return;
+      }
       visitedSegments.add(key);
 
       final p1 = Offset((cx + 0.5) * cellSize, (cy + 0.5) * cellSize);

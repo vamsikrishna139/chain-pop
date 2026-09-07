@@ -42,6 +42,9 @@ Future<void> initFirebaseChainPop() async {
       }
     }
   } catch (e, st) {
+    if (e is StateError && e.message.contains('placeholder')) {
+      rethrow;
+    }
     crashReportingReady = false;
     if (kDebugMode) {
       debugPrint('Firebase init skipped (add google-services config): $e\n$st');

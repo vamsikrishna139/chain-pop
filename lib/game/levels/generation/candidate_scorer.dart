@@ -272,8 +272,9 @@ class CandidateScorer {
 
   double _calculateLiberationAxisBonus(
       Candidate candidate, Point<int>? liberationPos, double occupancy) {
-    if (liberationPos == null || occupancy < 0.35 || occupancy > 0.65)
+    if (liberationPos == null || occupancy < 0.35 || occupancy > 0.65) {
       return 0.0;
+    }
 
     // Check if the candidate coordinate shares a clean X or Y axis with the liberation hub
     bool sharesAxis = candidate.cell.x == liberationPos.x ||

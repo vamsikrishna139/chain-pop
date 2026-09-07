@@ -20,15 +20,21 @@ void main() {
       final lvl = LevelManager.getDailyChallenge(d);
       final m = LevelMetrics.compute(lvl);
       final why = <String>[];
-      if (m.nodeCount < e.nodeCount.min || m.nodeCount > e.nodeCount.max)
+      if (m.nodeCount < e.nodeCount.min || m.nodeCount > e.nodeCount.max) {
         why.add('nodes');
+      }
       if (m.averageBranchingFactor < e.averageBranchingFactor.min ||
-          m.averageBranchingFactor > e.averageBranchingFactor.max)
+          m.averageBranchingFactor > e.averageBranchingFactor.max) {
         why.add('BF');
+      }
       if (m.criticalUnlockDepth < e.criticalUnlockDepth.min ||
-          m.criticalUnlockDepth > e.criticalUnlockDepth.max) why.add('CUD');
+          m.criticalUnlockDepth > e.criticalUnlockDepth.max) {
+        why.add('CUD');
+      }
       if (m.forcedSequenceRatio < e.forcedSequenceRatio.min ||
-          m.forcedSequenceRatio > e.forcedSequenceRatio.max) why.add('FSR');
+          m.forcedSequenceRatio > e.forcedSequenceRatio.max) {
+        why.add('FSR');
+      }
       final passes = e.passes(m);
       if (passes) {
         ok++;
