@@ -7,7 +7,7 @@ void main() {
     () {
       expect(
         ChainPopLegal.privacyPolicyUrl,
-        'https://sites.google.com/view/unbound-policy/home',
+        'https://sites.google.com/view/unbound-privacy-policy/home',
       );
     },
   );

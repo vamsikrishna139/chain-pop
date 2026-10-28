@@ -24,7 +24,7 @@ import 'package:chain_pop/game/chain_pop_game.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/main.dart';
 import 'package:chain_pop/screens/game_screen.dart';
-import 'package:chain_pop/services/ads/recording_ad_service.dart';
+import '../test/services/ads/recording_ad_service.dart';
 import 'package:chain_pop/services/game_audio.dart';
 import 'package:chain_pop/services/storage/storage_locator.dart';
 import 'package:flame/game.dart';
@@ -166,7 +166,8 @@ void main() {
       sw.stop();
 
       print('\n=== ${mode.name.toUpperCase()} (on device) ===');
-      print('  played      : $_kPerMode  (ids 1..${1 + (_kPerMode - 1) * _kStride} '
+      print(
+          '  played      : $_kPerMode  (ids 1..${1 + (_kPerMode - 1) * _kStride} '
           'stride $_kStride)');
       print('  won         : $won');
       print('  stranded    : $stranded');

@@ -66,7 +66,6 @@ Future<void> _backToMenu(WidgetTester tester) async {
   }
 }
 
-
 /// Drains layout/rendering exceptions raised during a leg and records them.
 ///
 /// A RenderFlex overflow is thrown by the framework during layout, and
@@ -83,8 +82,8 @@ void _drainOverflows(
     if (!text.contains('overflowed by')) {
       throw e; // not a layout overflow - a genuine failure, surface it
     }
-    final px = RegExp(r'overflowed by ([\d.]+) pixels on the (\w+)')
-        .firstMatch(text);
+    final px =
+        RegExp(r'overflowed by ([\d.]+) pixels on the (\w+)').firstMatch(text);
     results['FINDING $tag'] =
         'RenderFlex overflow ${px?.group(1) ?? "?"}px ${px?.group(2) ?? ""}';
   }
@@ -210,7 +209,8 @@ void main() {
       fail('Daily Incident opened neither the calendar nor a game');
     }
 
-    _drainOverflows(tester, results, 'daily_challenge_calendar_screen.dart:349');
+    _drainOverflows(
+        tester, results, 'daily_challenge_calendar_screen.dart:349');
     expect(find.text('Network incidents'), findsWidgets);
     results['daily: calendar opens'] = 'PASS';
 
@@ -227,7 +227,8 @@ void main() {
     await tester.tap(cell.first, warnIfMissed: false);
     await _frames(tester, frames: 70);
 
-    _drainOverflows(tester, results, 'daily_challenge_calendar_screen.dart:349');
+    _drainOverflows(
+        tester, results, 'daily_challenge_calendar_screen.dart:349');
     results['daily: play today'] = find.byType(GameScreen).evaluate().isNotEmpty
         ? 'PASS'
         : 'SKIP (locked or not started)';
@@ -278,18 +279,18 @@ void main() {
     results['settings: open'] = 'PASS';
 
     // Both sections are unconditional children of the sheet.
-    results['settings: purchases section'] =
-        find.textContaining(RegExp(r'[Pp]remium|[Rr]estore|[Aa]d-free'))
-                .evaluate()
-                .isNotEmpty
-            ? 'PASS'
-            : 'SKIP (no purchases copy matched)';
-    results['settings: privacy/ads section'] =
-        find.textContaining(RegExp(r'[Pp]rivacy|[Aa]ds|[Cc]onsent'))
-                .evaluate()
-                .isNotEmpty
-            ? 'PASS'
-            : 'SKIP (no privacy copy matched)';
+    results['settings: purchases section'] = find
+            .textContaining(RegExp(r'[Pp]remium|[Rr]estore|[Aa]d-free'))
+            .evaluate()
+            .isNotEmpty
+        ? 'PASS'
+        : 'SKIP (no purchases copy matched)';
+    results['settings: privacy/ads section'] = find
+            .textContaining(RegExp(r'[Pp]rivacy|[Aa]ds|[Cc]onsent'))
+            .evaluate()
+            .isNotEmpty
+        ? 'PASS'
+        : 'SKIP (no privacy copy matched)';
 
     await _tapIfPresent(tester, find.byIcon(Icons.close_rounded));
     results['settings: close'] =
@@ -346,7 +347,8 @@ void main() {
         break;
       }
     }
-    results.putIfAbsent('game: fullscreen toggle', () => 'SKIP (icon not found)');
+    results.putIfAbsent(
+        'game: fullscreen toggle', () => 'SKIP (icon not found)');
 
     // HINT on Easy is free; on Hard it opens a rewarded ad, which is a native
     // overlay this harness cannot drive — so only the free path is asserted.
@@ -360,10 +362,11 @@ void main() {
             ? 'PASS'
             : 'SKIP (no undo button)';
 
-    results['game: pause'] =
-        await _tapIfPresent(tester, find.byIcon(Icons.pause_rounded), frames: 40)
-            ? 'PASS'
-            : 'SKIP (pause icon not found)';
+    results['game: pause'] = await _tapIfPresent(
+            tester, find.byIcon(Icons.pause_rounded),
+            frames: 40)
+        ? 'PASS'
+        : 'SKIP (pause icon not found)';
 
     // Whatever the pause opened, get back out.
     await _frames(tester, frames: 20);

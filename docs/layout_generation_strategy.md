@@ -13,7 +13,7 @@ Unbound solves this by generating levels **backwards**—from an empty board out
 ```mermaid
 graph LR
     Empty["1. Empty Board (Solved State)"] --> Invert["2. Place Nodes Backwards (Retrograde)"]
-    Invert --> Start["3. Full Level (Player's Start State)"]
+    Invert --> Start["3. Full Level (Player's Start State)"][README.md](../../../../../../vibetrade/Vibe-Trading/README.md)
     
     Start -->|Player Solves Forwards| Empty
 ```

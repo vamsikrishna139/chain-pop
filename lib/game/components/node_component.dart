@@ -516,9 +516,6 @@ class NodeComponent extends PositionComponent
       _relayRotation += dt * 1.5;
     }
 
-    _blockerFlashTimer -= dt;
-    _arrowSpinTimer -= dt;
-
     if (!isPopping && !isJamming) {
       final activeLock = data.kind == NodeKind.locked && _hasActiveNeighbors();
       if (_isLockActive && !activeLock) {

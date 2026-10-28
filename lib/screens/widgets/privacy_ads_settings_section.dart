@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/chain_pop_legal.dart';
 import '../../services/ads/ump_consent.dart';
+import '../../services/analytics/analytics_consent.dart';
 import '../../services/notification_service.dart';
 import '../game/widgets/privacy_rights_sheet.dart';
 
@@ -128,6 +129,26 @@ class _PrivacyAdsSettingsSectionState extends State<PrivacyAdsSettingsSection> {
               ),
             ),
           ),
+        ),
+        SwitchListTile(
+          title: const Text(
+            'Share usage analytics',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: const Text(
+            'Anonymous gameplay stats that help us tune levels',
+            style: TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+          value: AnalyticsConsent.userEnabled,
+          activeThumbColor: widget.accent,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+          onChanged: (val) async {
+            await AnalyticsConsent.setUserEnabled(val);
+            if (mounted) setState(() {});
+          },
         ),
         SwitchListTile(
           title: const Text(

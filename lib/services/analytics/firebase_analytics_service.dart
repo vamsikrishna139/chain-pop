@@ -7,8 +7,24 @@ class FirebaseAnalyticsService implements AnalyticsService {
 
   @override
   Future<void> logEvent(String name, {Map<String, Object>? parameters}) async {
-    await _analytics.logEvent(name: name, parameters: parameters);
+    await _analytics.logEvent(
+      name: name,
+      parameters: parameters == null ? null : sanitizeParameters(parameters),
+    );
   }
+
+  /// Firebase only accepts String and num values: bools become 1/0 and
+  /// anything else its string form. Unsanitised bools trip an assertion in
+  /// debug and are dropped by the native SDK in release.
+  static Map<String, Object> sanitizeParameters(Map<String, Object> params) => {
+        for (final e in params.entries)
+          e.key: switch (e.value) {
+            final bool b => b ? 1 : 0,
+            final num n => n,
+            final String s => s,
+            final other => other.toString(),
+          },
+      };
 
   @override
   Future<void> logAppOpen() => _analytics.logAppOpen();

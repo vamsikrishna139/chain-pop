@@ -9,6 +9,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'bootstrap/firebase_bootstrap.dart';
 import 'dev/autoplay_harness.dart';
+import 'navigation/app_route_observer.dart';
 import 'screens/main_menu_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/achievements/play_games_bootstrap.dart';
@@ -17,6 +18,7 @@ import 'services/ads/admob_config.dart';
 import 'services/ads/ad_service_factory.dart';
 import 'services/ads/ads_locator.dart';
 import 'services/ads/ump_consent.dart';
+import 'services/analytics/analytics_consent.dart';
 import 'services/analytics/analytics_locator.dart';
 import 'services/analytics/analytics_service_factory.dart';
 import 'services/crash_reporting.dart';
@@ -98,7 +100,7 @@ Future<void> main() async {
 
 /// Hook point for analytics, ads, etc. Keep async work bounded so cold start stays responsive.
 ///
-/// **Mobile Ads:** UMP consent → [RequestConfiguration] (test device ids) →
+/// **Mobile Ads:** UMP consent → analytics consent → [RequestConfiguration] (test device ids) →
 /// `MobileAds.instance.initialize()` here, then [AdService.bootstrap] only preloads.
 Future<void> _bootstrapThirdPartySdks() async {
   // 1. Initialize Subscription Service
@@ -110,15 +112,18 @@ Future<void> _bootstrapThirdPartySdks() async {
   if (!kIsWeb) {
     const mockAds = bool.fromEnvironment('MOCK_ADS', defaultValue: false);
 
+    await AnalyticsConsent.load();
     if (!mockAds &&
         (defaultTargetPlatform == TargetPlatform.android ||
             defaultTargetPlatform == TargetPlatform.iOS)) {
       final canInitialize = await requestAdsConsentIfApplicable();
+      // Analytics follows the same GDPR choice, whether or not ads may start.
+      await AnalyticsConsent.apply();
       if (canInitialize) {
         await MobileAds.instance.updateRequestConfiguration(
           RequestConfiguration(
             testDeviceIds: kDebugMode ? kAdmobTestDeviceIds : null,
-            maxAdContentRating: MaxAdContentRating.t,
+            maxAdContentRating: MaxAdContentRating.g,
           ),
         );
         await MobileAds.instance.initialize();
@@ -196,6 +201,7 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
           textTheme: GoogleFonts.rajdhaniTextTheme(ThemeData.dark().textTheme),
           useMaterial3: true,
         ),
+        navigatorObservers: [appRouteObserver],
         home: const SplashScreen(nextScreen: MainMenuScreen()),
       ),
     );

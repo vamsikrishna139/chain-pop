@@ -53,3 +53,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Test and build artifacts
+*_test_results.txt
+test_out*.txt
+
+
+# Release build defines (RevenueCat public SDK key). Copy release.example.json.
+secrets/release.json

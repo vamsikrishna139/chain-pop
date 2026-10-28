@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import '../analytics/analytics_consent.dart';
 import 'ad_debug_log.dart';
 
 /// Requests GDPR / UMP consent before ads load (native User Messaging Platform).
@@ -89,9 +90,11 @@ Future<bool> requestAdsConsentIfApplicable() async {
       debugPrint('UMP: consent form never resolved (5m) — proceeding anyway.');
     }
   }
-  // Consent info was established successfully, so ad init is allowed even if
-  // the form stage misbehaved: the SDK applies whatever consent it holds.
-  return true;
+  // Google's gate: false when consent is required but was never obtained
+  // (e.g. the form failed to load), in which case ads must not start.
+  final canRequest = await ConsentInformation.instance.canRequestAds();
+  adDebug('UMP: canRequestAds=$canRequest');
+  return canRequest;
 }
 
 Future<void> _presentConsentThen(Completer<void> done) async {
@@ -132,5 +135,7 @@ Future<void> showPrivacyOptionsForm() async {
     }
     if (!done.isCompleted) done.complete();
   });
-  return done.future;
+  await done.future;
+  // A changed GDPR choice also changes what analytics may collect.
+  await AnalyticsConsent.apply();
 }

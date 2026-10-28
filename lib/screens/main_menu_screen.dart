@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
+import '../navigation/app_route_observer.dart';
 import '../services/ads/ad_service_factory.dart';
 import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
@@ -25,7 +26,8 @@ class MainMenuScreen extends StatefulWidget {
   State<MainMenuScreen> createState() => _MainMenuScreenState();
 }
 
-class _MainMenuScreenState extends State<MainMenuScreen> {
+class _MainMenuScreenState extends State<MainMenuScreen>
+    with RefreshOnReturn<MainMenuScreen> {
   late DifficultyMode _selected;
 
   @override
@@ -33,6 +35,10 @@ class _MainMenuScreenState extends State<MainMenuScreen> {
     super.initState();
     _selected = StorageLocator.instance.selectedDifficulty;
   }
+
+  @override
+  void onReturnedTo() => setState(
+      () => _selected = StorageLocator.instance.selectedDifficulty);
 
   Future<void> _selectDifficulty(DifficultyMode mode) async {
     if (_selected != mode &&

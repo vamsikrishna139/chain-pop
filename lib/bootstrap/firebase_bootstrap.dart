@@ -1,4 +1,3 @@
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
@@ -34,13 +33,8 @@ Future<void> initFirebaseChainPop() async {
           ),
     );
     crashReportingReady = true;
-    try {
-      await FirebaseAnalytics.instance.logAppOpen();
-    } catch (e, st) {
-      if (kDebugMode) {
-        debugPrint('Firebase Analytics logAppOpen skipped: $e\n$st');
-      }
-    }
+    // Analytics stays off (manifest default) until AnalyticsConsent.apply()
+    // runs after the UMP consent flow; app_open is logged from there.
   } catch (e, st) {
     if (e is StateError && e.message.contains('placeholder')) {
       rethrow;

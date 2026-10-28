@@ -19,3 +19,5 @@ tags:
     timeout: 60m
   slow:
     timeout: 30m
+  corpus:
+    timeout: 30m

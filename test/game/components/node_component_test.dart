@@ -28,6 +28,24 @@ void main() {
       );
       expect(node.arrowSpin, greaterThan(0));
     });
+
+    test('the spin eases back to 0 as frames advance', () {
+      final node = makeNode(Direction.up);
+      node.animateRotationTo(
+        NodeData(id: 0, x: 1, y: 1, dir: Direction.right),
+        clockwise: true,
+      );
+      final start = node.arrowSpin.abs();
+      node.update(0.05);
+      // Regression: an unconditional per-frame decrement used to push the
+      // timer negative before it ran, freezing the arrow at its old heading.
+      expect(node.arrowSpin.abs(), lessThan(start));
+      expect(node.arrowSpin, isNot(0.0));
+      for (var i = 0; i < 20; i++) {
+        node.update(0.016);
+      }
+      expect(node.arrowSpin, 0.0);
+    });
   });
 
   group('NodeComponent blocker flash', () {
@@ -36,6 +54,17 @@ void main() {
       expect(node.isFlashingBlocker, isFalse);
       node.flashAsBlocker();
       expect(node.isFlashingBlocker, isTrue);
+    });
+
+    test('the warning pulse survives the next frame and then ends', () {
+      final node = makeNode(Direction.left);
+      node.flashAsBlocker();
+      node.update(0.016);
+      expect(node.isFlashingBlocker, isTrue);
+      for (var i = 0; i < 60; i++) {
+        node.update(0.016);
+      }
+      expect(node.isFlashingBlocker, isFalse);
     });
   });
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 import 'package:games_services/games_services.dart' as gs;
 
 import '../analytics/analytics_locator.dart';
@@ -70,14 +70,23 @@ final class PlayGamesAchievementSink implements AchievementSink {
   @override
   bool get isAvailable => _signedIn && _supportedPlatform;
 
+  /// Queued writes via MainActivity: Play Games' plain `setSteps` / `unlock`
+  /// rather than the plugin's `*Immediate` calls. The immediate variants need
+  /// a live games client and failed with 26502 after ~2 writes per sync on a
+  /// Pixel 8a, so most step progress never reached Google and the Play Games
+  /// UI showed empty progress rings. The queued variants are persisted and
+  /// delivered by Play Games itself, reconnecting as needed.
+  static const _queue = MethodChannel('com.adbkv.chainpop/achievements');
+
   @override
   Future<void> setSteps(AchievementDef def, int steps) async {
     final id = _resolveId(def);
     // Google rejects a step count of zero; the tracker already filters those,
     // but the sink stays defensive because a failure here is silent.
     if (id == null || steps <= 0) return;
-    await _guarded(() => gs.Achievements.setSteps(
-          achievement: gs.Achievement(androidID: id, steps: steps),
+    await _guarded(() => _queue.invokeMethod<void>(
+          'setSteps',
+          {'id': id, 'steps': steps},
         ));
   }
 
@@ -86,9 +95,7 @@ final class PlayGamesAchievementSink implements AchievementSink {
     final id = _resolveId(def);
     if (id == null) return;
     AnalyticsLocator.instance.logAchievementUnlock(achievementId: def.id);
-    await _guarded(() => gs.Achievements.unlock(
-          achievement: gs.Achievement(androidID: id, percentComplete: 100),
-        ));
+    await _guarded(() => _queue.invokeMethod<void>('unlock', {'id': id}));
   }
 
   @override

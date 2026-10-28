@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../game/levels/generation/difficulty_mode.dart';
+import '../navigation/app_route_observer.dart';
 import '../game/levels/level_grid_config.dart';
 import '../models/difficulty.dart';
 import '../theme/app_colors.dart';
@@ -93,7 +94,8 @@ class LevelSelectScreen extends StatefulWidget {
   State<LevelSelectScreen> createState() => _LevelSelectScreenState();
 }
 
-class _LevelSelectScreenState extends State<LevelSelectScreen> {
+class _LevelSelectScreenState extends State<LevelSelectScreen>
+    with RefreshOnReturn<LevelSelectScreen> {
   late DifficultyMode _mode;
 
   @override

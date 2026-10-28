@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:chain_pop/game/levels/tutorial_levels.dart';
+import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/models/game_settings.dart';
+import 'package:chain_pop/navigation/app_route_observer.dart';
 import 'package:chain_pop/screens/game_screen.dart';
 import 'package:chain_pop/screens/main_menu_screen.dart';
 import 'package:chain_pop/services/game_audio.dart';
@@ -49,7 +51,10 @@ void main() {
     await tester.pumpWidget(
       ChainPopAudioScope(
         uiAudio: uiAudio,
-        child: const MaterialApp(home: MainMenuScreen()),
+        child: MaterialApp(
+          navigatorObservers: [appRouteObserver],
+          home: const MainMenuScreen(),
+        ),
       ),
     );
     await tester.pump();
@@ -126,6 +131,34 @@ void main() {
       expect(screen.isTutorial, isTrue);
       expect(screen.tutorialIndex, 0);
       expect(screen.fixedLevel, tutorialLevels.first);
+    });
+  });
+
+  group('MainMenuScreen progress refresh', () {
+    testWidgets(
+        'frontier card updates after a pushReplacement chain is popped',
+        (tester) async {
+      await pumpMenu(tester);
+      expect(find.text('PLAY FRONTIER 1'), findsOneWidget);
+
+      final nav = tester.state<NavigatorState>(find.byType(Navigator));
+      // Campaign auto-advance: level 1 is pushed, then each next level
+      // replaces it. The original push future completes on the first swap.
+      unawaited(nav.push(MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('level 1')))));
+      await tester.pumpAndSettle();
+      unawaited(nav.pushReplacement(MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('level 2')))));
+      await tester.pumpAndSettle();
+
+      // Progress saved while the later levels were played.
+      await storageForWidgetTest(tester, () async {
+        await StorageService.unlockLevel(DifficultyMode.easy, 21);
+      });
+
+      nav.pop();
+      await tester.pumpAndSettle();
+      expect(find.text('PLAY FRONTIER 21'), findsOneWidget);
     });
   });
 }
