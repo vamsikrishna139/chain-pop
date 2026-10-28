@@ -82,9 +82,14 @@ List<NodeData> _legalMoves(List<NodeData> nodes, LevelData level) {
 }
 
 List<NodeData> _apply(List<NodeData> nodes, NodeData n) {
-  var next = [for (final m in nodes) if (m.id != n.id) m.clone()];
+  var next = [
+    for (final m in nodes)
+      if (m.id != n.id) m.clone()
+  ];
   if (n.kind == NodeKind.relay) {
-    next = [for (final m in next) m.y == n.y ? m.copyWith(dir: m.dir.rotatedCw) : m];
+    next = [
+      for (final m in next) m.y == n.y ? m.copyWith(dir: m.dir.rotatedCw) : m
+    ];
   }
   return next;
 }
@@ -148,8 +153,8 @@ void main() {
           dir: _dirs[rng.nextInt(4)],
         ));
       }
-      final base = LevelData(
-          levelId: 1, gridWidth: gw, gridHeight: gh, nodes: nodes);
+      final base =
+          LevelData(levelId: 1, gridWidth: gw, gridHeight: gh, nodes: nodes);
       // Only consider relay-free boards that are themselves solvable.
       if (!LevelSolver.isSolvable(base)) continue;
 
@@ -168,7 +173,8 @@ void main() {
         if (safe) {
           safeCount++;
           expect(free, isTrue,
-              reason: 'FALSE-SAFE board: ${nodes.map((n) => "#${n.id}@${n.x},${n.y}:${n.dir.name}").join(" ")} '
+              reason:
+                  'FALSE-SAFE board: ${nodes.map((n) => "#${n.id}@${n.x},${n.y}:${n.dir.name}").join(" ")} '
                   '| relay=#${cand.id}');
         } else {
           unsafeCount++;

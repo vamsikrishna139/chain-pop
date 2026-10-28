@@ -168,8 +168,8 @@ void main() {
     var n = 0;
 
     for (final id in ids) {
-      final r = gen.generate(id,
-          mode: DifficultyMode.hard, timeBudget: kProdBudget);
+      final r =
+          gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
       if (!r.isSuccess) continue;
       final shipped = r.value;
       final post = LevelMetrics.compute(shipped);
@@ -179,8 +179,7 @@ void main() {
           .add((post.firstLegalMoveCount - pre.firstLegalMoveCount).toDouble());
       dFsr.add((post.forcedSequenceRatio - pre.forcedSequenceRatio) * 100);
       dWaves.add((post.waveDepth - pre.waveDepth).toDouble());
-      dCud.add(
-          (post.criticalUnlockDepth - pre.criticalUnlockDepth).toDouble());
+      dCud.add((post.criticalUnlockDepth - pre.criticalUnlockDepth).toDouble());
       dBf.add(post.averageBranchingFactor - pre.averageBranchingFactor);
       if (DifficultyProfile.hard.passes(pre)) wasInBand++;
       if (DifficultyProfile.hard.passes(post)) stillInBand++;

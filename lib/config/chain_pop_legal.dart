@@ -5,7 +5,7 @@
 abstract final class ChainPopLegal {
   static const privacyPolicyUrl = String.fromEnvironment(
     'CHAINPOP_PRIVACY_POLICY_URL',
-    defaultValue: 'https://sites.google.com/view/unbound-policy/home',
+    defaultValue: 'https://sites.google.com/view/unbound-privacy-policy/home',
   );
 
   /// Note: If you change this email, you must also manually update the contact

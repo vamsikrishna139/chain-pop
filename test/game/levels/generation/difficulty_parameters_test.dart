@@ -6,7 +6,8 @@ void main() {
   group('DifficultyParameters', () {
     group('fromLevelId with explicit mode', () {
       test('returns correct parameters for easy mode', () {
-        final params = DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
+        final params =
+            DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
 
         expect(params.mode, equals(DifficultyMode.easy));
         expect(params.minChainLength, equals(2));
@@ -17,7 +18,8 @@ void main() {
       });
 
       test('returns correct parameters for medium mode', () {
-        final params = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
+        final params =
+            DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
 
         expect(params.mode, equals(DifficultyMode.medium));
         expect(params.minChainLength, equals(2));
@@ -28,7 +30,8 @@ void main() {
       });
 
       test('returns correct parameters for hard mode', () {
-        final params = DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
+        final params =
+            DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
 
         expect(params.mode, equals(DifficultyMode.hard));
         expect(params.minChainLength, equals(6));
@@ -73,16 +76,20 @@ void main() {
 
     group('difficulty progression', () {
       test('easy mode has lower node counts than medium', () {
-        final easy = DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
-        final medium = DifficultyParameters.fromLevelId(5, mode: DifficultyMode.medium);
+        final easy =
+            DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
+        final medium =
+            DifficultyParameters.fromLevelId(5, mode: DifficultyMode.medium);
 
         expect(easy.minNodes, lessThan(medium.minNodes));
         expect(easy.maxNodes, lessThan(medium.maxNodes));
       });
 
       test('easy mode has lower density than medium', () {
-        final easy = DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
-        final medium = DifficultyParameters.fromLevelId(5, mode: DifficultyMode.medium);
+        final easy =
+            DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
+        final medium =
+            DifficultyParameters.fromLevelId(5, mode: DifficultyMode.medium);
 
         expect(easy.densityFactor, lessThan(medium.densityFactor));
       });
@@ -90,8 +97,10 @@ void main() {
       // Hard has lower minNodes than Medium deliberately (early Hard = 6×6 grid)
       // but allows more nodes at the top end (maxNodes).
       test('hard mode allows more max nodes than medium', () {
-        final medium = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
-        final hard = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.hard);
+        final medium =
+            DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
+        final hard =
+            DifficultyParameters.fromLevelId(15, mode: DifficultyMode.hard);
 
         expect(hard.maxNodes, greaterThan(medium.maxNodes),
             reason: 'Hard allows more nodes overall');
@@ -100,8 +109,10 @@ void main() {
       // Hard uses higher density than medium so backward-generation still has
       // room on large grids; absolute node caps remain higher.
       test('hard mode has higher absolute node counts than medium', () {
-        final medium = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
-        final hard = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.hard);
+        final medium =
+            DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
+        final hard =
+            DifficultyParameters.fromLevelId(15, mode: DifficultyMode.hard);
 
         expect(hard.maxNodes, greaterThan(medium.maxNodes),
             reason: 'Hard allows more nodes than medium overall');
@@ -110,7 +121,8 @@ void main() {
 
     group('parameters stay within reasonable bounds', () {
       test('easy mode parameters are reasonable', () {
-        final params = DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
+        final params =
+            DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
 
         expect(params.minChainLength, greaterThan(0));
         expect(params.maxChainLength, greaterThan(params.minChainLength));
@@ -121,7 +133,8 @@ void main() {
       });
 
       test('medium mode parameters are reasonable', () {
-        final params = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
+        final params =
+            DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
 
         expect(params.minChainLength, greaterThan(0));
         expect(params.maxChainLength, greaterThan(params.minChainLength));
@@ -132,7 +145,8 @@ void main() {
       });
 
       test('hard mode parameters are reasonable', () {
-        final params = DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
+        final params =
+            DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
 
         expect(params.minChainLength, greaterThan(0));
         expect(params.maxChainLength, greaterThan(params.minChainLength));
@@ -143,9 +157,12 @@ void main() {
       });
 
       test('all modes have density factor between 0 and 1', () {
-        final easy = DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
-        final medium = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
-        final hard = DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
+        final easy =
+            DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
+        final medium =
+            DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
+        final hard =
+            DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
 
         expect(easy.densityFactor, inInclusiveRange(0.0, 1.0));
         expect(medium.densityFactor, inInclusiveRange(0.0, 1.0));
@@ -153,9 +170,12 @@ void main() {
       });
 
       test('chain lengths increase with difficulty', () {
-        final easy = DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
-        final medium = DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
-        final hard = DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
+        final easy =
+            DifficultyParameters.fromLevelId(5, mode: DifficultyMode.easy);
+        final medium =
+            DifficultyParameters.fromLevelId(15, mode: DifficultyMode.medium);
+        final hard =
+            DifficultyParameters.fromLevelId(50, mode: DifficultyMode.hard);
 
         expect(easy.minChainLength, lessThanOrEqualTo(medium.minChainLength));
         expect(medium.minChainLength, lessThan(hard.minChainLength));

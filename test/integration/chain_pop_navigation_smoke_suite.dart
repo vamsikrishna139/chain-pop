@@ -57,7 +57,8 @@ void registerChainPopNavigationSmoke({
     expect(find.byType(GameScreen), findsOneWidget);
   });
 
-  testWidgets('main menu → Browse All Levels → level select → Easy level 1 game',
+  testWidgets(
+      'main menu → Browse All Levels → level select → Easy level 1 game',
       (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -80,10 +81,12 @@ void registerChainPopNavigationSmoke({
     await _pumpFrames(tester);
 
     await tester.tap(
-      find.descendant(
-        of: find.byType(LevelSelectScreen),
-        matching: find.text('1'),
-      ).first,
+      find
+          .descendant(
+            of: find.byType(LevelSelectScreen),
+            matching: find.text('1'),
+          )
+          .first,
     );
     await _pumpFrames(tester);
 

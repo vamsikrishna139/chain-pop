@@ -20,7 +20,8 @@ class ChainPopAudioScope extends InheritedWidget {
   final GameAudioController uiAudio;
 
   static GameAudioController of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<ChainPopAudioScope>();
+    final scope =
+        context.dependOnInheritedWidgetOfExactType<ChainPopAudioScope>();
     assert(scope != null, 'ChainPopAudioScope not found');
     return scope!.uiAudio;
   }

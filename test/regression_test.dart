@@ -50,7 +50,8 @@ void main() {
     test('Level 5 Playthrough', () => simulateSolutionPath(5));
   });
 
-  group('Regression — ascending-ID path for all difficulties (levels 1–10)', () {
+  group('Regression — ascending-ID path for all difficulties (levels 1–10)',
+      () {
     void simulateForMode(DifficultyMode mode) {
       for (var levelId = 1; levelId <= 10; levelId++) {
         final level = LevelManager.getLevel(levelId, mode: mode);
@@ -64,7 +65,8 @@ void main() {
           expect(
             LevelSolver.canRemove(liveNode, activeNodes, level),
             isTrue,
-            reason: '$mode level $levelId: node ${liveNode.id} blocked at step $step',
+            reason:
+                '$mode level $levelId: node ${liveNode.id} blocked at step $step',
           );
           activeNodes.removeWhere((n) => n.id == liveNode.id);
         }

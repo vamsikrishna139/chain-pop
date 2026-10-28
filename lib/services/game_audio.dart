@@ -101,8 +101,9 @@ class GameAudioController implements GameAudioHandle {
   Future<void> play(GameSfx sfx, {double playbackRate = 1.0}) async {
     final path = _paths[sfx];
     if (path == null) return;
-    final player =
-        _isBoardGameplaySfx(sfx) ? _players[_i++ % _players.length] : _hudPlayer;
+    final player = _isBoardGameplaySfx(sfx)
+        ? _players[_i++ % _players.length]
+        : _hudPlayer;
     final rate = playbackRate.clamp(0.85, 1.5);
     final volume = sfx == GameSfx.pop ? 0.82 : 0.88;
     try {

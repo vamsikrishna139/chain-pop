@@ -25,7 +25,7 @@
 //
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'dart:math' as math;
@@ -87,8 +87,8 @@ void _sweep(DifficultyMode mode) {
   }
 
   final d = math.max(1, n);
-  final shippedCud = sink.events.map((e) => e.metrics.criticalUnlockDepth).toList()
-    ..sort();
+  final shippedCud =
+      sink.events.map((e) => e.metrics.criticalUnlockDepth).toList()..sort();
   durations.sort();
 
   final noChoice = (rankableHist[0] ?? 0) + (rankableHist[1] ?? 0);
@@ -110,7 +110,8 @@ void _sweep(DifficultyMode mode) {
   // early-level sample, not the corpus. It reads identically across all three
   // variants for that reason. The real gate lives in the composition
   // calibration sweep and is run separately.
-  print('    gen p50/p95        ${_ms(durations, 0.50)} / ${_ms(durations, 0.95)}'
+  print(
+      '    gen p50/p95        ${_ms(durations, 0.50)} / ${_ms(durations, 0.95)}'
       '   (budget 260 ms)');
 }
 

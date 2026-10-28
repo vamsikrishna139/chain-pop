@@ -21,14 +21,12 @@ void main() {
       final gen = LevelGenerator();
       const samples = 100;
       for (var i = 0; i < samples; i++) {
-        final mode =
-            DifficultyMode.values[i % DifficultyMode.values.length];
+        final mode = DifficultyMode.values[i % DifficultyMode.values.length];
         final r = gen.generate(i, mode: mode);
         expect(r.isSuccess, isTrue, reason: 'failed at $i mode=$mode');
       }
-      final window = gen.diversityLedger.window
-          .map((f) => f.bits)
-          .toList(growable: false);
+      final window =
+          gen.diversityLedger.window.map((f) => f.bits).toList(growable: false);
       expect(window, isNotEmpty);
       expect(gen.diversityRejectionCount, greaterThan(0),
           reason: 'over 100 emissions, the ledger should have rejected '
@@ -37,8 +35,7 @@ void main() {
 
     test(
         'archetype distribution matches Medium §5 within ±5% (1000 medium-only '
-        'levels)',
-        () {
+        'levels)', () {
       final gen = LevelGenerator();
       for (var i = 0; i < 1000; i++) {
         gen.generate(i, mode: DifficultyMode.medium);
@@ -53,8 +50,7 @@ void main() {
             // rejections (some archetypes are more likely to be rejected
             // when their silhouettes are smaller, slightly skewing the
             // emission distribution from the raw sampling distribution).
-            reason:
-                'archetype=$arch observed=${observed.toStringAsFixed(3)} '
+            reason: 'archetype=$arch observed=${observed.toStringAsFixed(3)} '
                 'expected=$expected over $total emissions');
       });
     }, tags: 'slow');
@@ -68,8 +64,7 @@ void main() {
       }
     });
 
-    test('Director Renegotiation occasionally kicks in (≥ 0 instances ok)',
-        () {
+    test('Director Renegotiation occasionally kicks in (≥ 0 instances ok)', () {
       // We don't require renegotiation — just that the counter is wired and
       // never blows up.
       final gen = LevelGenerator();
@@ -103,18 +98,18 @@ void main() {
       const samples = 300;
       var inBand = 0;
       for (var i = 0; i < samples; i++) {
-        final mode =
-            DifficultyMode.values[i % DifficultyMode.values.length];
+        final mode = DifficultyMode.values[i % DifficultyMode.values.length];
         final r = gen.generate(i, mode: mode);
         expect(r.isSuccess, isTrue);
-        final profile = DifficultyProfile.forTier(
-            DifficultyProfile.tierFromMode(mode));
+        final profile =
+            DifficultyProfile.forTier(DifficultyProfile.tierFromMode(mode));
         if (profile.passes(LevelMetrics.compute(r.value))) inBand++;
       }
       // Dense Strategy silhouette-fill targets raise node counts; FSR/opening
       // bands are harder to hit simultaneously — keep a modest floor.
       expect(inBand / samples, greaterThanOrEqualTo(0.03),
-          reason: 'in-band rate=${(inBand * 100 / samples).toStringAsFixed(1)}%');
+          reason:
+              'in-band rate=${(inBand * 100 / samples).toStringAsFixed(1)}%');
     }, timeout: const Timeout(Duration(minutes: 2)));
   });
 }

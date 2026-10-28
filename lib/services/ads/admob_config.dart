@@ -10,8 +10,7 @@ const String admobProductionAppIdAndroid =
 const String admobIosNativeAppId = 'ca-app-pub-3940256099942544~1458002511';
 
 /// Google demo application IDs (Android) when [kAdmobUseSampleUnits] is true.
-const String admobSampleAppIdAndroid =
-    'ca-app-pub-3940256099942544~3347511713';
+const String admobSampleAppIdAndroid = 'ca-app-pub-3940256099942544~3347511713';
 
 /// Set `--dart-define=ADMOB_USE_SAMPLE_UNITS=true` to use Google’s demo ad **units**
 /// on **Android** (“Test ad”). **iOS** always defaults to Google’s official test unit IDs
@@ -22,7 +21,7 @@ const String admobSampleAppIdAndroid =
 /// iOS `GADApplicationIdentifier` stays on [admobIosNativeAppId] until release iOS setup.
 const bool kAdmobUseSampleUnits = bool.fromEnvironment(
   'ADMOB_USE_SAMPLE_UNITS',
-  defaultValue: false,
+  defaultValue: !kReleaseMode,
 );
 
 /// Google’s official iOS **test** ad units (safe default until real iOS AdMob units exist).
@@ -73,7 +72,9 @@ String admobAppIdMetaForLogs() {
   return switch (defaultTargetPlatform) {
     // iOS plist uses [admobIosNativeAppId] until a production iOS AdMob app exists.
     TargetPlatform.iOS => admobIosNativeAppId,
-    _ => kAdmobUseSampleUnits ? admobSampleAppIdAndroid : admobProductionAppIdAndroid,
+    _ => kAdmobUseSampleUnits
+        ? admobSampleAppIdAndroid
+        : admobProductionAppIdAndroid,
   };
 }
 
@@ -81,4 +82,6 @@ String admobAppIdMetaForLogs() {
 /// “Use RequestConfiguration… setTestDeviceIds”).
 const List<String> kAdmobTestDeviceIds = <String>[
   'DC579E05100486C86E738D1DA7D9B9FD',
+  // Pixel 8a (akita), Android 17 — wireless-debug test device.
+  'FCFF773E74258AAE1B16B64A296FD9ED',
 ];

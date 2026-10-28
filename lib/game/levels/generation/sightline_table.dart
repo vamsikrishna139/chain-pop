@@ -26,7 +26,8 @@ class SightlineTable {
   SightlineTable._(this.gridWidth, this.gridHeight, this._rays);
 
   /// Builds the table for a `gridWidth × gridHeight` rectangular grid.
-  factory SightlineTable.forGrid(int gridWidth, int gridHeight, {List<PortalPair> portals = const []}) {
+  factory SightlineTable.forGrid(int gridWidth, int gridHeight,
+      {List<PortalPair> portals = const []}) {
     final portalMap = <int, int>{};
     for (final p in portals) {
       portalMap[gridCellKey(p.x1, p.y1)] = gridCellKey(p.x2, p.y2);
@@ -42,7 +43,8 @@ class SightlineTable {
       for (var x = 0; x < gridWidth; x++) {
         final base = (y * gridWidth + x) * 4;
         for (final dir in Direction.values) {
-          rays[base + dir.index] = _walkRay(x, y, dir, gridWidth, gridHeight, portalMap);
+          rays[base + dir.index] =
+              _walkRay(x, y, dir, gridWidth, gridHeight, portalMap);
         }
       }
     }
@@ -61,8 +63,9 @@ class SightlineTable {
     var cx = x;
     var cy = y;
     int hops = 0;
-    
-    while (hops < 50) { // arbitrary hop limit to prevent infinite loops
+
+    while (hops < 50) {
+      // arbitrary hop limit to prevent infinite loops
       switch (dir) {
         case Direction.up:
           cy--;
@@ -74,10 +77,10 @@ class SightlineTable {
           cx++;
       }
       if (cx < 0 || cx >= gridWidth || cy < 0 || cy >= gridHeight) break;
-      
+
       final key = gridCellKey(cx, cy);
       cells.add(key);
-      
+
       if (portalMap.containsKey(key)) {
         final outKey = portalMap[key]!;
         cx = outKey % 1000;

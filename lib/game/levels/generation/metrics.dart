@@ -103,7 +103,6 @@ class LevelMetrics {
     final firstLegal = tempo.isEmpty ? 0 : tempo.first;
     final variance = _stddev(tempo, avgBF);
 
-
     final cud = computeCriticalUnlockDepth(level);
 
     var paths = -1;
@@ -119,7 +118,8 @@ class LevelMetrics {
     }
 
     final wavePeelingProfile = computeWavePeelingProfile(level);
-    final forcedSequenceRatio = calculateFSRFromProfile(wavePeelingProfile, level.nodes.length);
+    final forcedSequenceRatio =
+        calculateFSRFromProfile(wavePeelingProfile, level.nodes.length);
     final graph = DependencyGraph.fromLevel(level);
     final effort = computeSearchEffort(level);
 
@@ -177,8 +177,7 @@ List<int> computeTempoProfile(LevelData level) {
     for (final n in remaining) {
       final key = gridCellKey(n.x, n.y);
       positions.remove(key);
-      final canRemove =
-          LevelSolver.canRemoveWithPositions(n, positions, level);
+      final canRemove = LevelSolver.canRemoveWithPositions(n, positions, level);
       positions.add(key);
       if (canRemove) legal++;
     }
@@ -234,8 +233,8 @@ double calculateFSRFromProfile(List<int> waveBranchingFactors, int totalNodes) {
   }
 
   final result = totalScore / waveBranchingFactors.length;
-  assert(result >= 0.0 && result <= 1.0, 
-    'tFSR out of range: $result for level with $totalNodes nodes');
+  assert(result >= 0.0 && result <= 1.0,
+      'tFSR out of range: $result for level with $totalNodes nodes');
   return result;
 }
 
@@ -348,10 +347,7 @@ Map<int, List<int>> computeRayPrerequisites(LevelData level) {
         case Direction.right:
           cx++;
       }
-      if (cx < 0 ||
-          cx >= level.gridWidth ||
-          cy < 0 ||
-          cy >= level.gridHeight) {
+      if (cx < 0 || cx >= level.gridWidth || cy < 0 || cy >= level.gridHeight) {
         break;
       }
       final id = positionToId[gridCellKey(cx, cy)];
@@ -558,10 +554,7 @@ int? _firstRayTargetId(
       case Direction.right:
         x++;
     }
-    if (x < 0 ||
-        x >= level.gridWidth ||
-        y < 0 ||
-        y >= level.gridHeight) {
+    if (x < 0 || x >= level.gridWidth || y < 0 || y >= level.gridHeight) {
       return null;
     }
     final hit = positionToId[gridCellKey(x, y)];

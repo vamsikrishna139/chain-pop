@@ -802,65 +802,50 @@ void printSummary(String label, List<BoardRow> rows, List<int> failures) {
     _Stat('tapPx', [for (final r in rows) r.tapPx]),
     _Stat('spritePx', [for (final r in rows) r.spritePx]),
     _Stat('bboxOccupancy', [for (final r in rows) r.bboxOccupancy]),
-    _Stat('emptyRowRun', [
-      for (final r in rows) r.composition.largestEmptyRowRun.toDouble()
-    ]),
-    _Stat('emptyColRun', [
-      for (final r in rows) r.composition.largestEmptyColRun.toDouble()
-    ]),
-    _Stat('emptyRegion', [
-      for (final r in rows) r.composition.largestEmptyRegion.toDouble()
-    ]),
-    _Stat('isolatedNodes', [
-      for (final r in rows) r.composition.isolatedNodeCount.toDouble()
-    ]),
-    _Stat('meanLocalDens', [
-      for (final r in rows) r.composition.meanLocalDensity
-    ]),
+    _Stat('emptyRowRun',
+        [for (final r in rows) r.composition.largestEmptyRowRun.toDouble()]),
+    _Stat('emptyColRun',
+        [for (final r in rows) r.composition.largestEmptyColRun.toDouble()]),
+    _Stat('emptyRegion',
+        [for (final r in rows) r.composition.largestEmptyRegion.toDouble()]),
+    _Stat('isolatedNodes',
+        [for (final r in rows) r.composition.isolatedNodeCount.toDouble()]),
+    _Stat('meanLocalDens',
+        [for (final r in rows) r.composition.meanLocalDensity]),
     _Stat('canvasEmpty%', [for (final r in rows) r.canvasEmptyPct]),
     _Stat('gridEmpty%', [for (final r in rows) r.gridEmptyPct]),
     _Stat('bboxEmpty%', [for (final r in rows) r.bboxEmptyPct]),
     _Stat('gridCells', [for (final r in rows) r.gridCells.toDouble()]),
-    _Stat('opening', [
-      for (final r in rows) r.metrics.firstLegalMoveCount.toDouble()
-    ]),
-    _Stat('waveZero', [for (final r in rows) r.metrics.waveZeroWidth.toDouble()]),
+    _Stat('opening',
+        [for (final r in rows) r.metrics.firstLegalMoveCount.toDouble()]),
+    _Stat(
+        'waveZero', [for (final r in rows) r.metrics.waveZeroWidth.toDouble()]),
     _Stat('waves', [for (final r in rows) r.metrics.waveDepth.toDouble()]),
-    _Stat('CUD', [
-      for (final r in rows) r.metrics.criticalUnlockDepth.toDouble()
-    ]),
-    _Stat('FSR%', [
-      for (final r in rows) r.metrics.forcedSequenceRatio * 100
-    ]),
+    _Stat('CUD',
+        [for (final r in rows) r.metrics.criticalUnlockDepth.toDouble()]),
+    _Stat('FSR%', [for (final r in rows) r.metrics.forcedSequenceRatio * 100]),
     _Stat('BF', [for (final r in rows) r.metrics.averageBranchingFactor]),
     _Stat('frontierVar', [for (final r in rows) r.metrics.frontierVariance]),
-    _Stat('effort', [
-      for (final r in rows) r.metrics.searchEffortScore.toDouble()
-    ]),
-    _Stat('chokes', [
-      for (final r in rows) r.metrics.chokePointCount.toDouble()
-    ]),
-    _Stat('maxHub', [for (final r in rows) r.metrics.maxHubInDegree.toDouble()]),
-    _Stat('antichain', [
-      for (final r in rows) r.metrics.maxAntichainWidth.toDouble()
-    ]),
-    _Stat('components', [
-      for (final r in rows) r.composition.components.toDouble()
-    ]),
-    _Stat('enclosedHoles', [
-      for (final r in rows) r.composition.enclosedHoles.toDouble()
-    ]),
-    _Stat('coreTapDepth', [
-      for (final r in rows) r.core.coreTapDepth.toDouble()
-    ]),
+    _Stat('effort',
+        [for (final r in rows) r.metrics.searchEffortScore.toDouble()]),
+    _Stat(
+        'chokes', [for (final r in rows) r.metrics.chokePointCount.toDouble()]),
+    _Stat(
+        'maxHub', [for (final r in rows) r.metrics.maxHubInDegree.toDouble()]),
+    _Stat('antichain',
+        [for (final r in rows) r.metrics.maxAntichainWidth.toDouble()]),
+    _Stat('components',
+        [for (final r in rows) r.composition.components.toDouble()]),
+    _Stat('enclosedHoles',
+        [for (final r in rows) r.composition.enclosedHoles.toDouble()]),
+    _Stat(
+        'coreTapDepth', [for (final r in rows) r.core.coreTapDepth.toDouble()]),
     _Stat('coreTapFrac', [for (final r in rows) r.core.coreTapFraction]),
     _Stat('coreIsolation', [for (final r in rows) r.core.coreIsolation]),
-    _Stat('coreCritDepth', [
-      for (final r in rows) r.core.coreCriticalDepth.toDouble()
-    ]),
-    _Stat('tapCascade', [
-      for (final r in rows) r.core.maxSingleTapCascade.toDouble()
-    ]),
+    _Stat('coreCritDepth',
+        [for (final r in rows) r.core.coreCriticalDepth.toDouble()]),
+    _Stat('tapCascade',
+        [for (final r in rows) r.core.maxSingleTapCascade.toDouble()]),
     _Stat('timeLimitSec', [for (final r in rows) r.timeLimitSec.toDouble()]),
     _Stat('genMs', [for (final r in rows) r.genMs.toDouble()]),
   ];
@@ -891,9 +876,13 @@ void printSummary(String label, List<BoardRow> rows, List<int> failures) {
       'mask=${has((r) => r.hasMask)} '
       '(levels out of ${rows.length})');
 
-  _histCount('grid sizes', {
-    for (final r in rows) '${r.gridW}x${r.gridH}': 0,
-  }, rows, (r) => '${r.gridW}x${r.gridH}');
+  _histCount(
+      'grid sizes',
+      {
+        for (final r in rows) '${r.gridW}x${r.gridH}': 0,
+      },
+      rows,
+      (r) => '${r.gridW}x${r.gridH}');
   _histCount('directives', {}, rows, (r) => r.directive);
   _histBucket('opening width', rows,
       (r) => r.metrics.firstLegalMoveCount.toDouble(), [3, 5, 7, 9, 11, 14]);
@@ -905,10 +894,10 @@ void printSummary(String label, List<BoardRow> rows, List<int> failures) {
       [40, 50, 60, 70, 80, 90]);
   _histBucket('canvas empty %', rows, (r) => r.canvasEmptyPct,
       [30, 40, 50, 60, 70, 80]);
-  _histBucket('grid empty %', rows, (r) => r.gridEmptyPct,
-      [20, 30, 40, 50, 60, 70]);
   _histBucket(
-      'FSR %', rows, (r) => r.metrics.forcedSequenceRatio * 100, [30, 40, 50, 60, 70]);
+      'grid empty %', rows, (r) => r.gridEmptyPct, [20, 30, 40, 50, 60, 70]);
+  _histBucket('FSR %', rows, (r) => r.metrics.forcedSequenceRatio * 100,
+      [30, 40, 50, 60, 70]);
 
   _histBucket('core tap depth', rows, (r) => r.core.coreTapDepth.toDouble(),
       [3, 5, 7, 9, 12, 15, 20]);
@@ -925,11 +914,13 @@ void printSummary(String label, List<BoardRow> rows, List<int> failures) {
     ..sort((a, b) => b.value.compareTo(a.value));
   print('  topology classes: ${ranked.length} distinct '
       '(components/enclosedHoles/fillBucket)');
-  print('    commonest: ${ranked.take(5).map((e) => "${e.key}=${e.value}").join("  ")}');
+  print(
+      '    commonest: ${ranked.take(5).map((e) => "${e.key}=${e.value}").join("  ")}');
 
   final slow = List<BoardRow>.from(rows)
     ..sort((a, b) => b.genMs.compareTo(a.genMs));
-  print('  slowest: ${slow.take(5).map((r) => "${r.label}=${r.genMs}ms").join(", ")}');
+  print(
+      '  slowest: ${slow.take(5).map((r) => "${r.label}=${r.genMs}ms").join(", ")}');
   print('');
 }
 

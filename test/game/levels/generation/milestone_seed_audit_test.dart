@@ -68,8 +68,7 @@ void main() {
         };
         final id = seedIds.isEmpty ? '-' : seedIds.join('+');
 
-        int sum(Map<String, int> m) =>
-            m.values.fold<int>(0, (a, b) => a + b);
+        int sum(Map<String, int> m) => m.values.fold<int>(0, (a, b) => a + b);
 
         final attempts = sum(gen.seedAttemptCounts);
         final construction = sum(gen.seedConstructionFailureCounts);

@@ -293,8 +293,7 @@ class DifficultyProfile {
 
     if (crunchEnd < n) {
       final releaseSegment = tempoProfile.sublist(crunchEnd);
-      final releaseMax =
-          releaseSegment.reduce((a, b) => a > b ? a : b);
+      final releaseMax = releaseSegment.reduce((a, b) => a > b ? a : b);
       if (releaseMax < spec.releasePeak.min) return false;
     }
     return true;
@@ -315,20 +314,17 @@ class DifficultyProfile {
     final crunchStart = (n * 0.35).floor();
     final crunchEnd = min(n, max(crunchStart + 1, (n * 0.65).ceil()));
     final crunchSegment = tempoProfile.sublist(crunchStart, crunchEnd);
-    final crunchFsr = crunchSegment.where((m) => m == 1).length /
-        crunchSegment.length;
+    final crunchFsr =
+        crunchSegment.where((m) => m == 1).length / crunchSegment.length;
 
     var releaseScore = 0.0;
     if (crunchEnd < n) {
-      final releaseMax = tempoProfile
-          .sublist(crunchEnd)
-          .reduce((a, b) => a > b ? a : b);
+      final releaseMax =
+          tempoProfile.sublist(crunchEnd).reduce((a, b) => a > b ? a : b);
       releaseScore = releaseMax / spec.releasePeak.max;
     }
 
-    return openScore.clamp(0.0, 1.0) +
-        crunchFsr +
-        releaseScore.clamp(0.0, 1.0);
+    return openScore.clamp(0.0, 1.0) + crunchFsr + releaseScore.clamp(0.0, 1.0);
   }
 
   /// Midgame forced-sequence share (35–65% window) for in-band ranking.
@@ -367,11 +363,11 @@ class DifficultyProfile {
 
     if (criticalUnlockDepth.contains(criticalPathLength)) {
       score += 1.0;
-      final target =
-          (criticalUnlockDepth.min + criticalUnlockDepth.max) / 2.0;
+      final target = (criticalUnlockDepth.min + criticalUnlockDepth.max) / 2.0;
       score += 0.3 *
-          (1.0 - (criticalPathLength - target).abs() /
-              (criticalUnlockDepth.max - criticalUnlockDepth.min + 1));
+          (1.0 -
+              (criticalPathLength - target).abs() /
+                  (criticalUnlockDepth.max - criticalUnlockDepth.min + 1));
     }
 
     if (hardHubInDegreeBand.contains(maxHubInDegree)) {
@@ -400,7 +396,6 @@ class DifficultyProfile {
       maxHubInDegree: metrics.maxHubInDegree,
     );
   }
-
 
   static double _avg(List<int> values) {
     if (values.isEmpty) return 0;

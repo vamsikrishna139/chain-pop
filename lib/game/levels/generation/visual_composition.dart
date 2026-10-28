@@ -3,7 +3,6 @@ import '../level.dart';
 import '../grid_cell_key.dart';
 import 'difficulty_profile.dart';
 
-
 enum VisualCompositionRejectReason {
   aspect,
   occupancy,
@@ -216,8 +215,7 @@ VisualCompositionResult evaluateVisualComposition(
   final bboxAspect = bboxHeight == 0 ? 1.0 : bboxWidth / bboxHeight;
   final aspectApplies =
       !skipAspectCheck && logicalAspect >= 0.7 && logicalAspect <= 1.4;
-  final aspectFails =
-      aspectApplies && (bboxAspect < 0.55 || bboxAspect > 1.75);
+  final aspectFails = aspectApplies && (bboxAspect < 0.55 || bboxAspect > 1.75);
   // 1.0 at square, 0.0 at whichever reject edge the board is heading for.
   //
   // An exempted board scores 1.0 rather than being measured. `skipAspectCheck`
@@ -240,9 +238,8 @@ VisualCompositionResult evaluateVisualComposition(
       !skipBlobVsGridCheck && gridArea > 0 && blobVsGrid < 0.50;
   // Same exemption logic: `skipBlobVsGridCheck` marks masks whose bbox is
   // *meant* to be a small share of the grid, so they are not scored on it.
-  final blobVsGridScore = (skipBlobVsGridCheck || gridArea <= 0)
-      ? 1.0
-      : blobVsGrid.clamp(0.0, 1.0);
+  final blobVsGridScore =
+      (skipBlobVsGridCheck || gridArea <= 0) ? 1.0 : blobVsGrid.clamp(0.0, 1.0);
 
   // 4. Bbox Occupancy: node count / bbox area >= 0.35 (relax to 0.22 if nodes < 15 to allow sparse configurations without skewing archetypes)
   final occupancy = bboxArea > 0 ? level.nodes.length / bboxArea : 1.0;
@@ -354,7 +351,8 @@ VisualCompositionResult evaluateVisualComposition(
           final nbKey = gridCellKey(nb.$1, nb.$2);
           if (keys.contains(nbKey) && !visited.contains(nbKey)) {
             visited.add(nbKey);
-            final nbNode = level.nodes.firstWhere((n) => n.x == nb.$1 && n.y == nb.$2);
+            final nbNode =
+                level.nodes.firstWhere((n) => n.x == nb.$1 && n.y == nb.$2);
             queue.add(nbNode);
           }
         }

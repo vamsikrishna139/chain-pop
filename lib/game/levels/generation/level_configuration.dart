@@ -160,7 +160,8 @@ class LevelConfiguration {
   /// Medium) so daily boards match the Expert evaluator's density expectations.
   /// The UI label (`DifficultyMode.medium`) and timer formula are unchanged.
   factory LevelConfiguration.forDailyChallenge(int dayKey) {
-    final base = LevelConfiguration.fromLevelId(dayKey, mode: DifficultyMode.hard);
+    final base =
+        LevelConfiguration.fromLevelId(dayKey, mode: DifficultyMode.hard);
     final (gw, gh) = _clampGridDimensions(
       min(base.gridWidth, kDailyChallengeMaxGridSpan),
       min(base.gridHeight, kDailyChallengeMaxGridSpan),
@@ -309,9 +310,8 @@ class LevelConfiguration {
       case LevelArchetype.corridor:
         final longAxis = (base * 1.35).round();
         final shortAxis = (base * 0.70).round();
-        final (w, h) = levelId.isEven
-            ? (shortAxis, longAxis)
-            : (longAxis, shortAxis);
+        final (w, h) =
+            levelId.isEven ? (shortAxis, longAxis) : (longAxis, shortAxis);
         return _clampGridDimensions(w, h, mode, levelId: levelId);
       case LevelArchetype.fortress:
         final s = max(5, base);
@@ -339,7 +339,8 @@ class LevelConfiguration {
     bool isDaily = false,
     int levelId = 1,
   }) {
-    final sector = levelId > 10000 ? 8 : worldForLevel(levelId).sector.mechanicBudgetTier;
+    final sector =
+        levelId > 10000 ? 8 : worldForLevel(levelId).sector.mechanicBudgetTier;
     final (minSpan, maxSpan) = switch (mode) {
       DifficultyMode.easy => (6, 8),
       DifficultyMode.medium => (6, 9),
@@ -347,7 +348,6 @@ class LevelConfiguration {
     };
     return (w.clamp(minSpan, maxSpan), h.clamp(minSpan, maxSpan));
   }
-
 
   // ── Node count ─────────────────────────────────────────────────────────
 
@@ -375,8 +375,7 @@ class LevelConfiguration {
 
     final baseCount = difficulty.minNodes + (levelId * 0.5).floor();
     final densityMod = _archetypeDensityModifier(archetype);
-    final maxPossible =
-        (area * difficulty.densityFactor * densityMod).floor();
+    final maxPossible = (area * difficulty.densityFactor * densityMod).floor();
     final clamped = baseCount.clamp(
       difficulty.minNodes,
       max(difficulty.minNodes, min(effectiveMaxNodes, maxPossible)),

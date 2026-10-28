@@ -25,7 +25,8 @@ class TimerPauseChip extends StatefulWidget {
   State<TimerPauseChip> createState() => _TimerPauseChipState();
 }
 
-class _TimerPauseChipState extends State<TimerPauseChip> with SingleTickerProviderStateMixin {
+class _TimerPauseChipState extends State<TimerPauseChip>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _pulse;
 
   @override
@@ -78,7 +79,8 @@ class _TimerPauseChipState extends State<TimerPauseChip> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final hasCountdown = widget.timeLimitSec != null && widget.timeLeftSec != null;
+    final hasCountdown =
+        widget.timeLimitSec != null && widget.timeLeftSec != null;
     final frac = hasCountdown && widget.timeLimitSec! > 0
         ? widget.timeLeftSec! / widget.timeLimitSec!
         : 1.0;
@@ -88,8 +90,12 @@ class _TimerPauseChipState extends State<TimerPauseChip> with SingleTickerProvid
       animation: _pulse,
       builder: (context, _) {
         final scale = urgent ? 1.0 + _pulse.value * 0.05 : 1.0;
-        final bgColor = urgent ? Colors.redAccent.withValues(alpha: 0.1) : AppColors.surface;
-        final borderColor = urgent ? Colors.redAccent.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.1);
+        final bgColor = urgent
+            ? Colors.redAccent.withValues(alpha: 0.1)
+            : AppColors.surface;
+        final borderColor = urgent
+            ? Colors.redAccent.withValues(alpha: 0.5)
+            : Colors.white.withValues(alpha: 0.1);
         final iconColor = urgent ? Colors.redAccent : Colors.white70;
         final textColor = urgent ? Colors.redAccent : Colors.white;
 
@@ -111,7 +117,9 @@ class _TimerPauseChipState extends State<TimerPauseChip> with SingleTickerProvid
                   Icon(Icons.schedule_rounded, size: 14, color: iconColor),
                   const SizedBox(width: 6),
                   Text(
-                    hasCountdown ? _fmtSeconds(widget.timeLeftSec!) : _fmtElapsed(widget.elapsed),
+                    hasCountdown
+                        ? _fmtSeconds(widget.timeLeftSec!)
+                        : _fmtElapsed(widget.elapsed),
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -126,7 +134,9 @@ class _TimerPauseChipState extends State<TimerPauseChip> with SingleTickerProvid
                   ),
                   const SizedBox(width: 6),
                   Icon(
-                    widget.emphasizeResume ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                    widget.emphasizeResume
+                        ? Icons.play_arrow_rounded
+                        : Icons.pause_rounded,
                     size: 14,
                     color: Colors.white54,
                   ),

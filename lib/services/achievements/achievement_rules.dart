@@ -89,7 +89,8 @@ final Map<String, AchievementProgressFn> kAchievementRules =
   AchievementIds.dailyRegular: (s) => _clamp(s.dailyCompleted, 10),
   AchievementIds.dailyDevotee: (s) => _clamp(s.dailyCompleted, 50),
   AchievementIds.dailyArchivist: (s) => _clamp(s.dailyArchived, 10),
-  AchievementIds.calendarCloser: (s) => _flag(s, AchievementFlag.calendarCloser),
+  AchievementIds.calendarCloser: (s) =>
+      _flag(s, AchievementFlag.calendarCloser),
 
   // ── K · Streaks ───────────────────────────────────────────────────────────
   AchievementIds.backAgain: (s) => _clamp(s.bestPlayStreakDays, 3),

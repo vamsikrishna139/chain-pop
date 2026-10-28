@@ -33,7 +33,7 @@
 //
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'dart:math' as math;
@@ -129,7 +129,8 @@ void _funnel(DifficultyMode mode) {
       '$noChoice/$n = ${(100 * noChoice / d).toStringAsFixed(1)}%');
   print('  ^ every diversity mechanism in the generator — ledger novelty, the');
   print('    silhouette streak penalty and diversity boost, T2.4c composition');
-  print('    ranking, the tempo/CUD/topology comparator — chooses among these.');
+  print(
+      '    ranking, the tempo/CUD/topology comparator — chooses among these.');
 
   // T2.5 — the mortality table. This is the view that says WHICH gate to
   // touch, and it is the reason `_evaluatorRejectionCount` was split: that
@@ -150,7 +151,8 @@ void _funnel(DifficultyMode mode) {
         '${(100 * e.value / mi).toStringAsFixed(1)}%');
   }
   final accounted = rows.values.reduce((a, b) => a + b);
-  print('    ${'—— accounted for'.padRight(46)} ${accounted.toString().padLeft(5)}'
+  print(
+      '    ${'—— accounted for'.padRight(46)} ${accounted.toString().padLeft(5)}'
       '${accounted == iters ? '  (conserved)' : '  MISMATCH vs $iters'}');
   print('    iterations never entered (latency budget)      '
       '${budgetBreaks.toString().padLeft(5)}');
@@ -166,12 +168,23 @@ void _funnel(DifficultyMode mode) {
 
 /// Bit labels for the §4.5 fingerprint layout (`diversity_ledger.dart`).
 const Map<int, String> _kBitLabels = {
-  0: 'sil0', 1: 'sil1', 2: 'sil2',
-  3: 'wave0', 4: 'wave1',
-  5: 'bf0', 6: 'bf1',
-  7: 'motif0', 8: 'motif1', 9: 'motif2',
-  10: 'dirN', 11: 'dirE', 12: 'dirS', 13: 'dirW',
-  23: 'fam0', 24: 'fam1', 25: 'fam2',
+  0: 'sil0',
+  1: 'sil1',
+  2: 'sil2',
+  3: 'wave0',
+  4: 'wave1',
+  5: 'bf0',
+  6: 'bf1',
+  7: 'motif0',
+  8: 'motif1',
+  9: 'motif2',
+  10: 'dirN',
+  11: 'dirE',
+  12: 'dirS',
+  13: 'dirW',
+  23: 'fam0',
+  24: 'fam1',
+  25: 'fam2',
 };
 
 List<int> _entropyAndOutlines() {
@@ -180,7 +193,8 @@ List<int> _entropyAndOutlines() {
   final outlines = <SilhouetteId, Set<String>>{};
 
   for (var id = 1; id <= kSequenceLevels; id++) {
-    final r = gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
+    final r =
+        gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
     if (!r.isSuccess) continue;
     final ev = sink.events.last;
     final cells = r.value.playCells;
@@ -199,9 +213,8 @@ List<int> _entropyAndOutlines() {
     final ones = bits.where((x) => (x >> b) & 1 == 1).length;
     final p = ones / math.max(1, bits.length);
     final label = _kBitLabels[b] ?? 'dens${b - 14}';
-    final h = (p <= 0 || p >= 1)
-        ? 0.0
-        : -(p * _log2(p) + (1 - p) * _log2(1 - p));
+    final h =
+        (p <= 0 || p >= 1) ? 0.0 : -(p * _log2(p) + (1 - p) * _log2(1 - p));
     if (p <= 0 || p >= 1) dead++;
     entropy += h;
     final group = label.replaceAll(RegExp(r'[0-9]+$'), '');
@@ -212,13 +225,13 @@ List<int> _entropyAndOutlines() {
   }
   print('  DEAD bits: $dead/26   effective entropy: '
       '${entropy.toStringAsFixed(2)} of 26 bits');
-  final g = groups.entries.toList()
-    ..sort((a, b) => b.value.compareTo(a.value));
+  final g = groups.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
   print('  by field: ${g.map((e) => '${e.key}='
       '${e.value.toStringAsFixed(2)}b').join('  ')}');
 
   print('\n--- CONCRETE OUTLINES PER SILHOUETTE ID ---');
-  print('  (cells@grid signatures — what the player actually sees, against the');
+  print(
+      '  (cells@grid signatures — what the player actually sees, against the');
   print('   4-family label the "lattice share" DoD item is measured on)');
   final ids = outlines.keys.toList()
     ..sort((a, b) => outlines[b]!.length.compareTo(outlines[a]!.length));
@@ -258,7 +271,8 @@ void _novelty(List<int> bits) {
   print('T2.7 admission CDF — share of levels a threshold would call NOVEL:');
   for (var t = 2; t <= 9; t++) {
     final admitted = sorted.where((d) => d >= t).length;
-    print('  threshold $t : ${(100 * admitted / t2).toStringAsFixed(1)}% admitted');
+    print(
+        '  threshold $t : ${(100 * admitted / t2).toStringAsFixed(1)}% admitted');
   }
   // What a silhouette-only difference actually costs, which is the floor the
   // plan pinned: novelty must still reject a board differing only in
@@ -268,7 +282,8 @@ void _novelty(List<int> bits) {
     for (final b in SilhouetteId.values) {
       if (a.index >= b.index) continue;
       final d = _pop((a.index ^ b.index)) +
-          _pop(silhouetteVisualFamily(a).index ^ silhouetteVisualFamily(b).index);
+          _pop(silhouetteVisualFamily(a).index ^
+              silhouetteVisualFamily(b).index);
       silDistances.add(d);
     }
   }
@@ -296,9 +311,8 @@ int _pop(int x) {
 
 double _log2(double x) => x <= 0 ? 0 : math.log(x) / math.ln2;
 
-String _pct(List<int> sorted, double p) => sorted.isEmpty
-    ? '0'
-    : sorted[((sorted.length - 1) * p).round()].toString();
+String _pct(List<int> sorted, double p) =>
+    sorted.isEmpty ? '0' : sorted[((sorted.length - 1) * p).round()].toString();
 
 String _hist(Map<int, int> m) {
   final keys = m.keys.toList()..sort();

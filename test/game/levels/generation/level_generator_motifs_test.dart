@@ -17,12 +17,10 @@ void main() {
   group('Phase 4 — Motif Transaction Blocks', () {
     test(
         'Strong-Motif archetype keeps motif visibility ≥10% across a '
-        '300-level session with lock cluster reservation',
-        () {
+        '300-level session with lock cluster reservation', () {
       final gen = LevelGenerator();
       for (var i = 0; i < 300; i++) {
-        final mode =
-            DifficultyMode.values[i % DifficultyMode.values.length];
+        final mode = DifficultyMode.values[i % DifficultyMode.values.length];
         final r = gen.generate(i, mode: mode);
         expect(r.isSuccess, isTrue,
             reason: 'generation failed at $i mode=$mode');
@@ -42,8 +40,7 @@ void main() {
     test('every shipped level is solvable, motif or not (200 levels)', () {
       final gen = LevelGenerator();
       for (var i = 0; i < 200; i++) {
-        final mode =
-            DifficultyMode.values[i % DifficultyMode.values.length];
+        final mode = DifficultyMode.values[i % DifficultyMode.values.length];
         final r = gen.generate(i, mode: mode);
         expect(r.isSuccess, isTrue);
         final level = r.value;
@@ -85,8 +82,7 @@ void main() {
         // Skip dev validation seeds (30–39) so we exercise the live pipeline.
         final r = gen.generate(40 + i, mode: DifficultyMode.hard);
         expect(r.isSuccess, isTrue);
-        lockClusterShipped =
-            gen.motifEmissionCounts[MotifId.lockCluster] ?? 0;
+        lockClusterShipped = gen.motifEmissionCounts[MotifId.lockCluster] ?? 0;
         if (lockClusterShipped > 0) break;
       }
       expect(lockClusterShipped, greaterThan(0),

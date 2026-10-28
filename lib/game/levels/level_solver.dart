@@ -109,7 +109,8 @@ class LevelSolver {
   /// Walks a straight ray across the full bounding grid until it leaves the
   /// board; [LevelData.playCells] does not shorten the ray (void is not an
   /// exit). O(max(n, grid span)) per call.
-  static bool canRemove(NodeData node, List<NodeData> allNodes, LevelData level) {
+  static bool canRemove(
+      NodeData node, List<NodeData> allNodes, LevelData level) {
     final others = <int>{};
     for (final o in allNodes) {
       if (o.id != node.id) others.add(gridCellKey(o.x, o.y));
@@ -171,7 +172,7 @@ class LevelSolver {
           blockerNodeId: blockerId,
         );
       }
-      
+
       // Portal check
       if (level.portalPairs.isNotEmpty) {
         for (final p in level.portalPairs) {
@@ -201,10 +202,12 @@ class LevelSolver {
     Set<int> otherPositions,
     LevelData level,
   ) {
-    if (node.kind == NodeKind.locked && _lockedNeighborsRemain(node, otherPositions, level)) {
+    if (node.kind == NodeKind.locked &&
+        _lockedNeighborsRemain(node, otherPositions, level)) {
       return false;
     }
-    if (node.phaseGroup > 0 && _earlierPhaseRemains(node, otherPositions, level)) {
+    if (node.phaseGroup > 0 &&
+        _earlierPhaseRemains(node, otherPositions, level)) {
       return false;
     }
     var x = node.x;
@@ -226,7 +229,7 @@ class LevelSolver {
       }
       if (x < 0 || x >= gw || y < 0 || y >= gh) return true;
       if (otherPositions.contains(gridCellKey(x, y))) return false;
-      
+
       if (level.portalPairs.isNotEmpty) {
         for (final p in level.portalPairs) {
           if (p.x1 == x && p.y1 == y) {

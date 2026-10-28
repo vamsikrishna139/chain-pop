@@ -13,18 +13,24 @@ extension DifficultyExt on DifficultyMode {
   /// Short display label, e.g. "EASY"
   String get label {
     switch (this) {
-      case DifficultyMode.easy:   return 'EASY';
-      case DifficultyMode.medium: return 'MEDIUM';
-      case DifficultyMode.hard:   return 'HARD';
+      case DifficultyMode.easy:
+        return 'EASY';
+      case DifficultyMode.medium:
+        return 'MEDIUM';
+      case DifficultyMode.hard:
+        return 'HARD';
     }
   }
 
   /// Lowercase key used as Hive storage key segment.
   String get key {
     switch (this) {
-      case DifficultyMode.easy:   return 'easy';
-      case DifficultyMode.medium: return 'medium';
-      case DifficultyMode.hard:   return 'hard';
+      case DifficultyMode.easy:
+        return 'easy';
+      case DifficultyMode.medium:
+        return 'medium';
+      case DifficultyMode.hard:
+        return 'hard';
     }
   }
 
@@ -33,9 +39,12 @@ extension DifficultyExt on DifficultyMode {
   /// Primary accent colour for this difficulty.
   Color get color {
     switch (this) {
-      case DifficultyMode.easy:   return AppColors.accentEasy;
-      case DifficultyMode.medium: return AppColors.accentMedium;
-      case DifficultyMode.hard:   return AppColors.accentHard;
+      case DifficultyMode.easy:
+        return AppColors.accentEasy;
+      case DifficultyMode.medium:
+        return AppColors.accentMedium;
+      case DifficultyMode.hard:
+        return AppColors.accentHard;
     }
   }
 
@@ -50,21 +59,26 @@ extension DifficultyExt on DifficultyMode {
   /// Icon representing this difficulty level.
   IconData get icon {
     switch (this) {
-      case DifficultyMode.easy:   return Icons.bolt_outlined;
-      case DifficultyMode.medium: return Icons.local_fire_department_outlined;
-      case DifficultyMode.hard:   return Icons.whatshot;
+      case DifficultyMode.easy:
+        return Icons.bolt_outlined;
+      case DifficultyMode.medium:
+        return Icons.local_fire_department_outlined;
+      case DifficultyMode.hard:
+        return Icons.whatshot;
     }
   }
-
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   /// Parses a stored string key back to a [DifficultyMode].
   static DifficultyMode fromKey(String key) {
     switch (key) {
-      case 'medium': return DifficultyMode.medium;
-      case 'hard':   return DifficultyMode.hard;
-      default:       return DifficultyMode.easy;
+      case 'medium':
+        return DifficultyMode.medium;
+      case 'hard':
+        return DifficultyMode.hard;
+      default:
+        return DifficultyMode.easy;
     }
   }
 }

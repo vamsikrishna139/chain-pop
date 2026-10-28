@@ -11,7 +11,7 @@ import 'generation/generation.dart';
 /// The manager resolves generation results and always returns a valid
 /// [LevelData] — either the generated level or a safe fallback.
 class LevelManager {
-  static LevelGenerator generator = LevelGenerator();
+  static LevelGenerator generator = LevelGenerator.neutral();
 
   /// Latency budget for on-load campaign generation. A small tail of seeds
   /// otherwise burn the full attempt budget (~1s) chasing the ideal
@@ -137,7 +137,7 @@ class LevelManager {
     // A fresh generator is the smallest change that makes the contract hold on
     // both paths, and it makes the isolate an optimisation for latency rather
     // than a correctness requirement.
-    final result = LevelGenerator().generateDailyChallenge(
+    final result = LevelGenerator.neutral().generateDailyChallenge(
       dayKey,
       timeBudget: dailyGenerationBudget,
     );

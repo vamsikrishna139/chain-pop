@@ -11,7 +11,7 @@ import 'package:chain_pop/screens/game_screen.dart';
 import 'package:chain_pop/screens/game/widgets/quick_win_banner.dart';
 import 'package:chain_pop/screens/game/widgets/win_celebration_overlay.dart';
 import 'package:chain_pop/services/ads/campaign_interstitial_frustration_gate.dart';
-import 'package:chain_pop/services/ads/recording_ad_service.dart';
+import '../services/ads/recording_ad_service.dart';
 import 'package:chain_pop/services/game_audio.dart';
 import 'package:chain_pop/services/session_campaign_streak.dart';
 import 'package:chain_pop/services/session_pacing.dart';

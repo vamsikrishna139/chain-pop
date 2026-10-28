@@ -10,7 +10,8 @@ void main() {
   final generator = LevelGenerator();
 
   group('Solver Compatibility — isSolvable', () {
-    test('LevelSolver.isSolvable returns true for all generated levels (1-100)', () {
+    test('LevelSolver.isSolvable returns true for all generated levels (1-100)',
+        () {
       final failed = <int>[];
       for (int id = 1; id <= 100; id++) {
         final result = generator.generate(id);
@@ -18,12 +19,14 @@ void main() {
           failed.add(id);
         }
       }
-      expect(failed, isEmpty, reason: 'Solver found unsolvable levels: $failed');
+      expect(failed, isEmpty,
+          reason: 'Solver found unsolvable levels: $failed');
     });
   });
 
   group('Solver Compatibility — getHint', () {
-    test('LevelSolver.getHint finds a valid move for every generated level', () {
+    test('LevelSolver.getHint finds a valid move for every generated level',
+        () {
       for (final id in [1, 5, 10, 30, 100]) {
         final result = generator.generate(id);
         expect(result.isSuccess, isTrue);
@@ -62,7 +65,8 @@ void main() {
   });
 
   group('Removal-wave band', () {
-    test('Levels 1–100 sit within min/max removal waves for auto-derived mode', () {
+    test('Levels 1–100 sit within min/max removal waves for auto-derived mode',
+        () {
       for (var id = 1; id <= 100; id++) {
         final result = generator.generate(id);
         expect(result.isSuccess, isTrue, reason: 'Level $id');
@@ -75,9 +79,8 @@ void main() {
         );
         // Match the most permissive band used on late generation attempts.
         final wMin = wMin0 - 2 < 1 ? 1 : wMin0 - 2;
-        final wMax = wMax0 + 10 < level.nodes.length
-            ? wMax0 + 10
-            : level.nodes.length;
+        final wMax =
+            wMax0 + 10 < level.nodes.length ? wMax0 + 10 : level.nodes.length;
         expect(
           waves,
           inInclusiveRange(wMin, wMax),

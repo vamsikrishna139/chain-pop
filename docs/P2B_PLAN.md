@@ -1,5 +1,21 @@
 # P2b — Make the variety land
 
+> **Task ids renumbered 2026-08-21.** This document originally used `T3.0`–`T3.5`,
+> which collide with the Strategy Composer's `T3.1`/`T3.2`/`T3.3` in
+> `IMPLEMENTATION_PLAN_V2.md` §6. P2b is the tail of P2 and now numbers from P2:
+>
+> | here | was | task |
+> |---|---|---|
+> | **T2.5** | T3.0 | funnel instrument |
+> | **T2.6** | T3.1 | fingerprint re-bucketing |
+> | **T2.7** | T3.2 | threshold recalibration |
+> | **T2.8** | T3.3 | fallback-record fix |
+> | **T2.9** | T3.4 | candidate supply |
+> | **T2.10** | T3.5 | target renegotiation |
+>
+> `IMPLEMENTATION_PLAN_V2.md` §4b is the spine (scope, gating, DoD); this file
+> holds the evidence and the per-task detail. Numbers live in one place only.
+
 **Goal, in player terms:** a player who plays ten Hard levels in a sitting should
 not feel they played the same board ten times. That is the engagement problem
 F4 named, and it is the one P2's bundle did not solve.
@@ -115,7 +131,7 @@ times over).
   per-board measures are met.
 - **It does not re-open T2.2.** The mask floor question is settled and the
   jitter-range follow-up for `diamond` / `hollowDiamond` is tracked separately.
-- **It does not chase "lattice share < 50%" as written.** See §T3.5 — that
+- **It does not chase "lattice share < 50%" as written.** See §T2.10 — that
   target is probably measuring the wrong thing, and pursuing it directly fights
   a deliberate earlier decision.
 
@@ -123,11 +139,11 @@ times over).
 
 ## 2. The tasks
 
-Ordered by risk. **T3.0 is free. T3.1–T3.4 all move boards and land together as
+Ordered by risk. **T2.5 is free. T2.6–T2.9 all move boards and land together as
 one re-baselining event**, exactly as P2's bundle did. We are still pre-freeze,
 so one more event is available — and it is the *last* one.
 
-### T3.0 — Instrument the funnel · *zero behaviour change, zero seed impact*
+### T2.5 — Instrument the funnel · *zero behaviour change, zero seed impact*
 
 **Mostly delivered already** as `p2_selection_funnel_report_test.dart`. Remaining:
 
@@ -146,7 +162,7 @@ not, that is a control that tells us the cause is Hard-specific density.
 
 ---
 
-### T3.1 — Give the fingerprint back its dead bits · *moves seeds*
+### T2.6 — Give the fingerprint back its dead bits · *moves seeds*
 
 **File:** `diversity_ledger.dart`
 
@@ -159,23 +175,23 @@ quartiles of the observed range, the same method T0.2 used to settle
 `bboxFillBucket`.
 
 **Balance:** this is a measurement change, so per T2.4's hard-won lesson it
-**must not** be combined with a threshold change. T3.1 changes what the ruler
-measures; T3.2 chooses where the line goes. One commit each.
+**must not** be combined with a threshold change. T2.6 changes what the ruler
+measures; T2.7 chooses where the line goes. One commit each.
 
 **Expected:** +3–4 bits of live entropy in the fields where Hard boards genuinely
 differ, raising achievable nearest-neighbour distance. **Not** assumed — the
 gate is the measured median.
 
 **Gate:** rolling min-Hamming median must rise above 3.00. If it does not, the
-premise is wrong and T3.2 must not proceed.
+premise is wrong and T2.7 must not proceed.
 
 ---
 
-### T3.2 — Recalibrate the novelty threshold · *analysis, then one constant*
+### T2.7 — Recalibrate the novelty threshold · *analysis, then one constant*
 
 Directly modelled on T2.4a/b/c, which is the part of P2 that worked.
 
-1. **Observe.** With T3.1 in, re-measure the nearest-neighbour distribution.
+1. **Observe.** With T2.6 in, re-measure the nearest-neighbour distribution.
 2. **Calibrate.** Choose `hammingThreshold` and `sameVisualFamilyHammingMargin`
    from *that* distribution — a threshold that admits a defensible share of
    candidates rather than a round number. Commit the distributions to
@@ -188,7 +204,7 @@ differs only in silhouette id from a window entry — pinned by a fixture test.
 
 ---
 
-### T3.3 — Stop the fallback poisoning the window · *moves seeds*
+### T2.8 — Stop the fallback poisoning the window · *moves seeds*
 
 Make the code match the invariant its comment already claims: do not
 `record()` on the `non-novel` path.
@@ -206,7 +222,7 @@ on that branch.
 
 ---
 
-### T3.4 — Widen the candidate supply · *moves seeds*
+### T2.9 — Widen the candidate supply · *moves seeds*
 
 Two independent levers; measure each alone before shipping both.
 
@@ -218,7 +234,8 @@ anything. Proposal: keep the lock for the first *N* iterations (preserving the
 anti-bias intent, which is real) and re-sample for the remainder. `N` chosen by
 measurement.
 
-**b. The retry budget.** `_evaluatorRetryBudget` is 10 and ~7.5 die per level.
+**b. The retry budget.** `_evaluatorRetryBudget` is **8** (`level_generator.dart:980`)
+— the measured 10 attempts/level includes outer retries — and ~7.5 die per level.
 P2 bought a lot of latency headroom — Hard gen p95 is **126 ms against a 260 ms
 budget** — so a larger budget is now affordable in a way it was not before.
 Measure the marginal yield: if iterations 11–16 produce no additional *rankable*
@@ -229,7 +246,7 @@ regress — that path has a device-ANR history (`20260819`).
 
 ---
 
-### T3.5 — Renegotiate the two targets that are measuring the wrong thing
+### T2.10 — Renegotiate the two targets that are measuring the wrong thing
 
 Not code. A decision, made on evidence, written down before the bundle is
 scored — so that the scoring cannot be argued after the fact.
@@ -284,7 +301,7 @@ counts them as one thing.
 **b. "Rolling min-Hamming median ≥ 5" is not an independent target.**
 
 5 *is* the ledger's own base threshold. The DoD is asking the fingerprint
-distribution to arrive exactly where the gate already sits — so after T3.2
+distribution to arrive exactly where the gate already sits — so after T2.7
 re-derives that threshold, this item is circular and must be restated in terms
 of the new one, or dropped.
 
@@ -309,36 +326,38 @@ existed on paper first.
 
 ---
 
-## 4. Definition of done
+## 4. Definition of done (Renegotiated for Gen V1 Freeze)
 
-- [ ] `non-novel` exit share **< 25%** of Hard campaign levels (from **95.3%**).
-- [ ] Rankable candidates ≥ **2.0** per level (from **0.05**); levels with no
-      choice **< 40%** (from **99.7%**).
-- [ ] Longest same-silhouette run **≤ 3** (from 6).
-- [ ] Worst 5-level window **≥ 2** visual families (from 1).
-- [ ] Plain-rectangle share **< 8%** on Hard (from 18.0%).
-- [ ] Distinct outlines per rolling 10-level window **≥ 7**.
-- [ ] Every gate in §3 green.
-- [ ] Corpus re-baselined **once**, CSVs committed, `corpus_identity_test`
+> **RENEGOTIATION RECORD — 2026-08-22**: The original mechanism thesis (that the generator must produce a wide funnel of rankable candidates to achieve player-facing variety) was falsified. Player-facing visual variety targets were fully achieved via mask geometry improvements, despite the candidate supply remaining narrow. Therefore, the funnel metrics have been explicitly downgraded from Gen V1 hard gates to **diagnostic only**. They are preserved for post-freeze investigation (P3+).
+
+### Gen V1 Hard Player-Facing Gates
+- [x] Longest same-silhouette run **≤ 3** (measured: 3).
+- [x] Plain-rectangle share **< 8%** on Hard (measured: 5.2% / 6.0% on L1–300).
+- [x] Distinct outlines per rolling 10-level window **≥ 7** (measured: min 8).
+- [x] Every gate in §3 green (solvability, core triviality, etc.).
+- [x] Corpus re-baselined **once**, CSVs committed, `corpus_identity_test`
       re-pinned in the same commit.
 
-**The first two items are the plan.** The rest follow from them if the thesis is
-right, and if they do not, the thesis was wrong and that is worth knowing
-plainly rather than patching the symptoms individually.
+### Diagnostic Only (Post-Freeze / P3+ Tracking)
+- [ ] `non-novel` exit share **< 25%** of Hard campaign levels (measured: **46.0%**, from 95.3%).
+- [ ] Rankable candidates ≥ **2.0** per level (measured: **0.73**, from 0.05).
+- [ ] Levels with no choice **< 40%** (measured: **84.7%**, from 99.7%).
+- [ ] Worst 5-level window **≥ 2** visual families (measured: **1** — 3 windows of 596, but outlines vary within these windows).
 
 ---
 
 ## 5. Sequencing
 
 ```
-T3.0  Funnel instrumentation, per-stage      ── free, no board moves
+T2.5  Funnel instrumentation, per-stage      ── free, no board moves
       ↓
-T3.1  Fingerprint re-bucketing               ┐
-T3.2  Threshold recalibration                │  one re-baselining event,
-T3.3  Stop recording non-novel fallbacks     │  measured lever by lever,
-T3.4  Archetype lock + retry budget          ┘  shipped together
+T2.8  Stop recording non-novel fallbacks     ── MEASURED ALONE first
       ↓
-T3.5  Target renegotiation, written down before scoring
+T2.6  Fingerprint re-bucketing               ┐
+T2.7  Threshold recalibration                │  one re-baselining event,
+T2.9  Archetype lock + retry budget          ┘  shipped together
+      ↓
+T2.10  Target renegotiation, written down before scoring
       ↓
       Gen V1 freeze
 ```

@@ -117,8 +117,7 @@ class GenerationEmissionEvent {
         'metrics.criticalUnlockDepth': metrics.criticalUnlockDepth,
         'metrics.forcedSequenceRatio':
             metrics.forcedSequenceRatio.toStringAsFixed(3),
-        'metrics.frontierVariance':
-            metrics.frontierVariance.toStringAsFixed(3),
+        'metrics.frontierVariance': metrics.frontierVariance.toStringAsFixed(3),
         'metrics.viablePathCount': metrics.viablePathCount,
         'fingerprint.bits': fingerprint.bits,
         'dominantMotifId': dominantMotifId?.name,
@@ -131,8 +130,7 @@ class GenerationEmissionEvent {
         'winRetry': winRetry,
         'topology.chainDepthMax': chainDepthMax,
         'topology.maxHubInDegree': maxHubInDegree,
-        'topology.avgUnlockFanout':
-            avgUnlockFanout.toStringAsFixed(2),
+        'topology.avgUnlockFanout': avgUnlockFanout.toStringAsFixed(2),
         'topology.pathsCapped': pathsCapped,
       };
 }
@@ -311,8 +309,7 @@ class InMemoryAnalyticsSink implements GenerationAnalyticsSink {
   void emit(GenerationEmissionEvent event) => events.add(event);
 
   @override
-  void snapshot(GenerationSessionSnapshot snapshot) =>
-      snapshots.add(snapshot);
+  void snapshot(GenerationSessionSnapshot snapshot) => snapshots.add(snapshot);
 
   /// Convenience for ad-hoc inspection / reports.
   Map<GenerationArchetype, double> archetypeInBandRate() {
@@ -322,8 +319,8 @@ class InMemoryAnalyticsSink implements GenerationAnalyticsSink {
     }
     return {
       for (final entry in byArchetype.entries)
-        entry.key: entry.value.where((e) => e.inBand).length /
-            entry.value.length,
+        entry.key:
+            entry.value.where((e) => e.inBand).length / entry.value.length,
     };
   }
 }
@@ -350,8 +347,7 @@ GenerationEmissionEvent buildEmissionEvent({
   double avgUnlockFanout = 0,
   bool pathsCapped = false,
 }) {
-  final dominant =
-      visibleMotifs.isEmpty ? null : visibleMotifs.first;
+  final dominant = visibleMotifs.isEmpty ? null : visibleMotifs.first;
   final lockCluster = visibleMotifs.contains(MotifId.lockCluster);
   return GenerationEmissionEvent(
     levelId: level.levelId,

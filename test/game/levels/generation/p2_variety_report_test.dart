@@ -31,7 +31,7 @@
 //
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'dart:math' as math;
@@ -88,7 +88,8 @@ void _sequentialHardReport() {
   final gen = LevelGenerator(
     analyticsSink: sink,
     director: Director(
-      onMaskRectangleFallback: (attempted, _) => fallbackAttempts.add(attempted),
+      onMaskRectangleFallback: (attempted, _) =>
+          fallbackAttempts.add(attempted),
     ),
   );
 
@@ -105,7 +106,8 @@ void _sequentialHardReport() {
     sw
       ..reset()
       ..start();
-    final r = gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
+    final r =
+        gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
     sw.stop();
     if (!r.isSuccess) {
       print('  L$id: GENERATION FAILED (${r.error})');
@@ -143,12 +145,14 @@ void _sequentialHardReport() {
   print('longest same-family run:     ${macroStreak['max']}  '
       'hist=${macroStreak['histogram']}');
 
-  final w5 = macroBucketWindowStats(macroSequence: macroSequence(events), window: 5);
+  final w5 =
+      macroBucketWindowStats(macroSequence: macroSequence(events), window: 5);
   print('worst 5-level window families: ${w5.minDistinct} '
       '(DoD >= 2)  avg=${w5.avgDistinct.toStringAsFixed(2)} '
       'pureLattice=${w5.latticeOnlyWindows}');
   for (final w in const [10, 20]) {
-    final s = macroBucketWindowStats(macroSequence: macroSequence(events), window: w);
+    final s =
+        macroBucketWindowStats(macroSequence: macroSequence(events), window: w);
     print('  W=$w min=${s.minDistinct} max=${s.maxDistinct} '
         'avg=${s.avgDistinct.toStringAsFixed(2)} '
         'pureLattice=${s.latticeOnlyWindows}');
@@ -210,7 +214,8 @@ void _topologyClassReport() {
         label: 'L$id',
         levelId: id,
         mode: mode,
-        profile: DifficultyProfile.forTier(DifficultyProfile.tierFromMode(mode)),
+        profile:
+            DifficultyProfile.forTier(DifficultyProfile.tierFromMode(mode)),
         directive: '',
         timeLimitSec: 0,
         genMs: 0,
@@ -271,7 +276,8 @@ void _fullRectSymptomReport() {
   var fullRect = 0;
   final line = StringBuffer();
   for (var id = 45; id <= 56; id++) {
-    final r = gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
+    final r =
+        gen.generate(id, mode: DifficultyMode.hard, timeBudget: kProdBudget);
     if (!r.isSuccess) {
       line.write('L$id=FAIL ');
       continue;

@@ -11,7 +11,8 @@ void main() {
     });
 
     test('noValidDirections creates error with correct type', () {
-      final error = GenerationError.noValidDirections('Could not assign directions');
+      final error =
+          GenerationError.noValidDirections('Could not assign directions');
 
       expect(error.type, equals('no_valid_directions'));
       expect(error.message, equals('Could not assign directions'));

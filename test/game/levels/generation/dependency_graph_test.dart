@@ -75,9 +75,12 @@ void main() {
   group('DependencyGraph.fromRetrogradeOrder', () {
     test('matches fromLevel for the same placement order', () {
       final order = [
-        const RetrogradePlacement(position: Point(0, 0), direction: Direction.up),
-        const RetrogradePlacement(position: Point(1, 0), direction: Direction.up),
-        const RetrogradePlacement(position: Point(2, 0), direction: Direction.right),
+        const RetrogradePlacement(
+            position: Point(0, 0), direction: Direction.up),
+        const RetrogradePlacement(
+            position: Point(1, 0), direction: Direction.up),
+        const RetrogradePlacement(
+            position: Point(2, 0), direction: Direction.right),
       ];
 
       final fromOrder = DependencyGraph.fromRetrogradeOrder(
@@ -103,7 +106,8 @@ void main() {
       final fromLevel = DependencyGraph.fromLevel(level);
 
       expect(fromOrder.leafCount, equals(fromLevel.leafCount));
-      expect(fromOrder.criticalPathLength, equals(fromLevel.criticalPathLength));
+      expect(
+          fromOrder.criticalPathLength, equals(fromLevel.criticalPathLength));
       expect(fromOrder.chokePointCount, equals(fromLevel.chokePointCount));
       expect(fromOrder.maxHubInDegree, equals(fromLevel.maxHubInDegree));
     });

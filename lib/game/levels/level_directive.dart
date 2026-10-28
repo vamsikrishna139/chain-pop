@@ -14,11 +14,16 @@ enum LevelDirective {
 extension LevelDirectiveExt on LevelDirective {
   String get label {
     switch (this) {
-      case LevelDirective.flawless: return 'FLAWLESS';
-      case LevelDirective.integrity: return 'INTEGRITY';
-      case LevelDirective.cascade: return 'CASCADE';
-      case LevelDirective.swift: return 'SWIFT';
-      case LevelDirective.unaided: return 'UNAIDED';
+      case LevelDirective.flawless:
+        return 'FLAWLESS';
+      case LevelDirective.integrity:
+        return 'INTEGRITY';
+      case LevelDirective.cascade:
+        return 'CASCADE';
+      case LevelDirective.swift:
+        return 'SWIFT';
+      case LevelDirective.unaided:
+        return 'UNAIDED';
     }
   }
 }
@@ -37,12 +42,21 @@ const Map<int, List<LevelDirective>> _kSectorDirectivePool = {
   3: [LevelDirective.swift, LevelDirective.cascade],
   4: [LevelDirective.unaided, LevelDirective.swift],
   5: [LevelDirective.integrity, LevelDirective.unaided, LevelDirective.swift],
-  6: [LevelDirective.flawless, LevelDirective.integrity, LevelDirective.cascade],
-  7: [LevelDirective.flawless, LevelDirective.integrity, LevelDirective.unaided],
+  6: [
+    LevelDirective.flawless,
+    LevelDirective.integrity,
+    LevelDirective.cascade
+  ],
+  7: [
+    LevelDirective.flawless,
+    LevelDirective.integrity,
+    LevelDirective.unaided
+  ],
   8: [LevelDirective.flawless, LevelDirective.integrity, LevelDirective.swift],
 };
 
-LevelDirective directiveFor({required int levelId, required DifficultyMode mode}) {
+LevelDirective directiveFor(
+    {required int levelId, required DifficultyMode mode}) {
   final sector = worldForLevel(levelId).sector.mechanicBudgetTier;
   final pool = _kSectorDirectivePool[sector] ?? const [LevelDirective.flawless];
 
@@ -111,13 +125,13 @@ class LevelResult {
       if (jamCount <= 2) return 2;
       return 1;
     }
-    
+
     if (isTutorial) {
       if (jamCount == 0) return 3;
       if (jamCount <= 2) return 2;
       return 1;
     }
-    
+
     // Campaign grading: 3 stars if the sector's directive is met, 2 stars if
     // no jams occurred (where possible), 1 star otherwise.
     if (meetsDirective(directiveFor(levelId: levelId, mode: mode))) return 3;

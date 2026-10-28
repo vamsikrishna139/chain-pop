@@ -126,12 +126,14 @@ void main() {
       print('  stranded       : $stuck');
       print('  generation fail: $generationFailures');
       print('  core-wins      : $coreWins  (won with nodes still standing)');
-      print('  taps           : avg ${won == 0 ? 0 : (totalTaps / won).toStringAsFixed(1)}, '
+      print(
+          '  taps           : avg ${won == 0 ? 0 : (totalTaps / won).toStringAsFixed(1)}, '
           'worst $worstTaps (L$worstId)');
       print('  wall clock     : ${sw.elapsed.inSeconds}s');
     }
 
-    print('\n${failures.isEmpty ? "no failures" : "FAILURES (${failures.length}):"}');
+    print(
+        '\n${failures.isEmpty ? "no failures" : "FAILURES (${failures.length}):"}');
     for (final f in failures.take(40)) {
       print('  $f');
     }

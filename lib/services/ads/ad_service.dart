@@ -50,4 +50,7 @@ abstract class AdService {
   /// Bottom anchored adaptive banner for the game screen, shown below the toolbar.
   /// [NoOpAdService] and tests return zero-height spacer.
   Widget buildGameScreenBanner(BuildContext context);
+
+  /// Called when premium state activates mid-session to remove/destroy any loaded ads.
+  void disposeLoadedAds();
 }

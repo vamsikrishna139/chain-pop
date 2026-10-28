@@ -12,8 +12,7 @@ abstract final class AchievementsLocator {
 
   static AchievementTracker? _instance;
 
-  static AchievementTracker get instance =>
-      _instance ??= AchievementTracker();
+  static AchievementTracker get instance => _instance ??= AchievementTracker();
 
   static void install(AchievementTracker tracker) {
     _instance = tracker;

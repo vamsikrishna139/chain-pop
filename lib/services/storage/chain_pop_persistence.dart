@@ -67,6 +67,12 @@ abstract interface class ChainPopPersistence {
 
   Future<void> setTutorialCompleted(bool value);
 
+  // ── Premium / Subscription ────────────────────────────────────────────────
+
+  bool get cachedPremium;
+
+  Future<void> setCachedPremium(bool value);
+
   // ── Lifetime engagement ───────────────────────────────────────────────────
 
   int get lifetimeCampaignClears;

@@ -16,4 +16,10 @@ abstract class SubscriptionService {
 
   /// Restores previous purchases from the store account.
   Future<RestorePurchasesResult> restorePurchases();
+
+  /// Refreshes the premium entitlement state.
+  Future<void> refresh();
+
+  /// Gets the localized price string of the premium entitlement.
+  Future<String?> getPremiumPrice();
 }

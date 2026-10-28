@@ -2,7 +2,7 @@
 // 1000 Hard campaign levels. Not production code, not an assertion suite.
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'dart:io';
@@ -90,9 +90,8 @@ void main() {
 
       final cells = (lv.playCells?.toList() ?? <String>[])..sort();
       r.maskSig = '${lv.gridWidth}x${lv.gridHeight}|${cells.join(';')}';
-      final bs = [
-        for (final n in lv.nodes) '${n.x},${n.y},${n.dir.index}'
-      ]..sort();
+      final bs = [for (final n in lv.nodes) '${n.x},${n.y},${n.dir.index}']
+        ..sort();
       r.boardSig = '${lv.gridWidth}x${lv.gridHeight}|${bs.join(';')}';
       final dh = <int, int>{};
       for (final n in lv.nodes) {
@@ -120,11 +119,13 @@ void main() {
     print('bucket | nodes | grid | fill% | waves | open | FSR  | BF   | CUD |'
         ' cores locks relay phase portal | timer | gen ms');
     for (var b = 0; b < 10; b++) {
-      final s = recs.where((r) => r.id > b * 100 && r.id <= (b + 1) * 100).toList();
+      final s =
+          recs.where((r) => r.id > b * 100 && r.id <= (b + 1) * 100).toList();
       if (s.isEmpty) continue;
       double avg(num Function(Rec) f) =>
           s.map(f).fold<double>(0, (a, x) => a + x) / s.length;
-      print('${(b * 100 + 1).toString().padLeft(4)}-${((b + 1) * 100).toString().padRight(5)}'
+      print(
+          '${(b * 100 + 1).toString().padLeft(4)}-${((b + 1) * 100).toString().padRight(5)}'
           '| ${avg((r) => r.nodes).toStringAsFixed(1).padLeft(5)} '
           '| ${avg((r) => r.gw).toStringAsFixed(1)}x${avg((r) => r.gh).toStringAsFixed(1)} '
           '| ${(avg((r) => r.nodes) / avg((r) => r.maskArea) * 100).toStringAsFixed(0).padLeft(4)} '
@@ -167,8 +168,10 @@ void main() {
     for (final r in recs) {
       dims['${r.gw}x${r.gh}'] = (dims['${r.gw}x${r.gh}'] ?? 0) + 1;
     }
-    final sd = dims.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    print('grid dimensions: ${sd.map((e) => "${e.key}:${e.value}").join("  ")}');
+    final sd = dims.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    print(
+        'grid dimensions: ${sd.map((e) => "${e.key}:${e.value}").join("  ")}');
 
     // consecutive identical silhouette runs
     var runs = 0, maxRun = 1, cur = 1;
@@ -182,7 +185,8 @@ void main() {
       }
     }
     maxRun = max(maxRun, cur);
-    print('back-to-back identical silhouette runs: $runs (longest run: $maxRun)');
+    print(
+        'back-to-back identical silhouette runs: $runs (longest run: $maxRun)');
 
     // ── 3. Duplicate boards ───────────────────────────────────────────────
     print('\n== 3. DUPLICATE / NEAR-DUPLICATE BOARDS ==');
@@ -191,18 +195,22 @@ void main() {
       boardCounts.putIfAbsent(r.boardSig, () => []).add(r.id);
     }
     final dupes = boardCounts.entries.where((e) => e.value.length > 1).toList();
-    print('EXACT duplicate boards (same cells + same arrows): ${dupes.length} groups');
+    print(
+        'EXACT duplicate boards (same cells + same arrows): ${dupes.length} groups');
     for (final e in dupes.take(10)) {
       print('  levels ${e.value.join(", ")}');
     }
     // near-dup: same silhouette + same node count + same direction histogram
     final nearCounts = <String, List<int>>{};
     for (final r in recs) {
-      nearCounts.putIfAbsent('${r.maskSig}#${r.nodes}#${r.dirHist}', () => []).add(r.id);
+      nearCounts
+          .putIfAbsent('${r.maskSig}#${r.nodes}#${r.dirHist}', () => [])
+          .add(r.id);
     }
     final nearGroups = nearCounts.values.where((v) => v.length > 1).toList();
     final inNear = nearGroups.fold<int>(0, (a, v) => a + v.length);
-    print('NEAR-duplicate groups (same shape+count+arrow mix): ${nearGroups.length}'
+    print(
+        'NEAR-duplicate groups (same shape+count+arrow mix): ${nearGroups.length}'
         ' covering $inNear levels (${(inNear / recs.length * 100).toStringAsFixed(1)}%)');
 
     // ── 4. Mechanic delivery vs promise ───────────────────────────────────
@@ -285,7 +293,8 @@ void main() {
     }
 
     // SWIFT feasibility: must clear N nodes in timeLimit/2 seconds
-    final swift = recs.where((r) => r.directive == LevelDirective.swift).toList();
+    final swift =
+        recs.where((r) => r.directive == LevelDirective.swift).toList();
     if (swift.isNotEmpty) {
       final secsPerTap = swift
               .map((r) => (r.timeLimit / 2) / r.nodes)
@@ -305,7 +314,8 @@ void main() {
     print('total taps to clear all 1000 levels: $totalTaps');
     print('avg taps/level: ${(totalTaps / recs.length).toStringAsFixed(1)}');
     final avgTimer =
-        recs.map((r) => r.timeLimit).fold<int>(0, (a, x) => a + x) / recs.length;
+        recs.map((r) => r.timeLimit).fold<int>(0, (a, x) => a + x) /
+            recs.length;
     print('avg countdown: ${avgTimer.toStringAsFixed(0)}s; '
         'range ${recs.map((r) => r.timeLimit).reduce(min)}s..'
         '${recs.map((r) => r.timeLimit).reduce(max)}s');

@@ -50,9 +50,8 @@ void main() {
       for (var sector = 1; sector <= 8; sector++) {
         final ids = _idsInSector(sector);
         if (ids.isEmpty) continue;
-        final cores =
-            budgetFor(levelId: ids.first, mode: DifficultyMode.medium)
-                .coreCount;
+        final cores = budgetFor(levelId: ids.first, mode: DifficultyMode.medium)
+            .coreCount;
         expect(cores, greaterThanOrEqualTo(previous),
             reason: 'sector $sector drops below sector ${sector - 1}');
         previous = cores;

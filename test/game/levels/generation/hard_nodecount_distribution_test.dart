@@ -27,8 +27,8 @@ void main() {
       final lvl = r.value;
       counts.update(lvl.nodes.length, (v) => v + 1, ifAbsent: () => 1);
       final area = lvl.gridWidth * lvl.gridHeight;
-      grids.update('${lvl.gridWidth}x${lvl.gridHeight} (area $area)',
-          (v) => v + 1,
+      grids.update(
+          '${lvl.gridWidth}x${lvl.gridHeight} (area $area)', (v) => v + 1,
           ifAbsent: () => 1);
     }
 

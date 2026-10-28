@@ -94,9 +94,7 @@ class DependencyGraph {
 
     final leaves = ids.where((id) => rayTarget[id] == null).length;
     final waveProfile = computeWavePeelingProfile(level);
-    final maxAntichain = waveProfile.isEmpty
-        ? leaves
-        : waveProfile.reduce(max);
+    final maxAntichain = waveProfile.isEmpty ? leaves : waveProfile.reduce(max);
 
     return DependencyGraph(
       leafCount: leaves,
@@ -178,9 +176,7 @@ class DependencyGraph {
       nodes: nodes,
     );
     final waveProfile = computeWavePeelingProfile(level);
-    final maxAntichain = waveProfile.isEmpty
-        ? leaves
-        : waveProfile.reduce(max);
+    final maxAntichain = waveProfile.isEmpty ? leaves : waveProfile.reduce(max);
 
     return DependencyGraph(
       leafCount: leaves,
@@ -226,10 +222,7 @@ int? _firstRayTargetId(
       case Direction.right:
         x++;
     }
-    if (x < 0 ||
-        x >= level.gridWidth ||
-        y < 0 ||
-        y >= level.gridHeight) {
+    if (x < 0 || x >= level.gridWidth || y < 0 || y >= level.gridHeight) {
       return null;
     }
     final hit = positionToId[gridCellKey(x, y)];

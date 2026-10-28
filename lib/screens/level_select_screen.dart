@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../game/levels/generation/difficulty_mode.dart';
+import '../navigation/app_route_observer.dart';
 import '../game/levels/level_grid_config.dart';
 import '../models/difficulty.dart';
 import '../theme/app_colors.dart';
@@ -93,7 +94,8 @@ class LevelSelectScreen extends StatefulWidget {
   State<LevelSelectScreen> createState() => _LevelSelectScreenState();
 }
 
-class _LevelSelectScreenState extends State<LevelSelectScreen> {
+class _LevelSelectScreenState extends State<LevelSelectScreen>
+    with RefreshOnReturn<LevelSelectScreen> {
   late DifficultyMode _mode;
 
   @override
@@ -110,10 +112,10 @@ class _LevelSelectScreenState extends State<LevelSelectScreen> {
     if (!mounted) return;
     Navigator.of(context)
         .push(
-          MaterialPageRoute(
-            builder: (_) => GameScreen(level: levelId, difficulty: mode),
-          ),
-        )
+      MaterialPageRoute(
+        builder: (_) => GameScreen(level: levelId, difficulty: mode),
+      ),
+    )
         .then((_) {
       if (!mounted) return;
       setState(() {});
@@ -139,21 +141,25 @@ class _LevelSelectScreenState extends State<LevelSelectScreen> {
                   InkWell(
                     onTap: () {
                       if (StorageLocator.instance.gameSettings.soundEnabled) {
-                        unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.9));
+                        unawaited(ChainPopAudioScope.of(context)
+                            .play(GameSfx.uiTap, playbackRate: 0.9));
                       }
                       Navigator.of(context).pop();
                     },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.1)),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.arrow_back_rounded, size: 16, color: Colors.white70),
+                          const Icon(Icons.arrow_back_rounded,
+                              size: 16, color: Colors.white70),
                           const SizedBox(width: 6),
                           Text(
                             'BACK',
@@ -192,7 +198,7 @@ class _LevelSelectScreenState extends State<LevelSelectScreen> {
                 ],
               ),
             ),
-            
+
             // Breadcrumbs / Grid
             Expanded(
               child: _ChapteredLevelView(
@@ -247,8 +253,10 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   }
 
   void _goToPage(int page) {
-    if (page != _currentPage && StorageLocator.instance.gameSettings.soundEnabled) {
-      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.2));
+    if (page != _currentPage &&
+        StorageLocator.instance.gameSettings.soundEnabled) {
+      unawaited(ChainPopAudioScope.of(context)
+          .play(GameSfx.uiTap, playbackRate: 1.2));
     }
     _pageCtrl.animateToPage(
       page,
@@ -259,7 +267,8 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _onPillTap(NavGroup group) {
     if (StorageLocator.instance.gameSettings.soundEnabled) {
-      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 1.05));
+      unawaited(ChainPopAudioScope.of(context)
+          .play(GameSfx.uiTap, playbackRate: 1.05));
     }
     if (group.isDrillable) {
       setState(() {
@@ -267,7 +276,8 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
         _selectedLeafLevel = null;
       });
       _goToPage(group.firstPage);
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollPillIntoView());
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _scrollPillIntoView());
     } else {
       setState(() => _selectedLeafLevel = group.firstLevel);
       _goToPage(group.firstPage);
@@ -276,7 +286,8 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
 
   void _closeDrill() {
     if (StorageLocator.instance.gameSettings.soundEnabled) {
-      unawaited(ChainPopAudioScope.of(context).play(GameSfx.uiTap, playbackRate: 0.95));
+      unawaited(ChainPopAudioScope.of(context)
+          .play(GameSfx.uiTap, playbackRate: 0.95));
     }
     if (_drillPath.isEmpty) return;
     setState(() {
@@ -289,7 +300,9 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
   List<NavGroup> _activePills(int highest) {
     var groups = buildNavGroups(highest);
     for (final selected in _drillPath) {
-      final stillVisible = groups.any((g) => g.firstLevel == selected.firstLevel && g.lastLevel == selected.lastLevel);
+      final stillVisible = groups.any((g) =>
+          g.firstLevel == selected.firstLevel &&
+          g.lastLevel == selected.lastLevel);
       if (!stillVisible) break;
       groups = buildSubGroups(selected, highest);
     }
@@ -343,7 +356,8 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
     final highest = widget.highestUnlocked;
     final visible = visibleLevelCardCount(highest);
     final totalPages = (visible / _pageSize).ceil().clamp(1, 99999);
-    final nextLevelPage = ((highest) / _pageSize).floor().clamp(0, totalPages - 1);
+    final nextLevelPage =
+        ((highest) / _pageSize).floor().clamp(0, totalPages - 1);
 
     final pills = _activePills(highest);
     final accent = widget.mode.color;
@@ -368,14 +382,16 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                     onTap: _closeDrill,
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
                       decoration: BoxDecoration(
                         color: accent.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.arrow_back_rounded, size: 14, color: accent),
+                          Icon(Icons.arrow_back_rounded,
+                              size: 14, color: accent),
                           const SizedBox(width: 4),
                           Text(
                             _drillPath.last.label,
@@ -394,7 +410,8 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                 child: ListView.builder(
                   controller: _pillScrollCtrl,
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   itemCount: pills.length,
                   itemBuilder: (_, i) {
                     final group = pills[i];
@@ -406,14 +423,24 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                         onTap: () => _onPillTap(group),
                         borderRadius: BorderRadius.circular(8),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
                           decoration: BoxDecoration(
                             color: isCurrent ? Colors.white : AppColors.surface,
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: isCurrent ? Colors.white : Colors.white.withValues(alpha: 0.1),
+                              color: isCurrent
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.1),
                             ),
-                            boxShadow: isCurrent ? [BoxShadow(color: Colors.white.withValues(alpha: 0.3), blurRadius: 4)] : [],
+                            boxShadow: isCurrent
+                                ? [
+                                    BoxShadow(
+                                        color:
+                                            Colors.white.withValues(alpha: 0.3),
+                                        blurRadius: 4)
+                                  ]
+                                : [],
                           ),
                           alignment: Alignment.center,
                           child: Row(
@@ -422,8 +449,11 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                                 group.label,
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 11,
-                                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
-                                  color: isCurrent ? Colors.black : Colors.white70,
+                                  fontWeight: isCurrent
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  color:
+                                      isCurrent ? Colors.black : Colors.white70,
                                 ),
                               ),
                               if (group.containsLevel(highest)) ...[
@@ -474,16 +504,22 @@ class _ChapteredLevelViewState extends State<_ChapteredLevelView> {
                     onTap: () => _goToPage(nextLevelPage),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
                         color: accent,
                         borderRadius: BorderRadius.circular(16),
-                        boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.5), blurRadius: 12)],
+                        boxShadow: [
+                          BoxShadow(
+                              color: accent.withValues(alpha: 0.5),
+                              blurRadius: 12)
+                        ],
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.flag_rounded, size: 18, color: Colors.black),
+                          const Icon(Icons.flag_rounded,
+                              size: 18, color: Colors.black),
                           const SizedBox(width: 8),
                           Text(
                             'LEVEL $highest',
@@ -554,13 +590,26 @@ class _ChapterGrid extends StatelessWidget {
             duration: const Duration(milliseconds: 300),
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
-              color: isFrontier ? const Color(0xFF1A1A26) : (isUnlocked ? AppColors.surface : AppColors.background),
+              color: isFrontier
+                  ? const Color(0xFF1A1A26)
+                  : (isUnlocked ? AppColors.surface : AppColors.background),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isFrontier ? accent : (isUnlocked ? Colors.white.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.05)),
+                color: isFrontier
+                    ? accent
+                    : (isUnlocked
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : Colors.white.withValues(alpha: 0.05)),
                 width: isFrontier ? 2 : 1,
               ),
-              boxShadow: isFrontier ? [BoxShadow(color: accent.withValues(alpha: 0.5), blurRadius: 18, spreadRadius: -2)] : [],
+              boxShadow: isFrontier
+                  ? [
+                      BoxShadow(
+                          color: accent.withValues(alpha: 0.5),
+                          blurRadius: 18,
+                          spreadRadius: -2)
+                    ]
+                  : [],
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -570,7 +619,9 @@ class _ChapterGrid extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 14,
                     fontWeight: FontWeight.w900,
-                    color: isFrontier ? Colors.white : (isUnlocked ? Colors.white70 : Colors.white30),
+                    color: isFrontier
+                        ? Colors.white
+                        : (isUnlocked ? Colors.white70 : Colors.white30),
                   ),
                 ),
                 if (isFrontier)
@@ -580,7 +631,8 @@ class _ChapterGrid extends StatelessWidget {
                       color: accent,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.play_arrow_rounded, size: 14, color: Colors.black),
+                    child: const Icon(Icons.play_arrow_rounded,
+                        size: 14, color: Colors.black),
                   )
                 else if (isUnlocked)
                   Row(
@@ -588,9 +640,12 @@ class _ChapterGrid extends StatelessWidget {
                     children: List.generate(
                       3,
                       (i) => Icon(
-                        i < starCount ? Icons.star_rounded : Icons.star_border_rounded,
+                        i < starCount
+                            ? Icons.star_rounded
+                            : Icons.star_border_rounded,
                         size: 10,
-                        color: i < starCount ? AppColors.starGold : Colors.white24,
+                        color:
+                            i < starCount ? AppColors.starGold : Colors.white24,
                       ),
                     ),
                   )
@@ -601,12 +656,16 @@ class _ChapterGrid extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.play_arrow_rounded, size: 14, color: Colors.white70),
+                    child: const Icon(Icons.play_arrow_rounded,
+                        size: 14, color: Colors.white70),
                   )
                 else
-                  const Icon(Icons.lock_rounded, size: 14, color: Colors.white24),
+                  const Icon(Icons.lock_rounded,
+                      size: 14, color: Colors.white24),
                 Text(
-                  isFrontier ? 'ACTIVE' : (isUnlocked ? 'CLEAR' : (isNext ? 'NEXT' : 'LOCKED')),
+                  isFrontier
+                      ? 'ACTIVE'
+                      : (isUnlocked ? 'CLEAR' : (isNext ? 'NEXT' : 'LOCKED')),
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 8,
                     color: Colors.white54,

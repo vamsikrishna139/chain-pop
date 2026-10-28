@@ -33,8 +33,8 @@ void main() {
     test('blocker beyond edge does not affect rays', () {
       final t = SightlineTable.forGrid(4, 4);
       // (1, 1) shooting up exits at row -1; nothing in the precomputed ray.
-      expect(t.hasClearRay(1, 1, Direction.up, <int>{gridCellKey(1, 0)}),
-          isFalse);
+      expect(
+          t.hasClearRay(1, 1, Direction.up, <int>{gridCellKey(1, 0)}), isFalse);
       // Removing the blocker → clear.
       expect(t.hasClearRay(1, 1, Direction.up, <int>{}), isTrue);
     });

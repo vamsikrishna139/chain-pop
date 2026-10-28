@@ -3,7 +3,7 @@
 // and how much of each board is a free-tap mop-up.
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -110,7 +110,8 @@ void main() {
     }
 
     // Can a level be lost by playing badly (other than the clock)?
-    print('\nfail-state check: relay-free Chain Pop is monotone, so no tap order '
+    print(
+        '\nfail-state check: relay-free Chain Pop is monotone, so no tap order '
         'can strand the board. The only loss condition is the countdown.');
     final gen2 = LevelGenerator();
     var timePressure = <double>[];

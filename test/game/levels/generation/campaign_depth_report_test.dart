@@ -1,4 +1,4 @@
-@Tags(['slow'])
+@Tags(['corpus', 'slow'])
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -54,8 +54,7 @@ void main() {
       }
 
       acc.cores += level.nodes.where((n) => n.isCore).length;
-      acc.locks +=
-          level.nodes.where((n) => n.kind == NodeKind.locked).length;
+      acc.locks += level.nodes.where((n) => n.kind == NodeKind.locked).length;
       acc.relays += level.nodes.where((n) => n.kind == NodeKind.relay).length;
       acc.gates += level.nodes
           .map((n) => n.phaseGroup)
@@ -100,8 +99,8 @@ void main() {
     // mechanic load than sector 1.
     final first = perSector[1]!;
     final last = perSector[sectors.last]!;
-    expect(last.mechanicLoad / last.n,
-        greaterThan(first.mechanicLoad / first.n),
+    expect(
+        last.mechanicLoad / last.n, greaterThan(first.mechanicLoad / first.n),
         reason: 'late sectors must carry more mechanic load than sector 1');
   });
 }

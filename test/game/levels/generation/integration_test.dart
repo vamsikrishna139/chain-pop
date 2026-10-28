@@ -71,7 +71,8 @@ void main() {
         final result = generator.generate(id);
         if (result.isSuccess) {
           final v = validator.validate(result.value);
-          expect(v.isValid, isTrue, reason: 'Validator rejected level $id: ${v.message}');
+          expect(v.isValid, isTrue,
+              reason: 'Validator rejected level $id: ${v.message}');
         }
       }
     });

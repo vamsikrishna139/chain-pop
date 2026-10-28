@@ -9,6 +9,7 @@ import '../game/levels/level_manager.dart';
 import '../models/difficulty.dart';
 import '../services/ads/ad_placements.dart';
 import '../services/ads/ads_locator.dart';
+import '../services/analytics/analytics_locator.dart';
 import '../services/daily_challenge_play_policy.dart';
 import '../services/storage/storage_locator.dart';
 import '../theme/app_colors.dart';
@@ -41,6 +42,8 @@ class _DailyChallengeCalendarScreenState
   @override
   void initState() {
     super.initState();
+    AnalyticsLocator.instance
+        .logDailyOpen(dateStr: DateTime.now().toIso8601String());
     if (widget.policy.showRewardedAd != null) {
       unawaited(
         AdsLocator.instance.preloadRewarded(AdPlacements.dailyUnlockPast),

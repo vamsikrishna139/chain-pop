@@ -24,16 +24,44 @@ void main() {
 
     test('starsFor checks directives and jams', () {
       // Level 501 is sector 5 (Integrity: jamCount <= 1)
-      const integrityMet = LevelResult(levelId: 501, jamCount: 1, elapsedSeconds: 10, undosUsed: 0, movesTaken: 5, totalNodes: 10, mode: DifficultyMode.medium);
-      const integrityFailedOneStar = LevelResult(levelId: 501, jamCount: 2, elapsedSeconds: 10, undosUsed: 0, movesTaken: 10, totalNodes: 10, mode: DifficultyMode.medium);
-      
+      const integrityMet = LevelResult(
+          levelId: 501,
+          jamCount: 1,
+          elapsedSeconds: 10,
+          undosUsed: 0,
+          movesTaken: 5,
+          totalNodes: 10,
+          mode: DifficultyMode.medium);
+      const integrityFailedOneStar = LevelResult(
+          levelId: 501,
+          jamCount: 2,
+          elapsedSeconds: 10,
+          undosUsed: 0,
+          movesTaken: 10,
+          totalNodes: 10,
+          mode: DifficultyMode.medium);
+
       expect(integrityMet.earnedStars, 3);
       expect(integrityFailedOneStar.earnedStars, 1);
-      
+
       // Level 500 is sector 4 (Unaided: undosUsed == 0)
-      const unaidedMet = LevelResult(levelId: 500, jamCount: 1, elapsedSeconds: 20, undosUsed: 0, movesTaken: 10, totalNodes: 10, mode: DifficultyMode.medium);
-      const unaidedFailedButTwoStars = LevelResult(levelId: 500, jamCount: 0, elapsedSeconds: 100, undosUsed: 1, movesTaken: 10, totalNodes: 10, mode: DifficultyMode.medium);
-      
+      const unaidedMet = LevelResult(
+          levelId: 500,
+          jamCount: 1,
+          elapsedSeconds: 20,
+          undosUsed: 0,
+          movesTaken: 10,
+          totalNodes: 10,
+          mode: DifficultyMode.medium);
+      const unaidedFailedButTwoStars = LevelResult(
+          levelId: 500,
+          jamCount: 0,
+          elapsedSeconds: 100,
+          undosUsed: 1,
+          movesTaken: 10,
+          totalNodes: 10,
+          mode: DifficultyMode.medium);
+
       expect(unaidedMet.earnedStars, 3);
       expect(unaidedFailedButTwoStars.earnedStars, 2);
     });

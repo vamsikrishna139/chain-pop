@@ -27,12 +27,12 @@ void main() {
       final m = LevelMetrics.compute(level);
       final blocked = _blockedRayNodeCount(level);
 
-      totalOffered +=
-          after.blockingDirCandidatesOffered - before.blockingDirCandidatesOffered;
-      totalPicked +=
-          after.blockingDirCandidatesPicked - before.blockingDirCandidatesPicked;
-      totalRetries +=
-          after.constructionSolvabilityRetries - before.constructionSolvabilityRetries;
+      totalOffered += after.blockingDirCandidatesOffered -
+          before.blockingDirCandidatesOffered;
+      totalPicked += after.blockingDirCandidatesPicked -
+          before.blockingDirCandidatesPicked;
+      totalRetries += after.constructionSolvabilityRetries -
+          before.constructionSolvabilityRetries;
       totalBlockedNodes += blocked;
       totalNodes += level.nodes.length;
 
@@ -65,7 +65,8 @@ void main() {
     );
 
     // Culprit 3 ruled out if offered > 0
-    expect(totalOffered, greaterThan(0), reason: 'blocking dirs must be offered');
+    expect(totalOffered, greaterThan(0),
+        reason: 'blocking dirs must be offered');
     // Blocking IS reaching shipped levels
     expect(totalBlockedNodes, greaterThan(50),
         reason: 'shipped levels should contain blocked-ray nodes');

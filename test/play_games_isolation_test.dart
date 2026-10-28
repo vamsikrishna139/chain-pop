@@ -15,15 +15,16 @@ void main() {
 
     for (final file in dartFiles) {
       final basename = file.path.split('/').last;
-      
+
       // Allow PlayGamesAuth to use the native auth stream
       if (basename == 'play_games_auth.dart') continue;
 
       final content = file.readAsStringSync();
       // Ignore comments by simple stripping (not perfect but enough here)
-      final codeLines = content.split('\n').where((l) => !l.trimLeft().startsWith('//') && !l.trimLeft().startsWith('///'));
+      final codeLines = content.split('\n').where((l) =>
+          !l.trimLeft().startsWith('//') && !l.trimLeft().startsWith('///'));
       final code = codeLines.join('\n');
-      
+
       if (RegExp(r'\bGameAuth\.player\b').hasMatch(code) ||
           RegExp(r'\bGameAuth\.isSignedIn\b').hasMatch(code) ||
           RegExp(r'\bPlayer\.').hasMatch(code)) {

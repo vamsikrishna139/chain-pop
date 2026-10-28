@@ -11,25 +11,25 @@ void main() {
       // E.g. Cores at y=1, Blockers at y=0, all facing UP.
       // Tapping the blockers clears the way for the cores.
       // Other nodes on the board are completely disconnected from the cores.
-      
+
       final nodes = <NodeData>[
         // The core sequence (depth 2)
         NodeData(id: 0, x: 0, y: 0, dir: Direction.up, isCore: false),
         NodeData(id: 1, x: 0, y: 1, dir: Direction.up, isCore: true),
-        
+
         // A long irrelevant chain (depth 4)
         NodeData(id: 2, x: 1, y: 0, dir: Direction.up, isCore: false),
         NodeData(id: 3, x: 1, y: 1, dir: Direction.up, isCore: false),
         NodeData(id: 4, x: 1, y: 2, dir: Direction.up, isCore: false),
         NodeData(id: 5, x: 1, y: 3, dir: Direction.up, isCore: false),
-        
+
         // More irrelevant parallel noise (all depth 1)
         NodeData(id: 6, x: 2, y: 0, dir: Direction.up, isCore: false),
         NodeData(id: 7, x: 3, y: 0, dir: Direction.up, isCore: false),
         NodeData(id: 8, x: 4, y: 0, dir: Direction.up, isCore: false),
         NodeData(id: 9, x: 5, y: 0, dir: Direction.up, isCore: false),
       ];
-      
+
       final level = LevelData(
         levelId: 1,
         gridWidth: 6,
@@ -38,20 +38,20 @@ void main() {
       );
 
       final metrics = CoreMetrics.compute(level);
-      
+
       expect(metrics.totalNodes, 10);
       expect(metrics.coreTapDepth, 2); // only node 0 and 1
       expect(metrics.coreTapFraction, 0.2); // 2/10
       expect(metrics.coreIsolation, 0.8); // 8/10
       expect(metrics.coreCriticalDepth, 2);
-      
+
       final waveProfile = computeWavePeelingProfile(level);
       final waveDepth = waveProfile.length;
       expect(waveDepth, 4); // because of the length-4 chain
-      
+
       final coreWaveRatio = metrics.coreCriticalDepth / waveDepth;
       expect(coreWaveRatio, 0.5); // 2 / 4 = 0.5
-      
+
       // The divergence F1 warns about:
       // coreWaveRatio is 0.5, which the legacy engine considers "good",
       // but coreTapFraction is 0.2, showing 80% of the board is irrelevant filler.
@@ -60,13 +60,34 @@ void main() {
     test('deep core dependency: large tap fraction', () {
       // A sequential snake of 5 nodes. Core is at the very end.
       final nodes = <NodeData>[
-        NodeData(id: 0, x: 0, y: 0, dir: Direction.left, isCore: false), // unblocked
-        NodeData(id: 1, x: 1, y: 0, dir: Direction.left, isCore: false), // blocked by 0
-        NodeData(id: 2, x: 2, y: 0, dir: Direction.left, isCore: false), // blocked by 1 (and 0)
-        NodeData(id: 3, x: 3, y: 0, dir: Direction.left, isCore: false), // blocked by 2 (and 1, 0)
-        NodeData(id: 4, x: 4, y: 0, dir: Direction.left, isCore: true),  // blocked by 3 (and 2, 1, 0)
+        NodeData(
+            id: 0, x: 0, y: 0, dir: Direction.left, isCore: false), // unblocked
+        NodeData(
+            id: 1,
+            x: 1,
+            y: 0,
+            dir: Direction.left,
+            isCore: false), // blocked by 0
+        NodeData(
+            id: 2,
+            x: 2,
+            y: 0,
+            dir: Direction.left,
+            isCore: false), // blocked by 1 (and 0)
+        NodeData(
+            id: 3,
+            x: 3,
+            y: 0,
+            dir: Direction.left,
+            isCore: false), // blocked by 2 (and 1, 0)
+        NodeData(
+            id: 4,
+            x: 4,
+            y: 0,
+            dir: Direction.left,
+            isCore: true), // blocked by 3 (and 2, 1, 0)
       ];
-      
+
       final level = LevelData(
         levelId: 2,
         gridWidth: 5,
@@ -75,7 +96,7 @@ void main() {
       );
 
       final metrics = CoreMetrics.compute(level);
-      
+
       // The core is blocked by all 4 nodes in front of it.
       expect(metrics.coreTapDepth, 5);
       expect(metrics.coreTapFraction, 1.0);
@@ -170,6 +191,5 @@ void main() {
         computeCriticalUnlockDepth(level),
       );
     });
-
   });
 }

@@ -13,7 +13,8 @@ void main() {
     test('vShape returns non-empty subset within bounds', () {
       const w = 7;
       const h = 6;
-      final cells = buildLayoutMask(LayoutMaskKind.vShape, w, h, random: Random(42))!;
+      final cells =
+          buildLayoutMask(LayoutMaskKind.vShape, w, h, random: Random(42))!;
       expect(cells, isNotEmpty);
       for (final key in cells) {
         final parts = key.split(',');
@@ -27,21 +28,25 @@ void main() {
     });
 
     test('pentagon returns cells or falls back to vShape for tiny grids', () {
-      final large = buildLayoutMask(LayoutMaskKind.pentagon, 12, 12, random: Random(1))!;
+      final large =
+          buildLayoutMask(LayoutMaskKind.pentagon, 12, 12, random: Random(1))!;
       expect(large.length, greaterThanOrEqualTo(9));
     });
 
     test('cShape removes most interior void cells', () {
       const w = 9;
       const h = 9;
-      final cells = buildLayoutMask(LayoutMaskKind.cShape, w, h, random: Random(0))!;
+      final cells =
+          buildLayoutMask(LayoutMaskKind.cShape, w, h, random: Random(0))!;
       expect(cells.length, lessThan(w * h));
       expect(cells.length, greaterThan(40));
     });
 
     test('deterministic Random yields stable vShape cell count', () {
-      final a = buildLayoutMask(LayoutMaskKind.vShape, 10, 10, random: Random(99))!;
-      final b = buildLayoutMask(LayoutMaskKind.vShape, 10, 10, random: Random(99))!;
+      final a =
+          buildLayoutMask(LayoutMaskKind.vShape, 10, 10, random: Random(99))!;
+      final b =
+          buildLayoutMask(LayoutMaskKind.vShape, 10, 10, random: Random(99))!;
       expect(a.length, b.length);
       expect(a, b);
     });
@@ -147,7 +152,14 @@ void main() {
 
   /// The grids the Director actually asks for (6..9 on both axes).
   const grids = [
-    [6, 6], [7, 7], [8, 8], [9, 9], [8, 6], [6, 8], [9, 7], [7, 9],
+    [6, 6],
+    [7, 7],
+    [8, 8],
+    [9, 9],
+    [8, 6],
+    [6, 8],
+    [9, 7],
+    [7, 9],
   ];
 
   group('T2.1 jitter propagation', () {
@@ -208,7 +220,8 @@ void main() {
       }
     });
 
-    test('PRE-EXISTING: hollowDiamond jitter breaks the size envelope at the '
+    test(
+        'PRE-EXISTING: hollowDiamond jitter breaks the size envelope at the '
         'current minCells, and T2.2 is what fixes it', () {
       // Found by the T2.1 balance test on 2026-08-21. hollowDiamond is NOT a
       // T2.1 builder — it was jittered before this task and its jitter widens

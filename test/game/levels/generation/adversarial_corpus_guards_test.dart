@@ -60,7 +60,7 @@
 //
 // ignore_for_file: avoid_print
 
-@Tags(['slow'])
+@Tags(['corpus', 'slow'])
 library;
 
 import 'dart:io';
@@ -108,7 +108,8 @@ void main() {
       }
     });
 
-    test('severity view keeps the boards the earlier sketch would have cut', () {
+    test('severity view keeps the boards the earlier sketch would have cut',
+        () {
       // `docs/playtests/T0_EXIT_GATE.md` proposed restricting Medium to "boards
       // with cores, sectors 3+". T0.3 found the shallowest boards are
       // overwhelmingly sector 2, single-core, and Medium sector 2 keeps
@@ -336,8 +337,8 @@ void main() {
     });
 
     test('at floor with the same cores is INCIDENTAL', () {
-      expect(classify(b: base(), taps: 6, coreSet: 'C'),
-          BoardOutcome.incidental);
+      expect(
+          classify(b: base(), taps: 6, coreSet: 'C'), BoardOutcome.incidental);
     });
 
     test('below floor on a board that cannot reach it is UNFIXABLE', () {

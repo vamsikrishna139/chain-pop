@@ -41,8 +41,7 @@ void main() {
       final gen = LevelGenerator();
       const samples = 400;
       for (var i = 0; i < samples; i++) {
-        final mode =
-            DifficultyMode.values[i % DifficultyMode.values.length];
+        final mode = DifficultyMode.values[i % DifficultyMode.values.length];
         final r = gen.generate(i, mode: mode);
         expect(r.isSuccess, isTrue);
         final m = LevelMetrics.compute(r.value);
@@ -64,12 +63,11 @@ void main() {
       const samples = 300;
       var inBand = 0;
       for (var i = 0; i < samples; i++) {
-        final mode =
-            DifficultyMode.values[i % DifficultyMode.values.length];
+        final mode = DifficultyMode.values[i % DifficultyMode.values.length];
         final r = gen.generate(i, mode: mode);
         expect(r.isSuccess, isTrue);
-        final profile = DifficultyProfile.forTier(
-            DifficultyProfile.tierFromMode(mode));
+        final profile =
+            DifficultyProfile.forTier(DifficultyProfile.tierFromMode(mode));
         if (profile.passes(LevelMetrics.compute(r.value))) inBand++;
       }
       expect(gen.retrogradeInBandSuccessCount, greaterThan(0),

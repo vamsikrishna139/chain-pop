@@ -27,6 +27,9 @@ abstract class GameScreenControllerHost {
   int? get dailyDayKey;
   bool get isTutorial;
   int get tutorialIndex;
+
+  Map<String, Object> get analyticsParams;
+
   AdService? get adServiceOverride;
   GameAudioHandle Function()? get audioHandleFactory;
   ChainPopProgressStore? get progressStoreOverride;

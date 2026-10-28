@@ -11,7 +11,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
-    final tempDir = await Directory.systemTemp.createTemp('chain_pop_storage_test_');
+    final tempDir =
+        await Directory.systemTemp.createTemp('chain_pop_storage_test_');
     Hive.init(tempDir.path);
     await StorageService.init();
   });
@@ -167,7 +168,8 @@ void main() {
       expect(StorageService.tutorialCompleted, isFalse);
     });
 
-    test('tutorialCompleted reads int 1 as true (legacy / corrupt cell)', () async {
+    test('tutorialCompleted reads int 1 as true (legacy / corrupt cell)',
+        () async {
       await StorageService.clearProgress();
       final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
       await box.put('tutorial_completed', 1);
@@ -175,28 +177,34 @@ void main() {
     });
 
     group('lifetime campaign engagement (interstitial gate)', () {
-      test('gate false by default; satisfied via clears or gameplay seconds', () async {
+      test('gate false by default; satisfied via clears or gameplay seconds',
+          () async {
         expect(StorageService.lifetimeCampaignClears, 0);
         expect(StorageService.lifetimeGameplaySeconds, 0);
-        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isFalse);
+        expect(
+            StorageService.campaignInterstitialLifetimeGateSatisfied, isFalse);
 
         for (var i = 0;
             i < StorageService.campaignInterstitialMinLifetimeClears;
             i++) {
           await StorageService.incrementLifetimeCampaignClears();
         }
-        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isTrue);
+        expect(
+            StorageService.campaignInterstitialLifetimeGateSatisfied, isTrue);
 
         await StorageService.clearProgress();
-        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isFalse);
+        expect(
+            StorageService.campaignInterstitialLifetimeGateSatisfied, isFalse);
 
         await StorageService.accumulateLifetimeGameplaySeconds(
           StorageService.campaignInterstitialMinGameplaySeconds,
         );
-        expect(StorageService.campaignInterstitialLifetimeGateSatisfied, isTrue);
+        expect(
+            StorageService.campaignInterstitialLifetimeGateSatisfied, isTrue);
       });
 
-      test('accumulateLifetimeGameplaySeconds ignores non-positive delta', () async {
+      test('accumulateLifetimeGameplaySeconds ignores non-positive delta',
+          () async {
         await StorageService.accumulateLifetimeGameplaySeconds(0);
         await StorageService.accumulateLifetimeGameplaySeconds(-10);
         expect(StorageService.lifetimeGameplaySeconds, 0);

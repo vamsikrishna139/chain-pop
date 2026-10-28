@@ -132,12 +132,10 @@ void main() {
       ledger.record(const LevelFingerprint(0x002));
       // 0x001 now in window; 0x003 is distance 2 from 0x002 and distance 2
       // from 0x001 → novel.
-      expect(
-          ledger.isNovel(const LevelFingerprint(0x004)), isTrue);
+      expect(ledger.isNovel(const LevelFingerprint(0x004)), isTrue);
       // Push a third in → 0x001 evicted.
       ledger.record(const LevelFingerprint(0x008));
-      expect(
-          ledger.isNovel(const LevelFingerprint(0x001)), isTrue);
+      expect(ledger.isNovel(const LevelFingerprint(0x001)), isTrue);
     });
 
     test('serialize / restore round-trips the historical tail', () {
@@ -148,8 +146,7 @@ void main() {
       final bytes = ledger.serialize();
       final clone = DiversityLedger(windowSize: 2, historicalCap: 4);
       clone.restore(bytes);
-      expect(clone.historical.map((f) => f.bits).toList(),
-          equals(bytes));
+      expect(clone.historical.map((f) => f.bits).toList(), equals(bytes));
     });
   });
 }

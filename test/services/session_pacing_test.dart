@@ -21,7 +21,8 @@ void main() {
     test('non-interval wins between surges are calm', () {
       expect(SessionPacing.surgeForWinCount(SessionPacing.surgeInterval + 1),
           isNull);
-      expect(SessionPacing.surgeForWinCount(SessionPacing.surgeInterval * 2 - 1),
+      expect(
+          SessionPacing.surgeForWinCount(SessionPacing.surgeInterval * 2 - 1),
           isNull);
     });
   });

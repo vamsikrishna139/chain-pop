@@ -48,7 +48,7 @@ void main() {
 
       final l1 = r1.value;
       final l2 = r2.value;
-      
+
       bool isIdentical = l1.nodes.length == l2.nodes.length;
       if (isIdentical) {
         for (int i = 0; i < l1.nodes.length; i++) {
@@ -62,15 +62,18 @@ void main() {
           }
         }
       }
-      expect(isIdentical, isFalse, reason: 'Ledger is a declared input, subsequent generations should differ.');
+      expect(isIdentical, isFalse,
+          reason:
+              'Ledger is a declared input, subsequent generations should differ.');
     });
 
-    test('Probe 2: two fresh generators: generate(44) each -> byte-identical', () {
+    test('Probe 2: two fresh generators: generate(44) each -> byte-identical',
+        () {
       final g1 = LevelGenerator.neutral();
       final g2 = LevelGenerator.neutral();
       final r1 = g1.generate(44);
       final r2 = g2.generate(44);
-      
+
       expect(r1.isSuccess, isTrue);
       expect(r2.isSuccess, isTrue);
 
@@ -95,7 +98,7 @@ void main() {
       final r1 = generator.generate(44);
       generator.generate(45);
       final r2 = generator.generate(44);
-      
+
       final l1 = r1.value;
       final l2 = r2.value;
 
@@ -113,12 +116,13 @@ void main() {
       expect(isIdentical, isFalse);
     });
 
-    test('Probe 4: one generator: 44 Hard, 44 Medium, 44 Hard -> Hard differs', () {
+    test('Probe 4: one generator: 44 Hard, 44 Medium, 44 Hard -> Hard differs',
+        () {
       final generator = LevelGenerator.neutral();
       final r1 = generator.generate(44, mode: DifficultyMode.hard);
       generator.generate(44, mode: DifficultyMode.medium);
       final r2 = generator.generate(44, mode: DifficultyMode.hard);
-      
+
       final l1 = r1.value;
       final l2 = r2.value;
 
@@ -133,7 +137,8 @@ void main() {
           }
         }
       }
-      expect(isIdentical, isFalse, reason: 'Mode must not leak into the 3rd beyond ledger effects.');
+      expect(isIdentical, isFalse,
+          reason: 'Mode must not leak into the 3rd beyond ledger effects.');
     });
 
     // Probe 5 is the plan's real gate (§T0.0b: "a single id proves nothing
@@ -149,7 +154,11 @@ void main() {
     // Never let 5a become the only survivor. If it goes red, run 5 for the
     // full failing set before investigating.
     test('Probe 5a: two fresh generators, every 4th sample id x 3 modes', () {
-      for (final mode in [DifficultyMode.easy, DifficultyMode.medium, DifficultyMode.hard]) {
+      for (final mode in [
+        DifficultyMode.easy,
+        DifficultyMode.medium,
+        DifficultyMode.hard
+      ]) {
         for (var i = 0; i < kReportSampleIds.length; i += 4) {
           final id = kReportSampleIds[i];
           final g1 = LevelGenerator.neutral();
@@ -170,46 +179,64 @@ void main() {
               reason: 'Node count differs for id $id mode $mode');
 
           for (int n = 0; n < l1.nodes.length; n++) {
-            expect(l1.nodes[n].x, equals(l2.nodes[n].x), reason: 'x differs for id $id mode $mode node $n');
-            expect(l1.nodes[n].y, equals(l2.nodes[n].y), reason: 'y differs for id $id mode $mode node $n');
-            expect(l1.nodes[n].dir, equals(l2.nodes[n].dir), reason: 'dir differs for id $id mode $mode node $n');
-            expect(l1.nodes[n].isCore, equals(l2.nodes[n].isCore), reason: 'isCore differs for id $id mode $mode node $n');
-            expect(l1.nodes[n].kind, equals(l2.nodes[n].kind), reason: 'kind differs for id $id mode $mode node $n');
+            expect(l1.nodes[n].x, equals(l2.nodes[n].x),
+                reason: 'x differs for id $id mode $mode node $n');
+            expect(l1.nodes[n].y, equals(l2.nodes[n].y),
+                reason: 'y differs for id $id mode $mode node $n');
+            expect(l1.nodes[n].dir, equals(l2.nodes[n].dir),
+                reason: 'dir differs for id $id mode $mode node $n');
+            expect(l1.nodes[n].isCore, equals(l2.nodes[n].isCore),
+                reason: 'isCore differs for id $id mode $mode node $n');
+            expect(l1.nodes[n].kind, equals(l2.nodes[n].kind),
+                reason: 'kind differs for id $id mode $mode node $n');
           }
         }
       }
     });
 
-    test('Probe 5: two fresh generators, full sweep of 100 kReportSampleIds x 3 modes', () {
+    test(
+        'Probe 5: two fresh generators, full sweep of 100 kReportSampleIds x 3 modes',
+        () {
       // 300 checks total
-      for (final mode in [DifficultyMode.easy, DifficultyMode.medium, DifficultyMode.hard]) {
+      for (final mode in [
+        DifficultyMode.easy,
+        DifficultyMode.medium,
+        DifficultyMode.hard
+      ]) {
         for (final id in kReportSampleIds) {
           final g1 = LevelGenerator.neutral();
           final g2 = LevelGenerator.neutral();
-          
+
           final r1 = g1.generate(id, mode: mode);
           final r2 = g2.generate(id, mode: mode);
-          
+
           expect(r1.isSuccess, isTrue, reason: 'id: $id, mode: $mode');
           expect(r2.isSuccess, isTrue, reason: 'id: $id, mode: $mode');
-          
+
           final l1 = r1.value;
           final l2 = r2.value;
-          
+
           expect(l1.gridWidth, equals(l2.gridWidth));
           expect(l1.gridHeight, equals(l2.gridHeight));
-          expect(l1.nodes.length, equals(l2.nodes.length), reason: 'Node count differs for id $id mode $mode');
-          
+          expect(l1.nodes.length, equals(l2.nodes.length),
+              reason: 'Node count differs for id $id mode $mode');
+
           for (int i = 0; i < l1.nodes.length; i++) {
-            expect(l1.nodes[i].x, equals(l2.nodes[i].x), reason: 'x differs for id $id mode $mode node $i');
-            expect(l1.nodes[i].y, equals(l2.nodes[i].y), reason: 'y differs for id $id mode $mode node $i');
-            expect(l1.nodes[i].dir, equals(l2.nodes[i].dir), reason: 'dir differs for id $id mode $mode node $i');
-            expect(l1.nodes[i].isCore, equals(l2.nodes[i].isCore), reason: 'isCore differs for id $id mode $mode node $i');
-            expect(l1.nodes[i].kind, equals(l2.nodes[i].kind), reason: 'kind differs for id $id mode $mode node $i');
+            expect(l1.nodes[i].x, equals(l2.nodes[i].x),
+                reason: 'x differs for id $id mode $mode node $i');
+            expect(l1.nodes[i].y, equals(l2.nodes[i].y),
+                reason: 'y differs for id $id mode $mode node $i');
+            expect(l1.nodes[i].dir, equals(l2.nodes[i].dir),
+                reason: 'dir differs for id $id mode $mode node $i');
+            expect(l1.nodes[i].isCore, equals(l2.nodes[i].isCore),
+                reason: 'isCore differs for id $id mode $mode node $i');
+            expect(l1.nodes[i].kind, equals(l2.nodes[i].kind),
+                reason: 'kind differs for id $id mode $mode node $i');
           }
         }
       }
-    }, tags: 'slow');  });
+    }, tags: 'slow');
+  });
 
   // ── Hidden-state independence (T0.0c) ──────────────────────────────────
   //
@@ -269,7 +296,8 @@ void main() {
       // resetCounters() clears exactly those counters and nothing else, so it
       // is the precise instrument for the question.
       for (final id in probeIds) {
-        final fresh = identityOf(LevelGenerator.neutral(), id, DifficultyMode.hard);
+        final fresh =
+            identityOf(LevelGenerator.neutral(), id, DifficultyMode.hard);
 
         final counted = LevelGenerator.neutral();
         for (var warm = 200; warm < 215; warm++) {

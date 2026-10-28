@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Unbound privacy policy — copy this into Google Sites</title>
+<body style="max-width:760px;margin:24px auto;padding:0 16px;font-family:Arial,sans-serif;line-height:1.5">
+<p><b>Effective date:</b> October 9, 2026</p>
+<p>This policy explains what happens to data when you play <b>Unbound</b> (package com.adbkv.chainpop), published on Google Play by <b>MindGlow Studios</b> (ADBKV), an independent developer based in India. For the purposes of the EU and UK General Data Protection Regulation (GDPR), we are the <b>data controller</b> for the processing described here. Contact details are in §15.</p>
+<p>Unbound has <b>no account system</b>. There is no sign-up, no login, and no profile on our servers. You can play the entire game offline. We do not sell your data.</p>
+<p>We do, however, use third-party services that collect data — advertising, analytics, crash reporting, purchase management and Google Play Games. This policy names each one. <b>We do not claim that we collect no data.</b></p>
+<h2>1. Game data stored on your device</h2>
+<p>All game progression is stored locally on your device in a Hive database:</p>
+<ul><li>Stars earned per level and the highest level unlocked, per difficulty track</li><li>Your selected difficulty and game settings (sound, haptics, high contrast, aim guide, ambient motion)</li><li>Tutorial completion state</li><li>Daily challenge results and which past days you have unlocked</li><li>Achievement counters and progress</li><li>A cached flag recording whether you have purchased the ad-free upgrade</li></ul>
+<p>None of this is uploaded to us. We operate no game server and hold no copy of your progress.</p>
+<h2>2. Advertising — Google AdMob (Google Mobile Ads)</h2>
+<p>Unbound shows banner, interstitial and rewarded video ads through <b>Google AdMob</b> unless you have purchased the ad-free upgrade, which disables ads entirely.</p>
+<p>AdMob is an <b>independent third party</b>: it uses data for its own advertising and measurement purposes across its network, not solely on our behalf. Through AdMob, the following may be collected and shared: your <b>advertising ID (AAID)</b>, IP address, user agent, device and app information, coarse geographic region derived from your IP address, and your interactions with ads.</p>
+<p>Ad content in Unbound is capped at Google's <b>"G"</b> (general audiences) content rating.</p>
+<h3>Consent (GDPR / EU, UK and other consent regions)</h3>
+<p>Before the ads SDK is initialised, the app runs the <b>Google User Messaging Platform (UMP)</b> consent flow — a Google-certified consent management platform using the IAB Transparency &amp; Consent Framework. In the EEA, UK and Switzerland it shows a consent message with <b>Consent</b>, <b>Do not consent</b> and <b>Manage options</b>. Declining does not stop you playing: you may still see non-personalised ads, which use only limited data. If the app cannot establish your consent status, ads are not shown for that session.</p>
+<p>You can change your choice at any time: <b>Settings → Privacy &amp; Ads → Manage ad choices</b> (shown where a consent choice applies to you). The same screen offers a <b>Privacy rights</b> summary and a link to this policy.</p>
+<h2>3. Analytics — Firebase Analytics</h2>
+<p>We use <b>Google Firebase Analytics</b> (Firebase project unbound-667b8) to understand how the game is played and where players get stuck.</p>
+<p>Firebase Analytics acts as a <b>service provider processing on our behalf</b>. Events recorded include: session start and end, tutorial start/complete, level start, complete, fail, retry and abandon, hint and undo use, ad offers shown, started, completed and failed, interstitials shown and closed, purchase started, succeeded and failed, premium restored, daily challenge opened and completed, and achievement unlocks. Firebase also records device model, OS version, app version, and derives approximate region from your IP address.</p>
+<p>Identifier used: the <b>Firebase App Instance ID</b>. We do not enable Google Signals or link analytics to Google advertising products.</p>
+<p><b>Analytics is off until consent is checked.</b> The app starts with analytics collection disabled. In the EEA, UK and Switzerland it is switched on only if you consented to storing and accessing information on your device in the consent message above; elsewhere it is switched on once the consent check has run. You can turn analytics off at any time with <b>Settings → Privacy &amp; Ads → Share usage analytics</b>.</p>
+<h2>4. Crash reporting — Firebase Crashlytics</h2>
+<p>We use <b>Firebase Crashlytics</b> to detect and fix crashes. When the app crashes or hits a handled error, a report is sent containing the stack trace, device state, OS and app version, and a <b>Crashlytics installation UUID</b>. We do not deliberately attach names, email addresses or other direct identifiers to crash reports. Crashlytics is a service provider processing on our behalf, and crash data is retained by Google for roughly 90 days.</p>
+<p>Crash collection is disabled in development builds and enabled in released builds.</p>
+<h2>5. Purchases — RevenueCat and Google Play Billing</h2>
+<p>The optional one-time <b>ad-free upgrade</b> ("Unbound Premium") is sold through <b>Google Play Billing</b> and managed through <b>RevenueCat</b>, both acting as service providers on our behalf.</p>
+<ul><li>RevenueCat receives your purchase and receipt data and assigns an <b>anonymous App User ID</b>. It is not linked to a name or email by us.</li><li><b>Your payment details never reach the app.</b> Card and payment-method handling happens entirely inside Google Play's checkout.</li><li>"Restore purchases" in Settings re-queries your entitlement from the store.</li></ul>
+<h2>6. Achievements — Google Play Games Services</h2>
+<p>On Android, Unbound integrates <b>Google Play Games Services</b> so achievements sync to your Google Play Games profile. This is <b>optional</b>: the app attempts sign-in in the background at startup, and if you are not signed in the game runs entirely locally — the full achievement catalogue still works and remains browsable on-device.</p>
+<p>When you are signed in, Play Games provides the app with your <b>Play Games player ID and display name</b>, and the app sends your <b>achievement unlock state and step counts</b> to Google, which stores them against your Google account. Google Play Games Services is operated by Google in connection with our Play developer account.</p>
+<p>We do not read your friends list, we do not post on your behalf, and the game ships no leaderboards.</p>
+<h2>7. Permissions</h2>
+<p>The app uses network access (for ads, purchases, analytics and crash reports), <b>notifications</b> (optional daily reminders, which you can turn off in Settings and which Android asks you to allow), and the <b>advertising ID</b> permission used by AdMob. It also uses ordinary system permissions declared by its SDKs (vibration for haptics, keeping reminders scheduled after a restart, and background upload of analytics/crash data). Location, contacts, storage, microphone, camera, phone and SMS permissions are explicitly removed from the build. We do not collect precise location.</p>
+<h2>8. Retention</h2>
+<ul><li><b>On your device:</b> local game data stays until you clear it, clear the app's storage, or uninstall.</li><li><b>Firebase Analytics:</b> retained per the retention window configured in the Firebase console (2 or 14 months).</li><li><b>Firebase Crashlytics:</b> approximately 90 days.</li><li><b>RevenueCat:</b> purchase records retained until deletion is requested.</li><li><b>AdMob and Google Play:</b> per Google's own policies, linked below.</li></ul>
+<h2>9. Your controls and choices</h2>
+<h3>"Reset Game Data" (in-app)</h3>
+<p><b>Settings → Reset Game Data</b> (also reachable by pressing and holding the Play button on the main menu), then confirm in the dialog. It clears the local game database — all stars, unlocks, difficulty progress and settings on this device.</p>
+<p>Be clear about what it does and does not do:</p>
+<ul><li>It clears <b>local device data only</b>.</li><li>It does <b>NOT</b> delete data already held by Google, Firebase, AdMob, RevenueCat or Google Play Games. That data lives on their systems, not ours, and this button cannot reach it.</li><li>Your <b>ad-free purchase entitlement deliberately survives the reset</b> — you should never lose something you paid for by resetting your progress. The cached premium flag is rewritten immediately after the local data is cleared.</li><li>Local reset cannot be undone.</li></ul>
+<h3>Other controls</h3>
+<ul><li><b>Manage ad choices</b> (Settings → Privacy &amp; Ads) — revisit or withdraw your ads consent at any time. Withdrawing is as easy as giving it.</li><li><b>Share usage analytics</b> (Settings → Privacy &amp; Ads) — turn analytics off or back on.</li><li><b>Privacy rights</b> (Settings → Privacy &amp; Ads) — plain-language summary plus a direct contact link.</li><li><b>Buy the ad-free upgrade</b> — removes all ads, which removes the AdMob data flow.</li><li><b>Google account controls</b> — your Google Ads settings, and Play Games account and data controls, are managed by Google at <a href="https://myaccount.google.com">myaccount.google.com</a>.</li><li><b>Uninstall</b> — removes all locally stored game data.</li></ul>
+<h3>Requesting deletion</h3>
+<p>Because there is no account, there is nothing for us to look up by identity. For anything held by our service providers — most practically your RevenueCat purchase record — email us at the address in §15 and we will action the request. Include enough detail (for example, your Google Play order ID) for us to locate the record.</p>
+<h2>10. Legal bases (EEA / UK)</h2>
+<ul><li><b>Advertising (AdMob):</b> your <b>consent</b>, collected through the UMP message. Non-personalised ads where you decline rely on our <b>legitimate interest</b> in funding a free game.</li><li><b>Analytics (Firebase Analytics):</b> your <b>consent</b>.</li><li><b>Crash reporting (Crashlytics):</b> our <b>legitimate interest</b> in keeping the game working. You may object by contacting us.</li><li><b>Purchases (RevenueCat, Google Play Billing):</b> <b>performance of a contract</b> — delivering the upgrade you bought.</li><li><b>Achievements (Play Games):</b> <b>performance of a contract</b>, only when you choose to sign in.</li></ul>
+<h2>11. International transfers</h2>
+<p>Our service providers (Google, Firebase and RevenueCat) are based in, or process data in, the <b>United States</b> and other countries. These transfers rely on the European Commission's Standard Contractual Clauses and, where applicable, the EU–US Data Privacy Framework, as set out in those providers' own terms.</p>
+<h2>12. Your rights</h2>
+<p>Depending on where you live, you have the right to <b>access</b>, <b>correct</b>, <b>delete</b> or <b>port</b> your personal data, to <b>restrict</b> or <b>object to</b> processing, and to <b>withdraw consent</b> at any time without affecting earlier processing. In the EEA and UK you also have the right to <b>complain to your local data protection authority</b>.</p>
+<p><b>US residents</b> (including California, Virginia, Colorado and other states with privacy laws): we do not sell personal information for money. AdMob's use of your data for personalised ads may count as "sharing" or "targeted advertising" under those laws. You can opt out using your device's <b>Delete advertising ID / Opt out of Ads Personalization</b> setting, or contact us.</p>
+<p>Because the app has no account, we may ask for details (for example a Google Play order ID) to locate a record. We answer requests within one month.</p>
+<h2>13. Children</h2>
+<p>Unbound is intended for players aged <b>13 and over</b> and is not directed to children. We do not knowingly collect personal data from children under 13. If you believe a child under 13 has provided data through this app, contact us and we will act on it.</p>
+<h2>14. Third-party policies</h2>
+<ul><li>Google (AdMob, Play Billing, Play Games): <a href="https://policies.google.com/privacy">https://policies.google.com/privacy</a></li><li>Firebase (Analytics, Crashlytics): <a href="https://firebase.google.com/support/privacy">https://firebase.google.com/support/privacy</a></li><li>RevenueCat: <a href="https://www.revenuecat.com/privacy/">https://www.revenuecat.com/privacy/</a></li></ul>
+<h2>15. Contact</h2>
+<p>Privacy questions and data requests: <b>adbkv.apps@gmail.com</b></p>
+<p>Data controller: MindGlow Studios (ADBKV), India.</p>
+<h2>16. Changes</h2>
+<p>We may update this policy. Material changes will be reflected in a revised effective date at the top of this document and in the hosted copy.</p>
+</body>

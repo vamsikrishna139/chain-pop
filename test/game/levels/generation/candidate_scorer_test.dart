@@ -98,7 +98,8 @@ void main() {
     });
 
     test('softmax pick is deterministic with a seeded RNG', () {
-      final scorer = CandidateScorer(weights: const ScorerWeights(temperature: 1.0));
+      final scorer =
+          CandidateScorer(weights: const ScorerWeights(temperature: 1.0));
       final state = _stateForEmpty5x5();
       final candidates = [
         Candidate(

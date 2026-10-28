@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../game/levels/generation/difficulty_mode.dart';
 import '../../../models/difficulty.dart';
@@ -153,18 +154,38 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'Complete!',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-              ),
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                const Center(
+                  child: Text(
+                    'Complete!',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    icon: const Icon(Icons.share, color: Colors.white70),
+                    onPressed: () {
+                      SharePlus.instance.share(ShareParams(
+                        text:
+                            'I just completed Level ${widget.levelId} in Unbound! Can you beat my time?',
+                      ));
+                    },
+                  ),
+                ),
+              ],
             ),
             if (widget.directiveLabel != null) ...[
               const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),

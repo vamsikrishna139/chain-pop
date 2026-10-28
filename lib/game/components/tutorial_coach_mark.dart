@@ -57,7 +57,8 @@ class TutorialCoachMark extends PositionComponent
     }
 
     // ── Bouncing arrow from the lower-right, pointing up-left at the tile ─────
-    final bounce = (math.sin(_clock * math.pi * 2) * 0.5 + 0.5) * cellSize * 0.12;
+    final bounce =
+        (math.sin(_clock * math.pi * 2) * 0.5 + 0.5) * cellSize * 0.12;
     final dir = const Offset(-1, -1) / math.sqrt2; // points up-left
     final perp = const Offset(-1, 1) / math.sqrt2;
     final tip = Offset(cellSize * 0.34, cellSize * 0.34) + dir * -bounce;

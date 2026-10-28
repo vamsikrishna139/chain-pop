@@ -181,8 +181,7 @@ void main() {
     // measured baseline of 10 (see the calibration note above), so the window
     // is a symmetric [9, 11].
     test('Hard stays where it already is', () {
-      expect(hard.p50Taps, closeTo(10, 1),
-          reason: 'P1 must not move Hard');
+      expect(hard.p50Taps, closeTo(10, 1), reason: 'P1 must not move Hard');
       expect(hard.minTaps, greaterThanOrEqualTo(6),
           reason: 'Hard has no trivial boards today and must not gain any');
     });

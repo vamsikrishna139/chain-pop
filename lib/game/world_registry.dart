@@ -549,4 +549,3 @@ String worldHudLabel(int level) {
   if (name != null) return '${world.name.toUpperCase()} · $name';
   return '${world.name.toUpperCase()} · $level';
 }
-

@@ -42,7 +42,7 @@ abstract final class PlayGamesBootstrap {
 
     // Drive the sink's availability off the single auth owner.
     _auth.addListener(_onAuthChanged);
-    
+
     // Kick off the initial native check. Never awaited: cold start must not
     // block on a platform round trip.
     unawaited(_auth.refresh());
@@ -54,9 +54,9 @@ abstract final class PlayGamesBootstrap {
   static void _onAuthChanged() {
     final state = _auth.value;
     final signedIn = state == PlayGamesAuthState.signedIn;
-    
+
     _sink?.signedIn = signedIn;
-    
+
     if (signedIn) {
       // Failures in either step are swallowed and retried next time.
       unawaited(_syncThenReconcile());

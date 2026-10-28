@@ -7,8 +7,7 @@ import 'silhouettes.dart';
 class SilhouetteSessionTracker {
   static const int _historyLength = 5;
 
-  final Queue<SilhouetteVisualFamily> _recent =
-      Queue<SilhouetteVisualFamily>();
+  final Queue<SilhouetteVisualFamily> _recent = Queue<SilhouetteVisualFamily>();
 
   /// Records [silhouette] after a level is emitted.
   void record(SilhouetteId silhouette) {

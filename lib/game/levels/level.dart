@@ -145,8 +145,7 @@ class LevelData {
   int get coreCount => nodes.where((n) => n.isCore).length;
 
   /// Locked nodes on the board.
-  int get lockCount =>
-      nodes.where((n) => n.kind == NodeKind.locked).length;
+  int get lockCount => nodes.where((n) => n.kind == NodeKind.locked).length;
 
   /// Relay nodes on the board.
   int get relayCount => nodes.where((n) => n.kind == NodeKind.relay).length;

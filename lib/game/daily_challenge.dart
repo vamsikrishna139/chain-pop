@@ -11,8 +11,18 @@ class DailyChallenge {
   /// Short label for HUD / win sheet (no extra packages).
   static String compactDateLabel(DateTime when) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final m = months[when.month - 1];
     return '$m ${when.day}, ${when.year}';
@@ -29,8 +39,18 @@ class DailyChallenge {
   /// App bar style, e.g. `Apr 2026`.
   static String monthYearTitle(int year, int month) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return '${months[month - 1]} $year';
   }
@@ -39,8 +59,7 @@ class DailyChallenge {
   static String incidentTitle(int dayKey) => 'NETWORK INCIDENT';
 
   /// Objective line shown on daily briefing / in-game HUD.
-  static String incidentObjective(int dayKey) =>
-      'Restore the Cascade Reactor';
+  static String incidentObjective(int dayKey) => 'Restore the Cascade Reactor';
 
   /// Severity badge for daily incidents.
   static String incidentSeverity(int dayKey) => 'Critical';

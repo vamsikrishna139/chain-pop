@@ -34,11 +34,28 @@ void main() {
   });
 
   // (logical w, logical h, dpr, safeTop, safeBottom, label, expected consts)
-  final devices = <(double, double, double, double, double, String, double, double)>[
-    (390, 844, 3.0, 47, 34, 'iPhone 14 (390x844)', kRefTopReserved,
-        kRefBottomReserved),
-    (430, 932, 3.0, 59, 34, 'iPhone 15 Pro Max (430x932)', kRefTopReservedLarge,
-        kRefBottomReservedLarge),
+  final devices =
+      <(double, double, double, double, double, String, double, double)>[
+    (
+      390,
+      844,
+      3.0,
+      47,
+      34,
+      'iPhone 14 (390x844)',
+      kRefTopReserved,
+      kRefBottomReserved
+    ),
+    (
+      430,
+      932,
+      3.0,
+      59,
+      34,
+      'iPhone 15 Pro Max (430x932)',
+      kRefTopReservedLarge,
+      kRefBottomReservedLarge
+    ),
   ];
 
   for (final (w, h, dpr, safeTop, safeBottom, label, expTop, expBottom)

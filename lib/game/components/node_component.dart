@@ -516,9 +516,6 @@ class NodeComponent extends PositionComponent
       _relayRotation += dt * 1.5;
     }
 
-    _blockerFlashTimer -= dt;
-    _arrowSpinTimer -= dt;
-
     if (!isPopping && !isJamming) {
       final activeLock = data.kind == NodeKind.locked && _hasActiveNeighbors();
       if (_isLockActive && !activeLock) {
@@ -563,7 +560,9 @@ class NodeComponent extends PositionComponent
     // ── Blocker flash (one-shot warning ring) ───────────────────────────────
     if (_blockerFlashTimer >= 0) {
       _blockerFlashTimer += dt;
-      if (_blockerFlashTimer >= _blockerFlashDuration) _blockerFlashTimer = -1.0;
+      if (_blockerFlashTimer >= _blockerFlashDuration) {
+        _blockerFlashTimer = -1.0;
+      }
     }
 
     // ── Relay arrow rotation (ease the spin offset back to 0) ────────────────

@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0F0F13</color>
+    <!-- Matches AppColors.background (lib/theme/app_colors.dart:10) so the
+         cold-start window is the same colour as the first Flutter frame. -->
+    <color name="launch_background">#0F0F13</color>
 </resources>

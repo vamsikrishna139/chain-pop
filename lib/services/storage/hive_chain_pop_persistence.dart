@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 
 import '../../game/levels/generation/difficulty_mode.dart';
@@ -32,8 +33,7 @@ final class HiveChainPopPersistence implements ChainPopStorage {
 
   static const String _lifetimeCampaignClearsKey =
       'lifetime_campaign_level_clears';
-  static const String _lifetimeGameplaySecondsKey =
-      'lifetime_gameplay_seconds';
+  static const String _lifetimeGameplaySecondsKey = 'lifetime_gameplay_seconds';
   static const String _settingsSoundKey = 'settings_sound';
   static const String _settingsHapticsKey = 'settings_haptics';
   static const String _settingsColorblindKey = 'settings_colorblind';
@@ -55,7 +55,18 @@ final class HiveChainPopPersistence implements ChainPopStorage {
 
   @override
   Future<void> open() async {
-    _box = await Hive.openBox<dynamic>(boxName);
+    try {
+      _box = await Hive.openBox<dynamic>(boxName);
+    } catch (e, st) {
+      debugPrint('Hive box corrupted or failed to open: $e\n$st');
+      try {
+        await Hive.deleteBoxFromDisk(boxName);
+        _box = await Hive.openBox<dynamic>(boxName);
+      } catch (e2, st2) {
+        debugPrint('Failed to open Hive box after deletion: $e2\n$st2');
+        rethrow;
+      }
+    }
     await _ensureSchemaAndMigrate();
   }
 
@@ -186,8 +197,7 @@ final class HiveChainPopPersistence implements ChainPopStorage {
 
   @override
   Future<void> unlockLevel(DifficultyMode mode, int level) async {
-    final sanitized =
-        coerceHiveInt(level, fallback: 1, min: 1, max: 1 << 20);
+    final sanitized = coerceHiveInt(level, fallback: 1, min: 1, max: 1 << 20);
     final current = highestUnlocked(mode);
     if (sanitized > current) {
       await _box.put('$_unlockedPrefix${mode.key}', sanitized);
@@ -283,6 +293,19 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   @override
   Future<void> setTutorialCompleted(bool value) async {
     await _box.put(_tutorialCompletedKey, value);
+  }
+
+  static const String _cachedPremiumKey = 'cached_premium';
+
+  @override
+  bool get cachedPremium => coerceHiveBool(
+        _box.get(_cachedPremiumKey),
+        fallback: false,
+      );
+
+  @override
+  Future<void> setCachedPremium(bool value) async {
+    await _box.put(_cachedPremiumKey, value);
   }
 
   @override
@@ -439,8 +462,10 @@ final class HiveChainPopPersistence implements ChainPopStorage {
 
   @override
   Future<void> clearProgress() async {
+    final premiumState = cachedPremium;
     await _box.clear();
     await _box.put(_schemaKey, _schemaVersion);
+    await setCachedPremium(premiumState);
   }
 
   @override

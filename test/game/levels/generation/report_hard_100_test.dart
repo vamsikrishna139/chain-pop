@@ -3,7 +3,7 @@
 //   flutter test test/game/levels/generation/report_hard_100_test.dart
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';

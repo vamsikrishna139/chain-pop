@@ -7,7 +7,6 @@ import '../../../theme/app_colors.dart';
 import '../game_screen_constants.dart';
 import 'timer_pause_chip.dart';
 
-
 class GameHeaderHud extends StatelessWidget {
   final Key? measureKey;
   final VoidCallback onBack;
@@ -57,7 +56,7 @@ class GameHeaderHud extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = difficulty.color;
     final usesCores = (totalCores ?? 0) > 0;
-    
+
     final titleText = headerModeLabel ?? difficulty.label.toUpperCase();
     final directiveText = missionLabel;
 
@@ -89,9 +88,11 @@ class GameHeaderHud extends StatelessWidget {
                           decoration: BoxDecoration(
                             color: AppColors.surface,
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                            border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.1)),
                           ),
-                          child: const Icon(Icons.arrow_back_rounded, size: 16, color: Colors.white70),
+                          child: const Icon(Icons.arrow_back_rounded,
+                              size: 16, color: Colors.white70),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -114,11 +115,13 @@ class GameHeaderHud extends StatelessWidget {
                         // Sleek Directive Pill
                         Flexible(
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: accent.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: accent.withValues(alpha: 0.3)),
+                              border: Border.all(
+                                  color: accent.withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               directiveText.toUpperCase(),
@@ -158,16 +161,18 @@ class GameHeaderHud extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: AppColors.surface,
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                          border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.1)),
                         ),
-                        child: const Icon(Icons.tune_rounded, size: 16, color: Colors.white70),
+                        child: const Icon(Icons.tune_rounded,
+                            size: 16, color: Colors.white70),
                       ),
                     ),
                   ],
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 10),
 
             // Unified Telemetry Capsule Bar
@@ -202,15 +207,24 @@ class GameHeaderHud extends StatelessWidget {
                             height: 8,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: hasLife ? Colors.redAccent : Colors.white.withValues(alpha: 0.1),
-                              boxShadow: hasLife ? [BoxShadow(color: Colors.redAccent.withValues(alpha: 0.6), blurRadius: 6)] : [],
+                              color: hasLife
+                                  ? Colors.redAccent
+                                  : Colors.white.withValues(alpha: 0.1),
+                              boxShadow: hasLife
+                                  ? [
+                                      BoxShadow(
+                                          color: Colors.redAccent
+                                              .withValues(alpha: 0.6),
+                                          blurRadius: 6)
+                                    ]
+                                  : [],
                             ),
                           );
                         }),
                       ),
                     ],
                   ),
-                  
+
                   // Mission Objective (REMAINING 18)
                   RichText(
                     text: TextSpan(
@@ -243,11 +257,13 @@ class GameHeaderHud extends StatelessWidget {
             if (sessionGoalLabel != null && sessionGoalLabel!.isNotEmpty) ...[
               const SizedBox(height: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFF1A1A26),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: Colors.cyanAccent.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

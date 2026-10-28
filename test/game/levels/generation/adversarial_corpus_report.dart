@@ -56,9 +56,8 @@ String fnv1a64(String s) {
 /// without being fatal.
 String geometryHashOf(LevelData level) {
   final mask = level.playCells;
-  final cells = (mask == null || mask.isEmpty)
-      ? '-'
-      : (mask.toList()..sort()).join('|');
+  final cells =
+      (mask == null || mask.isEmpty) ? '-' : (mask.toList()..sort()).join('|');
   final b = StringBuffer()
     ..writeln('${level.gridWidth}x${level.gridHeight}')
     ..writeln(cells);
@@ -271,8 +270,8 @@ AdversarialRow measureEntry(CorpusEntry e) {
   // wrong path on every board where the generator preferred an earlier
   // candidate. The last *matching* record is the right one — a later candidate
   // with an identical core set has, by definition, the same provenance.
-  final shippedCores = (level.nodes.where((n) => n.isCore).map((n) => n.id).toList()
-    ..sort());
+  final shippedCores =
+      (level.nodes.where((n) => n.isCore).map((n) => n.id).toList()..sort());
   CoreSelectionPath? corePath;
   for (final r in selections) {
     if (r.coreIds.length == shippedCores.length &&
@@ -289,7 +288,8 @@ AdversarialRow measureEntry(CorpusEntry e) {
     mode: e.mode,
     profile: profileFor(e.mode),
     directive: directiveFor(levelId: e.levelId, mode: e.mode).label,
-    timeLimitSec: computeGameTimeLimit(e.mode, level.nodes.length, e.levelId) ?? 0,
+    timeLimitSec:
+        computeGameTimeLimit(e.mode, level.nodes.length, e.levelId) ?? 0,
     genMs: sw.elapsedMilliseconds,
     sector: world.sector.mechanicBudgetTier,
     worldName: world.name,
@@ -592,7 +592,8 @@ void printViewSummary(String label, List<AdversarialRow> rows) {
       'p50=${percentileInt(nodes, 0.5)}  '
       'max=${percentileInt(nodes, 1)}   '
       '<-- node-count equality guard watches this');
-  print('  captureRate    p25=${percentileDouble(capture, 0.25).toStringAsFixed(2)}  '
+  print(
+      '  captureRate    p25=${percentileDouble(capture, 0.25).toStringAsFixed(2)}  '
       'p50=${percentileDouble(capture, 0.5).toStringAsFixed(2)}  '
       'p75=${percentileDouble(capture, 0.75).toStringAsFixed(2)}');
   print('  <=6 taps       ${rows.where((r) => r.tapsToWin <= 6).length}'

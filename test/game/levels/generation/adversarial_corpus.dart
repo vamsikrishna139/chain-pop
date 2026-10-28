@@ -134,6 +134,7 @@ const Set<String> kP1GeometryMovers = {
   '990/medium', '998/medium', '1160/medium', '1225/medium', '1274/medium',
   '1365/medium', '1493/medium',
 };
+
 /// Boards the milestone-seed fix moved, 2026-08-20. Same contract as
 /// [kP1GeometryMovers]: named, not exempted by a relaxed assertion, and any
 /// board outside this set that moves is still a failure.
@@ -163,7 +164,8 @@ const Set<String> kP1GeometryMovers = {
 ///
 /// Keyed `levelId/mode` to match `CorpusEntry.key`.
 const Set<String> kMilestoneSeedFixMovers = {
-  '550/medium', '1225/medium',
+  '550/medium',
+  '1225/medium',
 };
 
 /// Shape of this corpus definition — bump when the entry schema changes.
@@ -297,106 +299,506 @@ const List<QuintileBounds> kQuintileBoundsAtFreeze = [
 /// all, and a corpus that excludes them cannot see the fix. The eligible
 /// population is every board that can ship to a player.
 const List<CorpusEntry> kAdversarialCorpus = [
-  CorpusEntry(130, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 1, freezeTaps: 2, freezeNodes: 14),  // S2 cores=1
-  CorpusEntry(261, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 93, freezeTaps: 4, freezeNodes: 14),  // S3 cores=2
-  CorpusEntry(507, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 116, freezeTaps: 4, freezeNodes: 15),  // S5 cores=2
-  CorpusEntry(132, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 2, freezeTaps: 2, freezeNodes: 19),  // S2 cores=1
-  CorpusEntry(263, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 63, freezeTaps: 3, freezeNodes: 21),  // S3 cores=2
-  CorpusEntry(516, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 117, freezeTaps: 4, freezeNodes: 14),  // S5 cores=2
-  CorpusEntry(133, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 3, freezeTaps: 2, freezeNodes: 15),  // S2 cores=1
-  CorpusEntry(268, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 94, freezeTaps: 4, freezeNodes: 14),  // S3 cores=2
-  CorpusEntry(526, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 118, freezeTaps: 4, freezeNodes: 18),  // S5 cores=2
-  CorpusEntry(134, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 41, freezeTaps: 3, freezeNodes: 14),  // S2 cores=1
-  CorpusEntry(303, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 95, freezeTaps: 4, freezeNodes: 21),  // S3 cores=2
-  CorpusEntry(541, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 119, freezeTaps: 4, freezeNodes: 18),  // S5 cores=2
-  CorpusEntry(135, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 88, freezeTaps: 4, freezeNodes: 21),  // S2 cores=1
-  CorpusEntry(320, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 96, freezeTaps: 4, freezeNodes: 16),  // S3 cores=2
-  CorpusEntry(548, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 120, freezeTaps: 4, freezeNodes: 15),  // S5 cores=2
-  CorpusEntry(138, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 89, freezeTaps: 4, freezeNodes: 15),  // S2 cores=1
-  CorpusEntry(323, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 97, freezeTaps: 4, freezeNodes: 18),  // S3 cores=2
-  CorpusEntry(667, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 65, freezeTaps: 3, freezeNodes: 13),  // S6 cores=2
-  CorpusEntry(139, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 4, freezeTaps: 2, freezeNodes: 16),  // S2 cores=1
-  CorpusEntry(326, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 1, severityRank: 64, freezeTaps: 3, freezeNodes: 16),  // S3 cores=2
-  CorpusEntry(154, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 218, freezeTaps: 5, freezeNodes: 21),  // S2 cores=1
-  CorpusEntry(258, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 221, freezeTaps: 5, freezeNodes: 16),  // S3 cores=2
-  CorpusEntry(550, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 121, freezeTaps: 4, freezeNodes: 15),  // S5 cores=2
-  CorpusEntry(200, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 219, freezeTaps: 5, freezeNodes: 25),  // S2 cores=1
-  CorpusEntry(269, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 222, freezeTaps: 5, freezeNodes: 14),  // S3 cores=2
-  CorpusEntry(556, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 122, freezeTaps: 4, freezeNodes: 15),  // S5 cores=2
-  CorpusEntry(219, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 220, freezeTaps: 5, freezeNodes: 18),  // S2 cores=1
-  CorpusEntry(271, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 223, freezeTaps: 5, freezeNodes: 22),  // S3 cores=2
-  CorpusEntry(562, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 123, freezeTaps: 4, freezeNodes: 16),  // S5 cores=2
-  CorpusEntry(1142, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 178, freezeTaps: 4, freezeNodes: 22),  // S2 cores=1
-  CorpusEntry(304, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 224, freezeTaps: 5, freezeNodes: 14),  // S3 cores=2
-  CorpusEntry(572, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 124, freezeTaps: 4, freezeNodes: 13),  // S5 cores=2
-  CorpusEntry(1149, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 179, freezeTaps: 4, freezeNodes: 22),  // S2 cores=1
-  CorpusEntry(307, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 225, freezeTaps: 5, freezeNodes: 21),  // S3 cores=2
-  CorpusEntry(580, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 125, freezeTaps: 4, freezeNodes: 15),  // S5 cores=2
-  CorpusEntry(1151, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 180, freezeTaps: 4, freezeNodes: 16),  // S2 cores=1
-  CorpusEntry(311, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 226, freezeTaps: 5, freezeNodes: 13),  // S3 cores=2
-  CorpusEntry(587, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 126, freezeTaps: 4, freezeNodes: 17),  // S5 cores=2
-  CorpusEntry(1181, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 181, freezeTaps: 4, freezeNodes: 15),  // S2 cores=1
-  CorpusEntry(313, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 2, severityRank: 227, freezeTaps: 5, freezeNodes: 20),  // S3 cores=2
-  CorpusEntry(230, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 323, freezeTaps: 6, freezeNodes: 14),  // S2 cores=1
-  CorpusEntry(266, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 324, freezeTaps: 6, freezeNodes: 20),  // S3 cores=2
-  CorpusEntry(501, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 245, freezeTaps: 5, freezeNodes: 22),  // S5 cores=2
-  CorpusEntry(1146, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 301, freezeTaps: 5, freezeNodes: 21),  // S2 cores=1
-  CorpusEntry(272, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 325, freezeTaps: 6, freezeNodes: 21),  // S3 cores=2
-  CorpusEntry(503, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 341, freezeTaps: 6, freezeNodes: 14),  // S5 cores=2
-  CorpusEntry(1199, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 302, freezeTaps: 5, freezeNodes: 18),  // S2 cores=1
-  CorpusEntry(310, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 326, freezeTaps: 6, freezeNodes: 20),  // S3 cores=2
-  CorpusEntry(504, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 342, freezeTaps: 6, freezeNodes: 21),  // S5 cores=2
-  CorpusEntry(1229, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 303, freezeTaps: 5, freezeNodes: 21),  // S2 cores=1
-  CorpusEntry(322, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 327, freezeTaps: 6, freezeNodes: 22),  // S3 cores=2
-  CorpusEntry(508, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 343, freezeTaps: 6, freezeNodes: 17),  // S5 cores=2
-  CorpusEntry(324, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 328, freezeTaps: 6, freezeNodes: 15),  // S3 cores=2
-  CorpusEntry(514, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 246, freezeTaps: 5, freezeNodes: 15),  // S5 cores=2
-  CorpusEntry(329, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 329, freezeTaps: 6, freezeNodes: 14),  // S3 cores=2
-  CorpusEntry(515, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 344, freezeTaps: 6, freezeNodes: 21),  // S5 cores=2
-  CorpusEntry(356, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 330, freezeTaps: 6, freezeNodes: 22),  // S3 cores=2
-  CorpusEntry(521, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 345, freezeTaps: 6, freezeNodes: 22),  // S5 cores=2
-  CorpusEntry(378, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 331, freezeTaps: 6, freezeNodes: 19),  // S4 cores=2
-  CorpusEntry(522, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 3, severityRank: 346, freezeTaps: 6, freezeNodes: 18),  // S5 cores=2
-  CorpusEntry(1178, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 387, freezeTaps: 6, freezeNodes: 17),  // S2 cores=1
-  CorpusEntry(256, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 458, freezeTaps: 8, freezeNodes: 21),  // S3 cores=2
-  CorpusEntry(505, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 420, freezeTaps: 7, freezeNodes: 15),  // S5 cores=2
-  CorpusEntry(265, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 459, freezeTaps: 8, freezeNodes: 22),  // S3 cores=2
-  CorpusEntry(511, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 464, freezeTaps: 8, freezeNodes: 22),  // S5 cores=2
-  CorpusEntry(283, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 406, freezeTaps: 7, freezeNodes: 14),  // S3 cores=2
-  CorpusEntry(513, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 421, freezeTaps: 7, freezeNodes: 21),  // S5 cores=2
-  CorpusEntry(284, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 407, freezeTaps: 7, freezeNodes: 14),  // S3 cores=2
-  CorpusEntry(534, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 465, freezeTaps: 8, freezeNodes: 18),  // S5 cores=2
-  CorpusEntry(291, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 408, freezeTaps: 7, freezeNodes: 15),  // S3 cores=2
-  CorpusEntry(544, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 466, freezeTaps: 8, freezeNodes: 14),  // S5 cores=2
-  CorpusEntry(380, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 409, freezeTaps: 7, freezeNodes: 20),  // S4 cores=2
-  CorpusEntry(546, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 422, freezeTaps: 7, freezeNodes: 21),  // S5 cores=2
-  CorpusEntry(386, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 410, freezeTaps: 7, freezeNodes: 18),  // S4 cores=2
-  CorpusEntry(549, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 467, freezeTaps: 8, freezeNodes: 20),  // S5 cores=2
-  CorpusEntry(391, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 460, freezeTaps: 8, freezeNodes: 15),  // S4 cores=2
-  CorpusEntry(598, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 423, freezeTaps: 7, freezeNodes: 20),  // S5 cores=2
-  CorpusEntry(399, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 461, freezeTaps: 8, freezeNodes: 20),  // S4 cores=2
-  CorpusEntry(605, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 424, freezeTaps: 7, freezeNodes: 16),  // S5 cores=2
-  CorpusEntry(403, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 4, severityRank: 462, freezeTaps: 8, freezeNodes: 21),  // S4 cores=2
-  CorpusEntry(1, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 504, freezeTaps: 12, freezeNodes: 12),  // S1 cores=0
-  CorpusEntry(306, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 484, freezeTaps: 9, freezeNodes: 21),  // S3 cores=2
-  CorpusEntry(616, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 486, freezeTaps: 9, freezeNodes: 17),  // S5 cores=2
-  CorpusEntry(2, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 496, freezeTaps: 10, freezeNodes: 10),  // S1 cores=0
-  CorpusEntry(340, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 497, freezeTaps: 10, freezeNodes: 17),  // S3 cores=2
-  CorpusEntry(660, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 487, freezeTaps: 9, freezeNodes: 22),  // S6 cores=2
-  CorpusEntry(4, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 506, freezeTaps: 13, freezeNodes: 13),  // S1 cores=0
-  CorpusEntry(443, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 485, freezeTaps: 9, freezeNodes: 18),  // S4 cores=2
-  CorpusEntry(677, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 488, freezeTaps: 9, freezeNodes: 22),  // S6 cores=2
-  CorpusEntry(7, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 586, freezeTaps: 22, freezeNodes: 22),  // S1 cores=0
-  CorpusEntry(1255, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 494, freezeTaps: 9, freezeNodes: 19),  // S3 cores=2
-  CorpusEntry(713, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 489, freezeTaps: 9, freezeNodes: 20),  // S6 cores=2
-  CorpusEntry(8, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 508, freezeTaps: 14, freezeNodes: 14),  // S1 cores=0
-  CorpusEntry(1269, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 495, freezeTaps: 9, freezeNodes: 22),  // S3 cores=2
-  CorpusEntry(742, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 498, freezeTaps: 10, freezeNodes: 19),  // S6 cores=2
-  CorpusEntry(13, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 555, freezeTaps: 18, freezeNodes: 18),  // S1 cores=0
-  CorpusEntry(1272, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 500, freezeTaps: 10, freezeNodes: 22),  // S3 cores=2
-  CorpusEntry(784, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 490, freezeTaps: 9, freezeNodes: 22),  // S7 cores=2
-  CorpusEntry(16, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 556, freezeTaps: 18, freezeNodes: 18),  // S1 cores=0
-  CorpusEntry(1411, DifficultyMode.medium, CorpusView.mediumSeverity, quintile: 5, severityRank: 481, freezeTaps: 8, freezeNodes: 17),  // S4 cores=2
+  CorpusEntry(130, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 1,
+      freezeTaps: 2,
+      freezeNodes: 14), // S2 cores=1
+  CorpusEntry(261, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 93,
+      freezeTaps: 4,
+      freezeNodes: 14), // S3 cores=2
+  CorpusEntry(507, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 116,
+      freezeTaps: 4,
+      freezeNodes: 15), // S5 cores=2
+  CorpusEntry(132, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 2,
+      freezeTaps: 2,
+      freezeNodes: 19), // S2 cores=1
+  CorpusEntry(263, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 63,
+      freezeTaps: 3,
+      freezeNodes: 21), // S3 cores=2
+  CorpusEntry(516, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 117,
+      freezeTaps: 4,
+      freezeNodes: 14), // S5 cores=2
+  CorpusEntry(133, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 3,
+      freezeTaps: 2,
+      freezeNodes: 15), // S2 cores=1
+  CorpusEntry(268, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 94,
+      freezeTaps: 4,
+      freezeNodes: 14), // S3 cores=2
+  CorpusEntry(526, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 118,
+      freezeTaps: 4,
+      freezeNodes: 18), // S5 cores=2
+  CorpusEntry(134, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 41,
+      freezeTaps: 3,
+      freezeNodes: 14), // S2 cores=1
+  CorpusEntry(303, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 95,
+      freezeTaps: 4,
+      freezeNodes: 21), // S3 cores=2
+  CorpusEntry(541, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 119,
+      freezeTaps: 4,
+      freezeNodes: 18), // S5 cores=2
+  CorpusEntry(135, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 88,
+      freezeTaps: 4,
+      freezeNodes: 21), // S2 cores=1
+  CorpusEntry(320, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 96,
+      freezeTaps: 4,
+      freezeNodes: 16), // S3 cores=2
+  CorpusEntry(548, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 120,
+      freezeTaps: 4,
+      freezeNodes: 15), // S5 cores=2
+  CorpusEntry(138, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 89,
+      freezeTaps: 4,
+      freezeNodes: 15), // S2 cores=1
+  CorpusEntry(323, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 97,
+      freezeTaps: 4,
+      freezeNodes: 18), // S3 cores=2
+  CorpusEntry(667, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 65,
+      freezeTaps: 3,
+      freezeNodes: 13), // S6 cores=2
+  CorpusEntry(139, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 4,
+      freezeTaps: 2,
+      freezeNodes: 16), // S2 cores=1
+  CorpusEntry(326, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 1,
+      severityRank: 64,
+      freezeTaps: 3,
+      freezeNodes: 16), // S3 cores=2
+  CorpusEntry(154, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 218,
+      freezeTaps: 5,
+      freezeNodes: 21), // S2 cores=1
+  CorpusEntry(258, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 221,
+      freezeTaps: 5,
+      freezeNodes: 16), // S3 cores=2
+  CorpusEntry(550, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 121,
+      freezeTaps: 4,
+      freezeNodes: 15), // S5 cores=2
+  CorpusEntry(200, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 219,
+      freezeTaps: 5,
+      freezeNodes: 25), // S2 cores=1
+  CorpusEntry(269, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 222,
+      freezeTaps: 5,
+      freezeNodes: 14), // S3 cores=2
+  CorpusEntry(556, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 122,
+      freezeTaps: 4,
+      freezeNodes: 15), // S5 cores=2
+  CorpusEntry(219, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 220,
+      freezeTaps: 5,
+      freezeNodes: 18), // S2 cores=1
+  CorpusEntry(271, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 223,
+      freezeTaps: 5,
+      freezeNodes: 22), // S3 cores=2
+  CorpusEntry(562, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 123,
+      freezeTaps: 4,
+      freezeNodes: 16), // S5 cores=2
+  CorpusEntry(1142, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 178,
+      freezeTaps: 4,
+      freezeNodes: 22), // S2 cores=1
+  CorpusEntry(304, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 224,
+      freezeTaps: 5,
+      freezeNodes: 14), // S3 cores=2
+  CorpusEntry(572, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 124,
+      freezeTaps: 4,
+      freezeNodes: 13), // S5 cores=2
+  CorpusEntry(1149, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 179,
+      freezeTaps: 4,
+      freezeNodes: 22), // S2 cores=1
+  CorpusEntry(307, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 225,
+      freezeTaps: 5,
+      freezeNodes: 21), // S3 cores=2
+  CorpusEntry(580, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 125,
+      freezeTaps: 4,
+      freezeNodes: 15), // S5 cores=2
+  CorpusEntry(1151, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 180,
+      freezeTaps: 4,
+      freezeNodes: 16), // S2 cores=1
+  CorpusEntry(311, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 226,
+      freezeTaps: 5,
+      freezeNodes: 13), // S3 cores=2
+  CorpusEntry(587, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 126,
+      freezeTaps: 4,
+      freezeNodes: 17), // S5 cores=2
+  CorpusEntry(1181, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 181,
+      freezeTaps: 4,
+      freezeNodes: 15), // S2 cores=1
+  CorpusEntry(313, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 2,
+      severityRank: 227,
+      freezeTaps: 5,
+      freezeNodes: 20), // S3 cores=2
+  CorpusEntry(230, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 323,
+      freezeTaps: 6,
+      freezeNodes: 14), // S2 cores=1
+  CorpusEntry(266, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 324,
+      freezeTaps: 6,
+      freezeNodes: 20), // S3 cores=2
+  CorpusEntry(501, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 245,
+      freezeTaps: 5,
+      freezeNodes: 22), // S5 cores=2
+  CorpusEntry(1146, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 301,
+      freezeTaps: 5,
+      freezeNodes: 21), // S2 cores=1
+  CorpusEntry(272, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 325,
+      freezeTaps: 6,
+      freezeNodes: 21), // S3 cores=2
+  CorpusEntry(503, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 341,
+      freezeTaps: 6,
+      freezeNodes: 14), // S5 cores=2
+  CorpusEntry(1199, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 302,
+      freezeTaps: 5,
+      freezeNodes: 18), // S2 cores=1
+  CorpusEntry(310, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 326,
+      freezeTaps: 6,
+      freezeNodes: 20), // S3 cores=2
+  CorpusEntry(504, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 342,
+      freezeTaps: 6,
+      freezeNodes: 21), // S5 cores=2
+  CorpusEntry(1229, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 303,
+      freezeTaps: 5,
+      freezeNodes: 21), // S2 cores=1
+  CorpusEntry(322, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 327,
+      freezeTaps: 6,
+      freezeNodes: 22), // S3 cores=2
+  CorpusEntry(508, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 343,
+      freezeTaps: 6,
+      freezeNodes: 17), // S5 cores=2
+  CorpusEntry(324, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 328,
+      freezeTaps: 6,
+      freezeNodes: 15), // S3 cores=2
+  CorpusEntry(514, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 246,
+      freezeTaps: 5,
+      freezeNodes: 15), // S5 cores=2
+  CorpusEntry(329, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 329,
+      freezeTaps: 6,
+      freezeNodes: 14), // S3 cores=2
+  CorpusEntry(515, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 344,
+      freezeTaps: 6,
+      freezeNodes: 21), // S5 cores=2
+  CorpusEntry(356, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 330,
+      freezeTaps: 6,
+      freezeNodes: 22), // S3 cores=2
+  CorpusEntry(521, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 345,
+      freezeTaps: 6,
+      freezeNodes: 22), // S5 cores=2
+  CorpusEntry(378, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 331,
+      freezeTaps: 6,
+      freezeNodes: 19), // S4 cores=2
+  CorpusEntry(522, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 3,
+      severityRank: 346,
+      freezeTaps: 6,
+      freezeNodes: 18), // S5 cores=2
+  CorpusEntry(1178, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 387,
+      freezeTaps: 6,
+      freezeNodes: 17), // S2 cores=1
+  CorpusEntry(256, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 458,
+      freezeTaps: 8,
+      freezeNodes: 21), // S3 cores=2
+  CorpusEntry(505, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 420,
+      freezeTaps: 7,
+      freezeNodes: 15), // S5 cores=2
+  CorpusEntry(265, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 459,
+      freezeTaps: 8,
+      freezeNodes: 22), // S3 cores=2
+  CorpusEntry(511, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 464,
+      freezeTaps: 8,
+      freezeNodes: 22), // S5 cores=2
+  CorpusEntry(283, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 406,
+      freezeTaps: 7,
+      freezeNodes: 14), // S3 cores=2
+  CorpusEntry(513, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 421,
+      freezeTaps: 7,
+      freezeNodes: 21), // S5 cores=2
+  CorpusEntry(284, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 407,
+      freezeTaps: 7,
+      freezeNodes: 14), // S3 cores=2
+  CorpusEntry(534, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 465,
+      freezeTaps: 8,
+      freezeNodes: 18), // S5 cores=2
+  CorpusEntry(291, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 408,
+      freezeTaps: 7,
+      freezeNodes: 15), // S3 cores=2
+  CorpusEntry(544, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 466,
+      freezeTaps: 8,
+      freezeNodes: 14), // S5 cores=2
+  CorpusEntry(380, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 409,
+      freezeTaps: 7,
+      freezeNodes: 20), // S4 cores=2
+  CorpusEntry(546, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 422,
+      freezeTaps: 7,
+      freezeNodes: 21), // S5 cores=2
+  CorpusEntry(386, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 410,
+      freezeTaps: 7,
+      freezeNodes: 18), // S4 cores=2
+  CorpusEntry(549, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 467,
+      freezeTaps: 8,
+      freezeNodes: 20), // S5 cores=2
+  CorpusEntry(391, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 460,
+      freezeTaps: 8,
+      freezeNodes: 15), // S4 cores=2
+  CorpusEntry(598, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 423,
+      freezeTaps: 7,
+      freezeNodes: 20), // S5 cores=2
+  CorpusEntry(399, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 461,
+      freezeTaps: 8,
+      freezeNodes: 20), // S4 cores=2
+  CorpusEntry(605, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 424,
+      freezeTaps: 7,
+      freezeNodes: 16), // S5 cores=2
+  CorpusEntry(403, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 4,
+      severityRank: 462,
+      freezeTaps: 8,
+      freezeNodes: 21), // S4 cores=2
+  CorpusEntry(1, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 504,
+      freezeTaps: 12,
+      freezeNodes: 12), // S1 cores=0
+  CorpusEntry(306, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 484,
+      freezeTaps: 9,
+      freezeNodes: 21), // S3 cores=2
+  CorpusEntry(616, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 486,
+      freezeTaps: 9,
+      freezeNodes: 17), // S5 cores=2
+  CorpusEntry(2, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 496,
+      freezeTaps: 10,
+      freezeNodes: 10), // S1 cores=0
+  CorpusEntry(340, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 497,
+      freezeTaps: 10,
+      freezeNodes: 17), // S3 cores=2
+  CorpusEntry(660, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 487,
+      freezeTaps: 9,
+      freezeNodes: 22), // S6 cores=2
+  CorpusEntry(4, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 506,
+      freezeTaps: 13,
+      freezeNodes: 13), // S1 cores=0
+  CorpusEntry(443, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 485,
+      freezeTaps: 9,
+      freezeNodes: 18), // S4 cores=2
+  CorpusEntry(677, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 488,
+      freezeTaps: 9,
+      freezeNodes: 22), // S6 cores=2
+  CorpusEntry(7, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 586,
+      freezeTaps: 22,
+      freezeNodes: 22), // S1 cores=0
+  CorpusEntry(1255, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 494,
+      freezeTaps: 9,
+      freezeNodes: 19), // S3 cores=2
+  CorpusEntry(713, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 489,
+      freezeTaps: 9,
+      freezeNodes: 20), // S6 cores=2
+  CorpusEntry(8, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 508,
+      freezeTaps: 14,
+      freezeNodes: 14), // S1 cores=0
+  CorpusEntry(1269, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 495,
+      freezeTaps: 9,
+      freezeNodes: 22), // S3 cores=2
+  CorpusEntry(742, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 498,
+      freezeTaps: 10,
+      freezeNodes: 19), // S6 cores=2
+  CorpusEntry(13, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 555,
+      freezeTaps: 18,
+      freezeNodes: 18), // S1 cores=0
+  CorpusEntry(1272, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 500,
+      freezeTaps: 10,
+      freezeNodes: 22), // S3 cores=2
+  CorpusEntry(784, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 490,
+      freezeTaps: 9,
+      freezeNodes: 22), // S7 cores=2
+  CorpusEntry(16, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 556,
+      freezeTaps: 18,
+      freezeNodes: 18), // S1 cores=0
+  CorpusEntry(1411, DifficultyMode.medium, CorpusView.mediumSeverity,
+      quintile: 5,
+      severityRank: 481,
+      freezeTaps: 8,
+      freezeNodes: 17), // S4 cores=2
 
   // ── medium representative — uniform over L1-1500, unfiltered ──────
   CorpusEntry(35, DifficultyMode.medium, CorpusView.mediumRepresentative),
@@ -604,8 +1006,10 @@ const List<CorpusEntry> kAdversarialCorpus = [
 ];
 
 /// The frozen boards of one view, in declaration order.
-List<CorpusEntry> corpusView(CorpusView view) =>
-    [for (final e in kAdversarialCorpus) if (e.view == view) e];
+List<CorpusEntry> corpusView(CorpusView view) => [
+      for (final e in kAdversarialCorpus)
+        if (e.view == view) e
+    ];
 
 /// The severity boards of one quintile.
 List<CorpusEntry> corpusQuintile(int quintile) => [

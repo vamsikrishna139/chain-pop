@@ -6,7 +6,7 @@
 // emitted board used, via a recording SilhouetteSessionTracker.
 // ignore_for_file: avoid_print
 
-@Tags(['report'])
+@Tags(['corpus', 'report'])
 library;
 
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
