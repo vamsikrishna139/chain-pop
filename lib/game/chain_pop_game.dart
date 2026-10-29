@@ -340,6 +340,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
           }
         }
       }
+      // The preview is a child of [board], so it leaves with it — but the
+      // reference would survive and pin [rayPreviewActive] true (freezing
+      // ambient motion for the rest of the level), because the NodeComponent
+      // that would deliver the hiding onTapUp is being rebuilt too.
+      hideRayPreview();
       board.removeFromParent();
       _boardLaidOut = false;
     }
@@ -800,7 +805,9 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       _spawnExtractionVisuals(node);
       playSfx(
         GameSfx.pop,
-        playbackRate: (1.0 + _finaleIndex * 0.05).clamp(1.0, 1.6),
+        // Ceiling matches GameAudio.play's clamp; anything above it is
+        // silently flattened there.
+        playbackRate: (1.0 + _finaleIndex * 0.05).clamp(1.0, 1.5),
       );
       for (final comp in board.children.whereType<NodeComponent>()) {
         if (comp.data.id == id) {

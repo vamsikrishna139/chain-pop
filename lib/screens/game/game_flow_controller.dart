@@ -174,7 +174,7 @@ final class GameFlowController {
         isWin: true,
         isDailyChallenge: false,
         isTutorial: false,
-        winStreak: SessionCampaignStreak.wins,
+        winStreak: _host.streak.wins,
         isInterstitialDue: _interstitialLikelyDue(),
       );
     }
@@ -290,7 +290,10 @@ final class GameFlowController {
     if (_host.isTutorial || _host.isDailyChallenge) return false;
     // Premium users never see interstitials.
     if (SubscriptionLocator.isPremiumNow) return false;
-    return SessionCampaignStreak.wins >=
+    // Read through the injected tracker — the win is recorded through it
+    // (see `_host.streak.onCampaignWin()`), so an injected tracker must also
+    // be the one this prediction sees.
+    return _host.streak.wins >=
         SessionCampaignStreak.interstitialStreakThreshold(_host.difficulty);
   }
 

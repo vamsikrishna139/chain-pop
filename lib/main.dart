@@ -9,6 +9,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'bootstrap/firebase_bootstrap.dart';
 import 'dev/autoplay_harness.dart';
+import 'game/levels/level_manager.dart';
 import 'navigation/app_route_observer.dart';
 import 'screens/main_menu_screen.dart';
 import 'screens/splash_screen.dart';
@@ -61,6 +62,29 @@ Future<void> bootstrapChainPop() async {
 
   await Hive.initFlutter();
   await StorageService.init();
+
+  // Campaign novelty survives a restart (W2.4): seed the ledger before the
+  // first level is generated, then persist it after each one.
+  LevelManager.restoreDiversityLedger(StorageService.diversityLedgerBits);
+  LevelManager.onDiversityLedgerChanged =
+      (bits) => unawaited(StorageService.saveDiversityLedgerBits(bits));
+  // A fallback board is playable but means generation failed — make it loud
+  // in Crashlytics and countable in analytics instead of silent (W2.5).
+  LevelManager.onGenerationFallback = (kind, id, reason) {
+    recordNonFatal(
+      StateError('Level generation fell back ($kind $id): $reason'),
+      StackTrace.current,
+    );
+    unawaited(AnalyticsLocator.instance.logEvent(
+      'level_generation_fallback',
+      parameters: {
+        'kind': kind,
+        'id': id,
+        // Analytics caps parameter values at 100 characters.
+        'reason': reason.length > 100 ? reason.substring(0, 100) : reason,
+      },
+    ));
+  };
 
   // After storage: the tracker reads Hive on construction of its first
   // snapshot. Installs the Play Games sink on Android and kicks off sign-in

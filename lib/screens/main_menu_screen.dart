@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
+import '../game/levels/level_manager.dart';
 import '../models/difficulty.dart';
 import '../navigation/app_route_observer.dart';
 import '../services/ads/ad_service_factory.dart';
@@ -153,6 +154,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     );
     if (confirm == true) {
       await StorageLocator.instance.clearProgress();
+      // The box wipe drops the persisted diversity history; drop the live
+      // copy too, or this session's boards would be re-saved on the next level.
+      LevelManager.generator.diversityLedger.clear();
       if (!mounted) return;
       setState(() => _selected = StorageLocator.instance.selectedDifficulty);
     }

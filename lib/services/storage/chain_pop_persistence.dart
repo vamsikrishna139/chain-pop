@@ -120,6 +120,14 @@ abstract interface class ChainPopPersistence {
 
   Future<void> setReviewHasEverTappedRate(bool value);
 
+  // ── Level generation ──────────────────────────────────────────────────────
+
+  /// Campaign [DiversityLedger] history (`DiversityLedger.serialize`), oldest
+  /// first, so novelty survives an app restart. Empty when never saved.
+  List<int> get diversityLedgerBits;
+
+  Future<void> saveDiversityLedgerBits(List<int> bits);
+
   // ── Achievements (schema v3) ──────────────────────────────────────────────
 
   /// Reads one aggregate counter. Missing keys read as 0.

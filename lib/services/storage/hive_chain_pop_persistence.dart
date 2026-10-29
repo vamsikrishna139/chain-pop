@@ -53,6 +53,8 @@ final class HiveChainPopPersistence implements ChainPopStorage {
 
   static const String _hintRewardCoachSeenKey = 'hint_reward_coach_seen';
 
+  static const String _diversityLedgerKey = 'diversity_ledger_bits';
+
   static const String _achievementUnlockedKey = 'ach_unlocked_ids';
   static const String _achievementCursorKey = 'ach_sync_cursor';
 
@@ -477,6 +479,22 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   @override
   Future<void> setReviewHasEverTappedRate(bool value) async {
     await _box.put(_reviewHasEverTappedRateKey, value);
+  }
+
+  @override
+  List<int> get diversityLedgerBits {
+    final raw = _box.get(_diversityLedgerKey);
+    if (raw is! List) return const [];
+    // Fingerprints are 26-bit packed values; anything else is corruption.
+    return [
+      for (final e in raw)
+        if (e is int && e >= 0 && e < (1 << 26)) e,
+    ];
+  }
+
+  @override
+  Future<void> saveDiversityLedgerBits(List<int> bits) async {
+    await _box.put(_diversityLedgerKey, List<int>.from(bits));
   }
 
   // ── Achievements ──────────────────────────────────────────────────────────

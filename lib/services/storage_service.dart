@@ -158,6 +158,12 @@ class StorageService {
   static bool get reviewHasEverTappedRate =>
       StorageLocator.instance.reviewHasEverTappedRate;
 
+  static List<int> get diversityLedgerBits =>
+      StorageLocator.instance.diversityLedgerBits;
+
+  static Future<void> saveDiversityLedgerBits(List<int> bits) =>
+      StorageLocator.instance.saveDiversityLedgerBits(bits);
+
   static Future<void> setReviewHasEverTappedRate(bool value) =>
       StorageLocator.instance.setReviewHasEverTappedRate(value);
 

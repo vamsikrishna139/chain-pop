@@ -550,7 +550,10 @@ class GameScreenState extends State<GameScreen>
           recordNonFatal(e, st);
           if (!mounted) return;
           _installResolvedLevel(
-            LevelManager.emergencyFallbackLevel(widget.level),
+            LevelManager.emergencyFallbackLevel(
+              widget.level,
+              mode: widget.difficulty,
+            ),
           );
         }
       });
@@ -701,7 +704,7 @@ class GameScreenState extends State<GameScreen>
   }
 
   void _handleFoul() {
-    if (_hasWon) return;
+    if (!mounted || _hasWon) return;
     setState(() {
       _livesRemaining--;
     });
@@ -801,6 +804,9 @@ class GameScreenState extends State<GameScreen>
     _engine.playSfx(GameSfx.uiTap);
     if (!mounted) return;
 
+    // Deliberately a *soft* pause: the clock and engine stop, but `_isPaused`
+    // stays false — the sheet is its own overlay (no pause panel under it), and
+    // the ambient bed keeps playing so sound toggles are audible as you flip them.
     _stopwatch.stop();
     _timers.countdownTimer?.cancel();
     _timers.ghostHintTimer?.cancel();

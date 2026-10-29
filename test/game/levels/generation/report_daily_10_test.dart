@@ -22,7 +22,7 @@ const int kDailyDays = 30;
 
 /// P3 gate — the part of Daily latency the time budget actually controls.
 ///
-/// `LevelManager.dailyGenerationBudget` bounds the *outer* generation loop:
+/// `LevelManager.dailyWorkBudget` bounds the *outer* generation loop:
 /// attempts, renegotiations and K-loop iterations. It cannot preempt a single
 /// retrograde construction, because the only clock is a stopwatch outside the
 /// constructor. On the rare date key whose construction is itself slow
@@ -123,7 +123,7 @@ void main() {
     expect(pct(0.5), lessThanOrEqualTo(kDailyMedianCeilingMs),
         reason: 'Daily median generation regressed. Check that '
             'LevelManager.getDailyChallenge still passes '
-            'dailyGenerationBudget.');
+            'dailyWorkBudget.');
     expect(pct(0.75), lessThanOrEqualTo(kDailyP75CeilingMs),
         reason: 'Daily p75 generation regressed — the time budget is no '
             'longer bounding the outer generation loop.');

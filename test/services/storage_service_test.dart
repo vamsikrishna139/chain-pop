@@ -48,6 +48,20 @@ void main() {
       });
     });
 
+    test('diversity ledger bits round-trip and drop corrupt entries', () async {
+      expect(StorageService.diversityLedgerBits, isEmpty);
+      await StorageService.saveDiversityLedgerBits([7, 0x2a5f3, 12]);
+      expect(StorageService.diversityLedgerBits, equals([7, 0x2a5f3, 12]));
+
+      final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
+      await box.put('diversity_ledger_bits', [5, -1, 'x', 1 << 26, 9]);
+      expect(StorageService.diversityLedgerBits, equals([5, 9]));
+
+      await StorageService.clearProgress();
+      expect(StorageService.diversityLedgerBits, isEmpty,
+          reason: 'Reset my data must forget the diversity history too');
+    });
+
     test('selectedDifficulty defaults to easy', () {
       expect(StorageService.selectedDifficulty, DifficultyMode.easy);
     });
