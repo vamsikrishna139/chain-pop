@@ -87,6 +87,39 @@ abstract interface class ChainPopPersistence {
 
   Future<void> seedLifetimeEngagementGateForTests();
 
+  // ── Session tracking (schema v4) ──────────────────────────────────────────
+
+  int get sessionCount;
+
+  Future<void> incrementSessionCount();
+
+  // ── Review Prompt (schema v4) ─────────────────────────────────────────────
+
+  /// Permanent suppression flag set when user taps "Never / Don't Ask Again".
+  bool get reviewPromptPermanentlyDisabled;
+
+  Future<void> setReviewPromptPermanentlyDisabled(bool value);
+
+  /// Epoch ms timestamp when the review prompt was last displayed.
+  int get reviewLastPromptEpochMs;
+
+  Future<void> setReviewLastPromptEpochMs(int epochMs);
+
+  /// Value of `lifetimeCampaignClears` at the time of the last prompt.
+  int get reviewLastPromptLevelClears;
+
+  Future<void> setReviewLastPromptLevelClears(int clears);
+
+  /// Rolling list of epoch ms for each prompt presented in the last 365 days.
+  List<int> get reviewPromptHistoryEpochMs;
+
+  Future<void> recordReviewPromptPresentation(int epochMs);
+
+  /// Whether the user has ever tapped "Rate Chain Pop" (initiating native flow).
+  bool get reviewHasEverTappedRate;
+
+  Future<void> setReviewHasEverTappedRate(bool value);
+
   // ── Achievements (schema v3) ──────────────────────────────────────────────
 
   /// Reads one aggregate counter. Missing keys read as 0.

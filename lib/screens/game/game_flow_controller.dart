@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:in_app_review/in_app_review.dart';
 
 import '../../game/daily_challenge.dart';
 import '../../game/difficulty_exports.dart';
@@ -15,8 +14,10 @@ import '../../services/ads/campaign_interstitial_frustration_gate.dart';
 import '../../services/ads/campaign_between_levels_ads.dart';
 import '../../services/analytics/analytics_locator.dart';
 import '../../services/game_sfx.dart';
+import '../../services/review/review_coordinator.dart';
 import '../../services/session_campaign_streak.dart';
 import '../game_screen.dart';
+import '../widgets/review_soft_prompt_sheet.dart';
 import 'game_screen_constants.dart';
 import 'game_screen_controller_host.dart';
 
@@ -159,19 +160,25 @@ final class GameFlowController {
       // After the stars and the unlock land, so the tracker's snapshot of
       // frontier and star total already includes this win.
       unawaited(_recordCampaignAchievementEvent(result, earned));
-      
-      if (_host.level == 10) {
-        try {
-          if (await InAppReview.instance.isAvailable()) {
-            unawaited(InAppReview.instance.requestReview());
-          }
-        } catch (_) {}
-      }
     }
 
     if (!_host.mounted) return;
 
-    final quick = _shouldQuickWin();
+    var shouldShowReview = false;
+    final reviewCoordinator = ReviewCoordinator();
+    if (!_host.isDailyChallenge && !_host.isTutorial) {
+      shouldShowReview = reviewCoordinator.shouldShowPrompt(
+        level: _host.level,
+        stars: earned,
+        isWin: true,
+        isDailyChallenge: false,
+        isTutorial: false,
+        winStreak: SessionCampaignStreak.wins,
+        isInterstitialDue: _interstitialLikelyDue(),
+      );
+    }
+
+    final quick = shouldShowReview ? false : _shouldQuickWin();
     _host.markDirty(() {
       _host.hasWon = true;
       _host.earnedStars = earned;
@@ -179,6 +186,19 @@ final class GameFlowController {
       _host.autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
     });
     if (goalCompleted) _host.showGoalCompleteToast();
+
+    if (shouldShowReview) {
+      cancelWinAdvanceTimers();
+      Timer(const Duration(milliseconds: 600), () {
+        if (!_host.mounted || !_host.hasWon) return;
+        unawaited(ReviewSoftPromptSheet.show(
+          context: _host.context,
+          level: _host.level,
+          coordinator: reviewCoordinator,
+        ));
+      });
+      return;
+    }
 
     if (_host.isDailyChallenge) {
       return;

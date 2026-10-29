@@ -166,6 +166,12 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     AnalyticsLocator.instance.logSessionStart();
+    unawaited(StorageService.incrementSessionCount());
+    if (const bool.fromEnvironment('RESET_REVIEW_STATE', defaultValue: false)) {
+      unawaited(StorageService.setReviewPromptPermanentlyDisabled(false));
+      unawaited(StorageService.setReviewLastPromptEpochMs(0));
+      unawaited(StorageService.setReviewLastPromptLevelClears(0));
+    }
     unawaited(NotificationService.instance.noteActivity());
   }
 
@@ -181,6 +187,7 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       SubscriptionLocator.instance.refresh();
       AnalyticsLocator.instance.logSessionStart();
+      unawaited(StorageService.incrementSessionCount());
       // Pushes the "you have not played in a while" reminder back out. Cheap,
       // fire-and-forget, never blocks the frame.
       unawaited(NotificationService.instance.noteActivity());

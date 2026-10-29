@@ -22,7 +22,7 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   /// ~10 minutes; pairs with clears gate under OR semantics.
   static const int campaignInterstitialMinGameplaySeconds = 600;
 
-  static const int _schemaVersion = 3;
+  static const int _schemaVersion = 4;
 
   static const String _difficultyKey = 'selected_difficulty';
   static const String _unlockedPrefix = 'unlocked_';
@@ -34,6 +34,17 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   static const String _lifetimeCampaignClearsKey =
       'lifetime_campaign_level_clears';
   static const String _lifetimeGameplaySecondsKey = 'lifetime_gameplay_seconds';
+  static const String _sessionCountKey = 'app_session_count';
+  static const String _reviewPermanentlyDisabledKey =
+      'review_permanently_disabled';
+  static const String _reviewLastPromptEpochMsKey =
+      'review_last_prompt_epoch_ms';
+  static const String _reviewLastPromptLevelClearsKey =
+      'review_last_prompt_level_clears';
+  static const String _reviewPromptHistoryEpochMsKey =
+      'review_prompt_history_epoch_ms';
+  static const String _reviewHasEverTappedRateKey =
+      'review_has_ever_tapped_rate';
   static const String _settingsSoundKey = 'settings_sound';
   static const String _settingsHapticsKey = 'settings_haptics';
   static const String _settingsColorblindKey = 'settings_colorblind';
@@ -92,7 +103,33 @@ final class HiveChainPopPersistence implements ChainPopStorage {
       await _migrateToV3();
     }
 
+    if (stored < 4) {
+      await _migrateToV4();
+    }
+
     await _box.put(_schemaKey, _schemaVersion);
+  }
+
+  /// Ensures schema v4 keys exist.
+  Future<void> _migrateToV4() async {
+    if (!_box.containsKey(_sessionCountKey)) {
+      await _box.put(_sessionCountKey, 0);
+    }
+    if (!_box.containsKey(_reviewPermanentlyDisabledKey)) {
+      await _box.put(_reviewPermanentlyDisabledKey, false);
+    }
+    if (!_box.containsKey(_reviewLastPromptEpochMsKey)) {
+      await _box.put(_reviewLastPromptEpochMsKey, 0);
+    }
+    if (!_box.containsKey(_reviewLastPromptLevelClearsKey)) {
+      await _box.put(_reviewLastPromptLevelClearsKey, 0);
+    }
+    if (!_box.containsKey(_reviewPromptHistoryEpochMsKey)) {
+      await _box.put(_reviewPromptHistoryEpochMsKey, <int>[]);
+    }
+    if (!_box.containsKey(_reviewHasEverTappedRateKey)) {
+      await _box.put(_reviewHasEverTappedRateKey, false);
+    }
   }
 
   /// Generation-gap migrations — keep idempotent for reruns / corrupted markers.
@@ -351,6 +388,95 @@ final class HiveChainPopPersistence implements ChainPopStorage {
       max: 1 << 30,
     );
     await _box.put(_lifetimeGameplaySecondsKey, sum);
+  }
+
+  // ── Session tracking ──────────────────────────────────────────────────────
+
+  @override
+  int get sessionCount => coerceHiveInt(
+        _box.get(_sessionCountKey),
+        fallback: 0,
+        min: 0,
+        max: 1 << 28,
+      );
+
+  @override
+  Future<void> incrementSessionCount() async {
+    final next = sessionCount + 1;
+    await _box.put(_sessionCountKey, next);
+  }
+
+  // ── Review prompt state ───────────────────────────────────────────────────
+
+  @override
+  bool get reviewPromptPermanentlyDisabled => coerceHiveBool(
+        _box.get(_reviewPermanentlyDisabledKey),
+        fallback: false,
+      );
+
+  @override
+  Future<void> setReviewPromptPermanentlyDisabled(bool value) async {
+    await _box.put(_reviewPermanentlyDisabledKey, value);
+  }
+
+  @override
+  int get reviewLastPromptEpochMs => coerceHiveInt(
+        _box.get(_reviewLastPromptEpochMsKey),
+        fallback: 0,
+        min: 0,
+        max: 1 << 52,
+      );
+
+  @override
+  Future<void> setReviewLastPromptEpochMs(int epochMs) async {
+    await _box.put(_reviewLastPromptEpochMsKey, epochMs);
+  }
+
+  @override
+  int get reviewLastPromptLevelClears => coerceHiveInt(
+        _box.get(_reviewLastPromptLevelClearsKey),
+        fallback: 0,
+        min: 0,
+        max: 1 << 28,
+      );
+
+  @override
+  Future<void> setReviewLastPromptLevelClears(int clears) async {
+    await _box.put(_reviewLastPromptLevelClearsKey, clears);
+  }
+
+  @override
+  List<int> get reviewPromptHistoryEpochMs {
+    final raw = _box.get(_reviewPromptHistoryEpochMsKey);
+    if (raw is List) {
+      return raw
+          .map((e) => coerceHiveInt(e, fallback: 0, min: 0, max: 1 << 52))
+          .where((e) => e > 0)
+          .toList();
+    }
+    return const [];
+  }
+
+  @override
+  Future<void> recordReviewPromptPresentation(int epochMs) async {
+    final now = epochMs > 0 ? epochMs : DateTime.now().millisecondsSinceEpoch;
+    final oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
+    final updated = reviewPromptHistoryEpochMs
+        .where((t) => t >= oneYearAgo)
+        .toList()
+      ..add(now);
+    await _box.put(_reviewPromptHistoryEpochMsKey, updated);
+  }
+
+  @override
+  bool get reviewHasEverTappedRate => coerceHiveBool(
+        _box.get(_reviewHasEverTappedRateKey),
+        fallback: false,
+      );
+
+  @override
+  Future<void> setReviewHasEverTappedRate(bool value) async {
+    await _box.put(_reviewHasEverTappedRateKey, value);
   }
 
   // ── Achievements ──────────────────────────────────────────────────────────

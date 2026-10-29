@@ -43,7 +43,7 @@ void main() {
       await storage.reconcileSchemaMarker();
 
       expect(storage.achievementCounter(AchievementCounter.totalStars), 9);
-      expect(box.get('_chain_pop_storage_schema'), 3);
+      expect(box.get('_chain_pop_storage_schema'), 4);
     });
 
     test('seeds Daily completions from existing day records', () async {
@@ -99,9 +99,9 @@ void main() {
       );
     });
 
-    test('a fresh install lands on v3 with zeroed counters', () async {
+    test('a fresh install lands on current schema version with zeroed counters', () async {
       final storage = await openFresh();
-      expect(storage.schemaVersionRead, 3);
+      expect(storage.schemaVersionRead, 4);
       for (final c in AchievementCounter.values) {
         expect(storage.achievementCounter(c), 0, reason: c.name);
       }

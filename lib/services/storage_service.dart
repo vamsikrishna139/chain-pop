@@ -122,6 +122,45 @@ class StorageService {
   static Future<void> seedLifetimeEngagementGateForTests() =>
       StorageLocator.instance.seedLifetimeEngagementGateForTests();
 
+  // ── Session tracking (schema v4) ──────────────────────────────────────────
+
+  static int get sessionCount => StorageLocator.instance.sessionCount;
+
+  static Future<void> incrementSessionCount() =>
+      StorageLocator.instance.incrementSessionCount();
+
+  // ── Review Prompt (schema v4) ─────────────────────────────────────────────
+
+  static bool get reviewPromptPermanentlyDisabled =>
+      StorageLocator.instance.reviewPromptPermanentlyDisabled;
+
+  static Future<void> setReviewPromptPermanentlyDisabled(bool value) =>
+      StorageLocator.instance.setReviewPromptPermanentlyDisabled(value);
+
+  static int get reviewLastPromptEpochMs =>
+      StorageLocator.instance.reviewLastPromptEpochMs;
+
+  static Future<void> setReviewLastPromptEpochMs(int epochMs) =>
+      StorageLocator.instance.setReviewLastPromptEpochMs(epochMs);
+
+  static int get reviewLastPromptLevelClears =>
+      StorageLocator.instance.reviewLastPromptLevelClears;
+
+  static Future<void> setReviewLastPromptLevelClears(int clears) =>
+      StorageLocator.instance.setReviewLastPromptLevelClears(clears);
+
+  static List<int> get reviewPromptHistoryEpochMs =>
+      StorageLocator.instance.reviewPromptHistoryEpochMs;
+
+  static Future<void> recordReviewPromptPresentation(int epochMs) =>
+      StorageLocator.instance.recordReviewPromptPresentation(epochMs);
+
+  static bool get reviewHasEverTappedRate =>
+      StorageLocator.instance.reviewHasEverTappedRate;
+
+  static Future<void> setReviewHasEverTappedRate(bool value) =>
+      StorageLocator.instance.setReviewHasEverTappedRate(value);
+
   @Deprecated('Use highestUnlocked(DifficultyMode) instead')
   static int get highestUnlockedLevel =>
       StorageLocator.instance.highestUnlocked(
