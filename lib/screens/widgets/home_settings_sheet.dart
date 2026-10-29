@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:in_app_review/in_app_review.dart';
 
+import '../../services/analytics/analytics_locator.dart';
 import 'privacy_ads_settings_section.dart';
 import 'purchases_settings_section.dart';
 
@@ -82,6 +86,10 @@ Future<void> showHomeSettingsSheet({
                   PurchasesSettingsSection(accent: accent),
                   const SizedBox(height: 16),
                   PrivacyAdsSettingsSection(accent: accent),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.white.withValues(alpha: 0.1)),
+                  const SizedBox(height: 8),
+                  _RateAppTile(accent: accent),
                   if (onResetGameData != null) ...[
                     const SizedBox(height: 16),
                     Divider(color: Colors.white.withValues(alpha: 0.1)),
@@ -104,6 +112,46 @@ Future<void> showHomeSettingsSheet({
       );
     },
   );
+}
+
+/// Direct store rating action for the settings sheet.
+///
+/// Uses `openStoreListing()` to deep-link directly to App Store / Google Play,
+/// fully compliant with Apple and Google prohibitions against wiring in-app
+/// modal review prompts to static buttons.
+class _RateAppTile extends StatelessWidget {
+  final Color accent;
+
+  const _RateAppTile({required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: () {
+        Navigator.pop(context);
+        unawaited(AnalyticsLocator.instance.logReviewManualSettingsTapped());
+        try {
+          unawaited(InAppReview.instance.openStoreListing());
+        } catch (_) {}
+      },
+      style: TextButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      ),
+      icon: Icon(Icons.star_rate_rounded, color: accent, size: 20),
+      label: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'Rate Chain Pop',
+          style: GoogleFonts.rajdhani(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Destructive "Reset Game Data" row for the settings sheet.

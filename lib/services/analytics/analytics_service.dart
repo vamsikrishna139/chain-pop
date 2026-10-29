@@ -39,4 +39,11 @@ abstract class AnalyticsService {
       {required String dateStr, required Map<String, Object> params});
 
   Future<void> logAchievementUnlock({required String achievementId});
+
+  // Review prompt events
+  Future<void> logReviewPromptShown(
+      {required int level, required int promptCount});
+  Future<void> logReviewPromptAction(
+      {required String action, required int level});
+  Future<void> logReviewManualSettingsTapped();
 }

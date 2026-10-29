@@ -131,4 +131,24 @@ class FirebaseAnalyticsService implements AnalyticsService {
   @override
   Future<void> logAchievementUnlock({required String achievementId}) =>
       _analytics.logUnlockAchievement(id: achievementId);
+
+  @override
+  Future<void> logReviewPromptShown(
+          {required int level, required int promptCount}) =>
+      logEvent('review_soft_prompt_shown', parameters: {
+        'level': level,
+        'prompt_seq_number': promptCount,
+      });
+
+  @override
+  Future<void> logReviewPromptAction(
+          {required String action, required int level}) =>
+      logEvent('review_soft_prompt_action', parameters: {
+        'action': action,
+        'level': level,
+      });
+
+  @override
+  Future<void> logReviewManualSettingsTapped() =>
+      logEvent('review_manual_settings_tapped');
 }

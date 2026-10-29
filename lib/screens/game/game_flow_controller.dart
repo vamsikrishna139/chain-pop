@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:in_app_review/in_app_review.dart';
 
 import '../../game/daily_challenge.dart';
 import '../../game/difficulty_exports.dart';
@@ -15,8 +14,11 @@ import '../../services/ads/campaign_interstitial_frustration_gate.dart';
 import '../../services/ads/campaign_between_levels_ads.dart';
 import '../../services/analytics/analytics_locator.dart';
 import '../../services/game_sfx.dart';
+import '../../services/review/review_coordinator.dart';
 import '../../services/session_campaign_streak.dart';
+import '../../services/subscription/subscription_locator.dart';
 import '../game_screen.dart';
+import '../widgets/review_soft_prompt_sheet.dart';
 import 'game_screen_constants.dart';
 import 'game_screen_controller_host.dart';
 
@@ -159,19 +161,25 @@ final class GameFlowController {
       // After the stars and the unlock land, so the tracker's snapshot of
       // frontier and star total already includes this win.
       unawaited(_recordCampaignAchievementEvent(result, earned));
-      
-      if (_host.level == 10) {
-        try {
-          if (await InAppReview.instance.isAvailable()) {
-            unawaited(InAppReview.instance.requestReview());
-          }
-        } catch (_) {}
-      }
     }
 
     if (!_host.mounted) return;
 
-    final quick = _shouldQuickWin();
+    var shouldShowReview = false;
+    final reviewCoordinator = ReviewCoordinator();
+    if (!_host.isDailyChallenge && !_host.isTutorial) {
+      shouldShowReview = reviewCoordinator.shouldShowPrompt(
+        level: _host.level,
+        stars: earned,
+        isWin: true,
+        isDailyChallenge: false,
+        isTutorial: false,
+        winStreak: SessionCampaignStreak.wins,
+        isInterstitialDue: _interstitialLikelyDue(),
+      );
+    }
+
+    final quick = shouldShowReview ? false : _shouldQuickWin();
     _host.markDirty(() {
       _host.hasWon = true;
       _host.earnedStars = earned;
@@ -179,6 +187,22 @@ final class GameFlowController {
       _host.autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
     });
     if (goalCompleted) _host.showGoalCompleteToast();
+
+    if (shouldShowReview) {
+      cancelWinAdvanceTimers();
+      // The countdown waits under the sheet and starts once it closes, so the
+      // panel never sits on a frozen "Next level in 5s".
+      Timer(const Duration(milliseconds: 600), () async {
+        if (!_host.mounted || !_host.hasWon) return;
+        await ReviewSoftPromptSheet.show(
+          context: _host.context,
+          level: _host.level,
+          coordinator: reviewCoordinator,
+        );
+        _startWinAutoAdvance();
+      });
+      return;
+    }
 
     if (_host.isDailyChallenge) {
       return;
@@ -207,6 +231,13 @@ final class GameFlowController {
       return;
     }
 
+    _startWinAutoAdvance();
+  }
+
+  /// Full [WinPanel] countdown: a short beat, then one tick a second until
+  /// [goNextLevel].
+  void _startWinAutoAdvance() {
+    if (!_host.mounted || !_host.hasWon || _host.goingNext) return;
     _host.timers.autoAdvanceDelayTimer?.cancel();
     _host.timers.autoAdvanceTimer?.cancel();
     _host.timers.autoAdvanceDelayTimer = Timer(
@@ -217,6 +248,13 @@ final class GameFlowController {
             Timer.periodic(const Duration(seconds: 1), (t) {
           if (!_host.mounted || !_host.hasWon || _host.goingNext) {
             t.cancel();
+            return;
+          }
+          // Hold the countdown while the app is in the background (e.g. the
+          // Play Store opened from Rate), so the player comes back to their
+          // win panel instead of a level that already moved on.
+          final lifecycle = WidgetsBinding.instance.lifecycleState;
+          if (lifecycle != null && lifecycle != AppLifecycleState.resumed) {
             return;
           }
           _host.markDirty(() => _host.autoAdvanceSec--);
@@ -250,6 +288,8 @@ final class GameFlowController {
   /// so we keep the full panel even if engagement gates might later suppress it.
   bool _interstitialLikelyDue() {
     if (_host.isTutorial || _host.isDailyChallenge) return false;
+    // Premium users never see interstitials.
+    if (SubscriptionLocator.isPremiumNow) return false;
     return SessionCampaignStreak.wins >=
         SessionCampaignStreak.interstitialStreakThreshold(_host.difficulty);
   }

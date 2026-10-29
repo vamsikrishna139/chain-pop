@@ -16,6 +16,10 @@ class SubscriptionLocator {
 
   static SubscriptionService? get instanceOrNull => _instance;
 
+  /// Whether the user currently has the premium (no ads) entitlement.
+  /// False when no service is installed (tests, early startup).
+  static bool get isPremiumNow => _instance?.isPremium.value ?? false;
+
   static void install(SubscriptionService service) {
     _instance = service;
   }

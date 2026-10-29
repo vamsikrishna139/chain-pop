@@ -1007,30 +1007,36 @@ class GameScreenState extends State<GameScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  GameBottomToolbar(
-                    measureKey: _footerHudKey,
-                    accent: accent,
-                    showHintAdBadge: _hardOrDailyFeatures,
-                    axisGuidesVisible: _engine.axisGuidesVisible,
-                    canUndo: _engine.canUndo,
-                    onHint: () => unawaited(_adCoordinator.handleHint()),
-                    onToggleGuides: () {
-                      if (_isPaused) return;
-                      _engine.toggleAxisGuides();
-                      setState(() {});
-                    },
-                    onZoomIn: widget.isTutorial
-                        ? () {
-                            if (_isPaused) return;
-                            _engine.zoomInStep();
-                          }
-                        : null,
-                    onResetView: () {
-                      if (_isPaused) return;
-                      _engine.resetView();
-                    },
-                    onUndo: () => unawaited(_adCoordinator.handleUndo()),
-                    onRestart: _gameFlow.resetForRetry,
+                  ValueListenableBuilder<bool>(
+                    valueListenable:
+                        SubscriptionLocator.instanceOrNull?.isPremium ??
+                            _kNeverPremium,
+                    builder: (context, isPremium, _) => GameBottomToolbar(
+                      measureKey: _footerHudKey,
+                      accent: accent,
+                      // Premium users get hints without an ad, so no badge.
+                      showHintAdBadge: _hardOrDailyFeatures && !isPremium,
+                      axisGuidesVisible: _engine.axisGuidesVisible,
+                      canUndo: _engine.canUndo,
+                      onHint: () => unawaited(_adCoordinator.handleHint()),
+                      onToggleGuides: () {
+                        if (_isPaused) return;
+                        _engine.toggleAxisGuides();
+                        setState(() {});
+                      },
+                      onZoomIn: widget.isTutorial
+                          ? () {
+                              if (_isPaused) return;
+                              _engine.zoomInStep();
+                            }
+                          : null,
+                      onResetView: () {
+                        if (_isPaused) return;
+                        _engine.resetView();
+                      },
+                      onUndo: () => unawaited(_adCoordinator.handleUndo()),
+                      onRestart: _gameFlow.resetForRetry,
+                    ),
                   ),
                   ValueListenableBuilder<bool>(
                     valueListenable:

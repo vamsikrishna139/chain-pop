@@ -4,6 +4,17 @@ import '../../../game/levels/generation/difficulty_mode.dart';
 import '../../../models/difficulty.dart';
 import '../../../theme/app_colors.dart';
 
+IconData _continueIcon(bool isPremium) =>
+    isPremium ? Icons.play_arrow_rounded : Icons.play_circle_outline_rounded;
+
+String _continueLabel({
+  required bool isPremium,
+  required bool rewardedAdReady,
+}) {
+  if (isPremium) return 'CONTINUE';
+  return rewardedAdReady ? 'WATCH AD TO CONTINUE' : 'AD LOADING…';
+}
+
 class TimeUpDialog extends StatelessWidget {
   final DifficultyMode difficulty;
   final VoidCallback onRetry;
@@ -11,6 +22,9 @@ class TimeUpDialog extends StatelessWidget {
   final bool showRewardedContinue;
   final bool rewardedAdReady;
   final Future<void> Function()? onWatchAdContinue;
+
+  /// Premium users continue without an ad, so the button drops the ad copy.
+  final bool isPremium;
 
   const TimeUpDialog({
     super.key,
@@ -20,6 +34,7 @@ class TimeUpDialog extends StatelessWidget {
     this.showRewardedContinue = false,
     this.rewardedAdReady = false,
     this.onWatchAdContinue,
+    this.isPremium = false,
   });
 
   @override
@@ -82,11 +97,12 @@ class TimeUpDialog extends StatelessWidget {
               onPressed:
                   rewardedAdReady ? () async => onWatchAdContinue!() : null,
               icon: Icon(
-                Icons.play_circle_outline_rounded,
+                _continueIcon(isPremium),
                 color: rewardedAdReady ? accent : Colors.white24,
               ),
               label: Text(
-                rewardedAdReady ? 'WATCH AD TO CONTINUE' : 'AD LOADING…',
+                _continueLabel(
+                    isPremium: isPremium, rewardedAdReady: rewardedAdReady),
                 style: TextStyle(
                   color: rewardedAdReady ? accent : Colors.white24,
                   fontWeight: FontWeight.w700,
@@ -188,6 +204,9 @@ class GameOverDialog extends StatelessWidget {
   final bool rewardedAdReady;
   final Future<void> Function()? onWatchAdContinue;
 
+  /// Premium users continue without an ad, so the button drops the ad copy.
+  final bool isPremium;
+
   const GameOverDialog({
     super.key,
     required this.difficulty,
@@ -196,6 +215,7 @@ class GameOverDialog extends StatelessWidget {
     this.showRewardedContinue = false,
     this.rewardedAdReady = false,
     this.onWatchAdContinue,
+    this.isPremium = false,
   });
 
   @override
@@ -262,11 +282,12 @@ class GameOverDialog extends StatelessWidget {
               onPressed:
                   rewardedAdReady ? () async => onWatchAdContinue!() : null,
               icon: Icon(
-                Icons.play_circle_outline_rounded,
+                _continueIcon(isPremium),
                 color: rewardedAdReady ? accent : Colors.white24,
               ),
               label: Text(
-                rewardedAdReady ? 'WATCH AD TO CONTINUE' : 'AD LOADING…',
+                _continueLabel(
+                    isPremium: isPremium, rewardedAdReady: rewardedAdReady),
                 style: TextStyle(
                   color: rewardedAdReady ? accent : Colors.white24,
                   fontWeight: FontWeight.w700,

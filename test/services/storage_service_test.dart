@@ -24,7 +24,7 @@ void main() {
   group('StorageService', () {
     test('Hive schema marker is current after init/clearProgress', () {
       final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
-      expect(box.get('_chain_pop_storage_schema'), 3);
+      expect(box.get('_chain_pop_storage_schema'), 4);
     });
 
     group('Hive schema reconciliation', () {
@@ -36,15 +36,15 @@ void main() {
         await box.delete('_chain_pop_storage_schema');
         expect(StorageService.debugSchemaMarkerOrZero, 0);
         await StorageService.debugReconcileStorageSchemaMarker();
-        expect(box.get('_chain_pop_storage_schema'), 3);
-        expect(StorageService.debugSchemaMarkerOrZero, 3);
+        expect(box.get('_chain_pop_storage_schema'), 4);
+        expect(StorageService.debugSchemaMarkerOrZero, 4);
       });
 
       test('reconcile is idempotent when marker already current', () async {
         await StorageService.clearProgress();
         await StorageService.debugReconcileStorageSchemaMarker();
         final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
-        expect(box.get('_chain_pop_storage_schema'), 3);
+        expect(box.get('_chain_pop_storage_schema'), 4);
       });
     });
 
@@ -208,6 +208,42 @@ void main() {
         await StorageService.accumulateLifetimeGameplaySeconds(0);
         await StorageService.accumulateLifetimeGameplaySeconds(-10);
         expect(StorageService.lifetimeGameplaySeconds, 0);
+      });
+    });
+
+    group('Session and Review Prompt State (Schema v4)', () {
+      test('sessionCount increments properly', () async {
+        expect(StorageService.sessionCount, 0);
+        await StorageService.incrementSessionCount();
+        expect(StorageService.sessionCount, 1);
+        await StorageService.incrementSessionCount();
+        expect(StorageService.sessionCount, 2);
+      });
+
+      test('reviewPromptPermanentlyDisabled persists', () async {
+        expect(StorageService.reviewPromptPermanentlyDisabled, isFalse);
+        await StorageService.setReviewPromptPermanentlyDisabled(true);
+        expect(StorageService.reviewPromptPermanentlyDisabled, isTrue);
+      });
+
+      test('review cooldown state persists', () async {
+        expect(StorageService.reviewLastPromptEpochMs, 0);
+        expect(StorageService.reviewLastPromptLevelClears, 0);
+        expect(StorageService.reviewPromptHistoryEpochMs, isEmpty);
+
+        await StorageService.setReviewLastPromptEpochMs(123456789);
+        await StorageService.setReviewLastPromptLevelClears(15);
+        await StorageService.recordReviewPromptPresentation(123456789);
+
+        expect(StorageService.reviewLastPromptEpochMs, 123456789);
+        expect(StorageService.reviewLastPromptLevelClears, 15);
+        expect(StorageService.reviewPromptHistoryEpochMs, [123456789]);
+      });
+
+      test('reviewHasEverTappedRate persists', () async {
+        expect(StorageService.reviewHasEverTappedRate, isFalse);
+        await StorageService.setReviewHasEverTappedRate(true);
+        expect(StorageService.reviewHasEverTappedRate, isTrue);
       });
     });
   });

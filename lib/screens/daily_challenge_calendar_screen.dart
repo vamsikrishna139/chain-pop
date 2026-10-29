@@ -12,6 +12,7 @@ import '../services/ads/ads_locator.dart';
 import '../services/analytics/analytics_locator.dart';
 import '../services/daily_challenge_play_policy.dart';
 import '../services/storage/storage_locator.dart';
+import '../services/subscription/subscription_locator.dart';
 import '../theme/app_colors.dart';
 import 'game/widgets/game_dialogs.dart';
 import 'game_screen.dart';
@@ -55,7 +56,10 @@ class _DailyChallengeCalendarScreenState
     if (_loadingDay != null) return;
     final now = DateTime.now();
 
-    if (widget.policy.needsRewardedUnlockBeforePlay(day, now)) {
+    // Premium users unlock past days without an ad (the ad service grants the
+    // reward instantly), so the "watch an ad" confirmation is skipped.
+    if (widget.policy.needsRewardedUnlockBeforePlay(day, now) &&
+        !SubscriptionLocator.isPremiumNow) {
       final accent = DifficultyMode.medium.color;
       final dateLabel = DailyChallenge.compactDateLabelFromKey(
           DailyChallenge.dateKeyLocal(day));
@@ -164,7 +168,9 @@ class _DailyChallengeCalendarScreenState
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Each day is a critical incident. Today is free. Earlier days replay after a short ad unlock.',
+                        SubscriptionLocator.isPremiumNow
+                            ? 'Each day is a critical incident. Today is free. Earlier days replay ad-free.'
+                            : 'Each day is a critical incident. Today is free. Earlier days replay after a short ad unlock.',
                         style:
                             tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                       ),
@@ -220,8 +226,11 @@ class _DailyChallengeCalendarScreenState
                           );
                           final playable =
                               widget.policy.mayBePlayable(day, now);
-                          final needsVideoBadge =
-                              playable && !isFuture && !inFree && !adOk;
+                          final needsVideoBadge = playable &&
+                              !isFuture &&
+                              !inFree &&
+                              !adOk &&
+                              !SubscriptionLocator.isPremiumNow;
 
                           final enabled = playable && !isFuture;
 

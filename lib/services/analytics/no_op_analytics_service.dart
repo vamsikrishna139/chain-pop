@@ -58,4 +58,12 @@ class NoOpAnalyticsService implements AnalyticsService {
       {required String dateStr, required Map<String, Object> params}) async {}
   @override
   Future<void> logAchievementUnlock({required String achievementId}) async {}
+  @override
+  Future<void> logReviewPromptShown(
+      {required int level, required int promptCount}) async {}
+  @override
+  Future<void> logReviewPromptAction(
+      {required String action, required int level}) async {}
+  @override
+  Future<void> logReviewManualSettingsTapped() async {}
 }
