@@ -6,6 +6,7 @@ import '../../services/ads/ad_placements.dart';
 import '../../services/ads/campaign_interstitial_frustration_gate.dart';
 import '../../services/analytics/analytics_locator.dart';
 import '../../services/game_sfx.dart';
+import '../../services/subscription/subscription_locator.dart';
 import 'game_screen_controller_host.dart';
 import 'widgets/game_dialogs.dart';
 
@@ -31,6 +32,8 @@ final class GameAdCoordinator {
 
   void scheduleRewardedHintsEntryCoachIfNeeded() {
     if (!_host.hardOrDailyFeatures) return;
+    // Premium users get these hints without an ad, so the intro doesn't apply.
+    if (SubscriptionLocator.isPremiumNow) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!_host.mounted) return;
       if (_host.gameStorage.hintRewardAdCoachSeen) return;
@@ -79,6 +82,7 @@ final class GameAdCoordinator {
         showRewardedContinue: offer,
         rewardedAdReady:
             offer && _host.ads.isRewardedReady(AdPlacements.continueAfterLives),
+        isPremium: SubscriptionLocator.isPremiumNow,
         onWatchAdContinue: !offer
             ? null
             : () async {
@@ -128,6 +132,7 @@ final class GameAdCoordinator {
         showRewardedContinue: offer,
         rewardedAdReady:
             offer && _host.ads.isRewardedReady(AdPlacements.continueAfterLives),
+        isPremium: SubscriptionLocator.isPremiumNow,
         onWatchAdContinue: !offer
             ? null
             : () async {
@@ -174,7 +179,11 @@ final class GameAdCoordinator {
       if (cooldown != null) {
         final secs = cooldown.inSeconds.clamp(1, 9999);
         ScaffoldMessenger.maybeOf(_host.context)?.showSnackBar(
-          SnackBar(content: Text('Undo via ad unlocks in ${secs}s')),
+          SnackBar(
+            content: Text(SubscriptionLocator.isPremiumNow
+                ? 'Next undo unlocks in ${secs}s'
+                : 'Undo via ad unlocks in ${secs}s'),
+          ),
         );
         _host.engine.playSfx(GameSfx.uiTap);
         return;
@@ -248,7 +257,11 @@ final class GameAdCoordinator {
       if (cooldown != null) {
         final secs = cooldown.inSeconds.clamp(1, 9999);
         ScaffoldMessenger.maybeOf(_host.context)?.showSnackBar(
-          SnackBar(content: Text('Hint via ad unlocks in ${secs}s')),
+          SnackBar(
+            content: Text(SubscriptionLocator.isPremiumNow
+                ? 'Next hint unlocks in ${secs}s'
+                : 'Hint via ad unlocks in ${secs}s'),
+          ),
         );
         _host.engine.playSfx(GameSfx.uiTap);
         return;
