@@ -115,6 +115,50 @@ void main() {
             'exactly one relay and completed inside the state budget');
   }, tags: 'slow', timeout: const Timeout(Duration(minutes: 30)));
 
+  // W2.7 — the same property on boards that ship portals. The sweep above
+  // stops at L600; portals start at sector 6, so it never saw one. Run with
+  // the rollout switch on, over the range where portals are budgeted.
+  test('One-relay softlock property holds with portals live', () {
+    final was = PortalRollout.enabled;
+    PortalRollout.enabled = true;
+    addTearDown(() => PortalRollout.enabled = was);
+
+    var tested = 0, withPortals = 0;
+    final inconclusive = <String>[];
+    final softlocked = <String>[];
+    for (final mode in [DifficultyMode.medium, DifficultyMode.hard]) {
+      final generator = LevelGenerator.neutral();
+      for (var id = 601; id <= 1000; id++) {
+        final result = generator.generate(id, mode: mode);
+        if (!result.isSuccess) continue;
+        final level = result.value;
+        if (level.nodes.where((n) => n.kind == NodeKind.relay).length != 1) {
+          continue;
+        }
+        final verdict = _SoftlockSearch().run(level);
+        if (verdict == _Verdict.budgetExhausted) {
+          inconclusive.add('$id/${mode.name}');
+          continue;
+        }
+        tested++;
+        if (level.portalPairs.isNotEmpty) withPortals++;
+        if (verdict == _Verdict.softlocked) {
+          softlocked.add('$id/${mode.name} '
+              '(${level.portalPairs.length} portal pair(s))');
+        }
+      }
+    }
+    print('Portals live, one relay: $tested proved safe ($withPortals with '
+        'portals), ${inconclusive.length} inconclusive, '
+        '${softlocked.length} softlocked.');
+
+    expect(softlocked, isEmpty,
+        reason: 'portal boards reached a dead end: ${softlocked.join(', ')}');
+    expect(withPortals, greaterThan(10),
+        reason: 'the fixture proved nothing about portals: only $withPortals '
+            'one-relay boards carried a portal');
+  }, tags: 'slow', timeout: const Timeout(Duration(minutes: 30)));
+
   // UNREACHABLE-STATE HARDENING — deliberately skipped, not deleted.
   //
   // This test finds a genuine counterexample: on a bespoke 6x6 / 10-node
@@ -240,11 +284,9 @@ class _SoftlockSearch {
 
     for (final moveId in moves) {
       final moveNode = current.nodes.firstWhere((n) => n.id == moveId);
-      final next = LevelData(
-        levelId: current.levelId,
-        gridWidth: current.gridWidth,
-        gridHeight: current.gridHeight,
-        playCells: current.playCells,
+      // copyWith, not the constructor: the next state must keep the board's
+      // portals, or the search proves a portal-free board (audit P1-6d).
+      final next = current.copyWith(
         nodes: [
           for (final n in current.nodes)
             if (n.id != moveId)

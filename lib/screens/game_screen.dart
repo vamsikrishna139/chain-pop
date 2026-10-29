@@ -611,6 +611,7 @@ class GameScreenState extends State<GameScreen>
 
     _adCoordinator.preloadForLevelStartup();
     _adCoordinator.scheduleRewardedHintsEntryCoachIfNeeded();
+    _schedulePortalIntroIfNeeded();
 
     AnalyticsLocator.instance.logLevelStart(params: analyticsParams);
     if (widget.isTutorial && widget.tutorialIndex == 0) {
@@ -836,6 +837,49 @@ class GameScreenState extends State<GameScreen>
         _timerController.startEasyHudTimer();
       }
     }
+  }
+
+  /// W2.7: portals are not taught in the tutorial, so the first board that
+  /// carries one explains them once. The clock is held while it is open.
+  void _schedulePortalIntroIfNeeded() {
+    if (_levelData?.portalPairs.isEmpty ?? true) return;
+    if (_gameStorage.portalIntroSeen) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _gameStorage.portalIntroSeen) return;
+      _stopwatch.stop();
+      _timers.countdownTimer?.cancel();
+      _timers.ghostHintTimer?.cancel();
+      _timers.easyHudTimer?.cancel();
+      _engine.pauseEngine();
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Portals'),
+          content: Text(
+            'The two rings with the same number are linked. An arrow that '
+            'flies into one comes out of the other, still heading the same '
+            'way — so it can be blocked on the far side.',
+            style: Theme.of(ctx).textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      await _gameStorage.setPortalIntroSeen();
+      if (!mounted || _isPaused || _hasWon) return;
+      _engine.resumeEngine();
+      if (!_stopwatch.isRunning) _stopwatch.start();
+      if (!widget.suppressGameplayTimers) {
+        _timerController.startCountdown();
+        _timerController.resetGhostHintTimer();
+        _timerController.startEasyHudTimer();
+      }
+    });
   }
 
   String _tutorialHintText() {

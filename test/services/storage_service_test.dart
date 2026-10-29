@@ -62,6 +62,15 @@ void main() {
           reason: 'Reset my data must forget the diversity history too');
     });
 
+    test('portal intro flag persists and resets with progress', () async {
+      final storage = StorageService.backing;
+      expect(storage.portalIntroSeen, isFalse);
+      await storage.setPortalIntroSeen();
+      expect(storage.portalIntroSeen, isTrue);
+      await StorageService.clearProgress();
+      expect(storage.portalIntroSeen, isFalse);
+    });
+
     test('selectedDifficulty defaults to easy', () {
       expect(StorageService.selectedDifficulty, DifficultyMode.easy);
     });

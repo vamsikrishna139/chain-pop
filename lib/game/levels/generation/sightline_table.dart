@@ -26,8 +26,12 @@ class SightlineTable {
   SightlineTable._(this.gridWidth, this.gridHeight, this._rays);
 
   /// Builds the table for a `gridWidth × gridHeight` rectangular grid.
+  ///
+  /// [legacyGenV1] reproduces the Gen V1 table byte-for-byte while portals are
+  /// dark (see `PortalRollout`): base-1000 exit decoding and no loop sentinel.
+  /// Delete it at the Gen V2 flip.
   factory SightlineTable.forGrid(int gridWidth, int gridHeight,
-      {List<PortalPair> portals = const []}) {
+      {List<PortalPair> portals = const [], bool legacyGenV1 = false}) {
     final portalMap = <int, int>{};
     for (final p in portals) {
       portalMap[gridCellKey(p.x1, p.y1)] = gridCellKey(p.x2, p.y2);
@@ -43,8 +47,8 @@ class SightlineTable {
       for (var x = 0; x < gridWidth; x++) {
         final base = (y * gridWidth + x) * 4;
         for (final dir in Direction.values) {
-          rays[base + dir.index] =
-              _walkRay(x, y, dir, gridWidth, gridHeight, portalMap);
+          rays[base + dir.index] = _walkRay(
+              x, y, dir, gridWidth, gridHeight, portalMap, legacyGenV1);
         }
       }
     }
@@ -58,6 +62,7 @@ class SightlineTable {
     int gridWidth,
     int gridHeight,
     Map<int, int> portalMap,
+    bool legacyGenV1,
   ) {
     final cells = <int>[];
     var cx = x;
@@ -83,20 +88,28 @@ class SightlineTable {
 
       if (portalMap.containsKey(key)) {
         final outKey = portalMap[key]!;
-        cx = outKey % 1000;
-        cy = outKey ~/ 1000;
+        cx = legacyGenV1 ? outKey % 1000 : gridCellX(outKey);
+        cy = legacyGenV1 ? outKey ~/ 1000 : gridCellY(outKey);
         // The out portal cell itself is not part of the line of sight again.
         // It acts as the origin for the next step.
       }
       hops++;
     }
+    // A ray that never leaves the grid is caught in a portal loop. The solver
+    // treats that as permanently blocked (`LevelSolver`'s hop limit), so the
+    // table must too, or the constructor would believe the node is free.
+    if (hops >= 50 && !legacyGenV1) return _loopRay;
     return List<int>.unmodifiable(cells);
   }
+
+  /// Sentinel ray for portal loops; [hasClearRay] is never true for it.
+  static const List<int> _loopRay = <int>[-1];
 
   /// True iff the ray from `(x,y)` along [dir] exits the grid without hitting
   /// any cell whose key is in [occupied].
   bool hasClearRay(int x, int y, Direction dir, Set<int> occupied) {
     final ray = _rays[(y * gridWidth + x) * 4 + dir.index];
+    if (identical(ray, _loopRay)) return false;
     for (final c in ray) {
       if (occupied.contains(c)) return false;
     }

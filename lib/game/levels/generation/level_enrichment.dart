@@ -32,13 +32,7 @@ LevelData enrichLevel(
   nodes = _markCoreNodes(
       nodes, config.difficulty.mode, level, mechanicOverride, onCoreSelection);
   nodes = _markSpecialNodes(nodes, config, level, mechanicOverride);
-  return LevelData(
-    levelId: level.levelId,
-    gridWidth: level.gridWidth,
-    gridHeight: level.gridHeight,
-    playCells: level.playCells,
-    nodes: nodes,
-  );
+  return _rebuild(level, nodes);
 }
 
 /// Tap-depth percentile band a core must fall in. Mid-route by design: the
@@ -186,13 +180,27 @@ class CoreSelectionTelemetry {
 
 /// Rebuilds a [LevelData] with [nodes] but [level]'s geometry — used to query
 /// the solver against a working node list.
-LevelData _withNodes(LevelData level, List<NodeData> nodes) => LevelData(
-      levelId: level.levelId,
-      gridWidth: level.gridWidth,
-      gridHeight: level.gridHeight,
-      playCells: level.playCells,
-      nodes: nodes,
-    );
+LevelData _withNodes(LevelData level, List<NodeData> nodes) =>
+    _rebuild(level, nodes);
+
+/// Rebuilds [level] with [nodes] — every board this file produces goes
+/// through here.
+///
+/// With portals live ([PortalRollout]) it keeps every field. With the switch
+/// off it reproduces Gen V1 exactly: the old hand-built rebuilds dropped
+/// `portalPairs` and `silhouetteId`, and both the frozen corpus and the
+/// shipped boards depend on that until the Gen V2 flip (W2.7). Delete the
+/// legacy branch at the flip.
+LevelData _rebuild(LevelData level, List<NodeData> nodes) =>
+    PortalRollout.enabled
+        ? level.copyWith(nodes: nodes)
+        : LevelData(
+            levelId: level.levelId,
+            gridWidth: level.gridWidth,
+            gridHeight: level.gridHeight,
+            playCells: level.playCells,
+            nodes: nodes,
+          );
 
 /// Transitive prerequisite closures for every node on a board, plus the
 /// derived quantities T1.1's band and T1.2's floor both read.
@@ -986,13 +994,7 @@ List<NodeData> _markSpecialNodes(
           for (final n in result)
             n.id == candidate.id ? n.copyWith(kind: NodeKind.relay) : n,
         ];
-        final probe = LevelData(
-          levelId: level.levelId,
-          gridWidth: level.gridWidth,
-          gridHeight: level.gridHeight,
-          playCells: level.playCells,
-          nodes: withRelay,
-        );
+        final probe = _rebuild(level, withRelay);
         if (_relayIsSoftlockSafe(probe, {candidate.id}) &&
             validator.validate(probe).isValid) {
           result = withRelay;
@@ -1027,13 +1029,7 @@ List<NodeData> _markSpecialNodes(
                   ? n.copyWith(kind: NodeKind.relay)
                   : n,
           ];
-          final probe = LevelData(
-            levelId: level.levelId,
-            gridWidth: level.gridWidth,
-            gridHeight: level.gridHeight,
-            playCells: level.playCells,
-            nodes: withRelays,
-          );
+          final probe = _rebuild(level, withRelays);
           if (_relayIsSoftlockSafe(probe, {c1.id, c2.id}) &&
               validator.validate(probe).isValid) {
             result = withRelays;
@@ -1115,13 +1111,7 @@ bool _relayIsSoftlockSafe(LevelData level, Set<int> relayIds) {
           (n.y == relay.y ? n.copyWith(dir: n.dir.rotatedCw) : n),
     ];
 
-    final nextLevel = LevelData(
-      levelId: level.levelId,
-      gridWidth: level.gridWidth,
-      gridHeight: level.gridHeight,
-      playCells: level.playCells,
-      nodes: afterPop,
-    );
+    final nextLevel = _rebuild(level, afterPop);
     final nextRelays = relayIds.difference({relayId});
     if (!_relayIsSoftlockSafe(nextLevel, nextRelays)) {
       return false;

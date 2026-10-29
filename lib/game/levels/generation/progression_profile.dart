@@ -3,6 +3,24 @@ import '../../world_registry.dart';
 
 enum CampaignMechanic { phaseGate, multiRelay, portalPair }
 
+/// W2.7 rollout switch for portals. **Off until the Gen V2 sign-off.**
+///
+/// Portals have been budgeted from sector 6 for a long time, but until W2.7
+/// they never reached a player: the constructor decoded their cells wrongly
+/// and `enrichLevel` dropped them. This switch gates the fixed pipeline.
+///
+/// It is deliberately *not* implemented by zeroing the budget. With a portal
+/// budget the constructor shuffles its RNG to pick portal cells, and that
+/// shuffle still runs with the switch off — so every board downstream keeps
+/// the same random stream as Gen V1. Only the portals themselves are skipped.
+///
+/// A mutable static rather than a const so tests can exercise both sides.
+/// Worker isolates (the Daily) read the default, so flip the default — never
+/// set it at runtime in the app.
+abstract final class PortalRollout {
+  static bool enabled = false;
+}
+
 /// Clamp mechanics behind Phase feature flags until they are ready.
 const Set<CampaignMechanic> _kEnabledMechanics = {
   CampaignMechanic.phaseGate,

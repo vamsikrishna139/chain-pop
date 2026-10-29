@@ -17,6 +17,11 @@ abstract interface class ChainPopPersistence {
 
   Future<void> setHintRewardAdCoachSeen();
 
+  /// One-time portal explainer (W2.7) has been shown.
+  bool get portalIntroSeen;
+
+  Future<void> setPortalIntroSeen();
+
   // ── Difficulty preference ─────────────────────────────────────────────────
 
   DifficultyMode get selectedDifficulty;

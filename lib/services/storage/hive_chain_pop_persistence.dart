@@ -55,6 +55,8 @@ final class HiveChainPopPersistence implements ChainPopStorage {
 
   static const String _diversityLedgerKey = 'diversity_ledger_bits';
 
+  static const String _portalIntroSeenKey = 'portal_intro_seen';
+
   static const String _achievementUnlockedKey = 'ach_unlocked_ids';
   static const String _achievementCursorKey = 'ach_sync_cursor';
 
@@ -177,6 +179,17 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   @override
   Future<void> setHintRewardAdCoachSeen() async {
     await _box.put(_hintRewardCoachSeenKey, true);
+  }
+
+  @override
+  bool get portalIntroSeen => coerceHiveBool(
+        _box.get(_portalIntroSeenKey),
+        fallback: false,
+      );
+
+  @override
+  Future<void> setPortalIntroSeen() async {
+    await _box.put(_portalIntroSeenKey, true);
   }
 
   @override
