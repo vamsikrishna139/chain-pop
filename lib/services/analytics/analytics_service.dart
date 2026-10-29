@@ -45,6 +45,5 @@ abstract class AnalyticsService {
       {required int level, required int promptCount});
   Future<void> logReviewPromptAction(
       {required String action, required int level});
-  Future<void> logReviewNativeRequested({required int level});
   Future<void> logReviewManualSettingsTapped();
 }

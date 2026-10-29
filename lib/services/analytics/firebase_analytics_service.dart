@@ -149,10 +149,6 @@ class FirebaseAnalyticsService implements AnalyticsService {
       });
 
   @override
-  Future<void> logReviewNativeRequested({required int level}) =>
-      logEvent('review_native_requested', parameters: {'level': level});
-
-  @override
   Future<void> logReviewManualSettingsTapped() =>
       logEvent('review_manual_settings_tapped');
 }

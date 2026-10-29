@@ -24,8 +24,10 @@ class ReviewCoordinator {
     ChainPopPersistence? persistence,
     AnalyticsService? analytics,
     InAppReview? inAppReview,
-    this.cooldownDays = const int.fromEnvironment('REVIEW_COOLDOWN_DAYS', defaultValue: 14),
-    this.cooldownClears = const int.fromEnvironment('REVIEW_COOLDOWN_CLEARS', defaultValue: 15),
+    this.cooldownDays =
+        const int.fromEnvironment('REVIEW_COOLDOWN_DAYS', defaultValue: 14),
+    this.cooldownClears =
+        const int.fromEnvironment('REVIEW_COOLDOWN_CLEARS', defaultValue: 15),
   })  : _persistence = persistence ?? StorageLocator.instance,
         _analytics = analytics ?? AnalyticsLocator.instance,
         _inAppReview = inAppReview ?? InAppReview.instance;
@@ -57,9 +59,17 @@ class ReviewCoordinator {
       'cooldownDays=$cooldownDays cooldownClears=$cooldownClears',
     );
 
-    // 1. Permanent suppression (User tapped "Never")
-    if (cooldownDays > 0 && _persistence.reviewPromptPermanentlyDisabled) {
-      debugPrint('ReviewCoordinator: rejected - reviewPromptPermanentlyDisabled');
+    // 1. Permanent suppression (User tapped "Never"). Not tied to the
+    // cooldown debug knobs: "Don't ask again" must hold in every build.
+    if (_persistence.reviewPromptPermanentlyDisabled) {
+      debugPrint(
+          'ReviewCoordinator: rejected - reviewPromptPermanentlyDisabled');
+      return false;
+    }
+
+    // 1b. Already sent to the store once; never nag a player who rated.
+    if (_persistence.reviewHasEverTappedRate) {
+      debugPrint('ReviewCoordinator: rejected - reviewHasEverTappedRate');
       return false;
     }
 
@@ -77,7 +87,8 @@ class ReviewCoordinator {
 
     // 4. Emotional peak: 3 stars or an active win streak of at least 2
     if (stars < 3 && winStreak < 2) {
-      debugPrint('ReviewCoordinator: rejected - emotional peak not met (stars=$stars, streak=$winStreak)');
+      debugPrint(
+          'ReviewCoordinator: rejected - emotional peak not met (stars=$stars, streak=$winStreak)');
       return false;
     }
 
@@ -89,19 +100,22 @@ class ReviewCoordinator {
 
     // 6. Campaign progress depth: Level 15 completed
     if (_persistence.lifetimeCampaignClears < minCampaignClears) {
-      debugPrint('ReviewCoordinator: rejected - lifetimeCampaignClears ${_persistence.lifetimeCampaignClears} < $minCampaignClears');
+      debugPrint(
+          'ReviewCoordinator: rejected - lifetimeCampaignClears ${_persistence.lifetimeCampaignClears} < $minCampaignClears');
       return false;
     }
 
     // 7. Session count depth: at least 3 distinct sessions
     if (_persistence.sessionCount < minSessionCount) {
-      debugPrint('ReviewCoordinator: rejected - sessionCount ${_persistence.sessionCount} < $minSessionCount');
+      debugPrint(
+          'ReviewCoordinator: rejected - sessionCount ${_persistence.sessionCount} < $minSessionCount');
       return false;
     }
 
     // 8. Cumulative active playtime: at least 20 minutes
     if (_persistence.lifetimeGameplaySeconds < minGameplaySeconds) {
-      debugPrint('ReviewCoordinator: rejected - lifetimeGameplaySeconds ${_persistence.lifetimeGameplaySeconds} < $minGameplaySeconds');
+      debugPrint(
+          'ReviewCoordinator: rejected - lifetimeGameplaySeconds ${_persistence.lifetimeGameplaySeconds} < $minGameplaySeconds');
       return false;
     }
 
@@ -111,7 +125,8 @@ class ReviewCoordinator {
         .where((ts) => (nowMs - ts) < oneYearMs)
         .length;
     if (cooldownDays > 0 && recentPrompts >= maxPromptsPerYear) {
-      debugPrint('ReviewCoordinator: rejected - annual quota exceeded ($recentPrompts >= $maxPromptsPerYear)');
+      debugPrint(
+          'ReviewCoordinator: rejected - annual quota exceeded ($recentPrompts >= $maxPromptsPerYear)');
       return false;
     }
 
@@ -120,7 +135,8 @@ class ReviewCoordinator {
     if (lastPromptMs > 0 && cooldownDays > 0) {
       final cooldownMs = cooldownDays * 24 * 60 * 60 * 1000;
       if ((nowMs - lastPromptMs) < cooldownMs) {
-        debugPrint('ReviewCoordinator: rejected - day cooldown not elapsed (${nowMs - lastPromptMs} < $cooldownMs)');
+        debugPrint(
+            'ReviewCoordinator: rejected - day cooldown not elapsed (${nowMs - lastPromptMs} < $cooldownMs)');
         return false;
       }
     }
@@ -128,7 +144,8 @@ class ReviewCoordinator {
     if (lastPromptMs > 0 && cooldownClears > 0) {
       final lastClears = _persistence.reviewLastPromptLevelClears;
       if ((_persistence.lifetimeCampaignClears - lastClears) < cooldownClears) {
-        debugPrint('ReviewCoordinator: rejected - clear cooldown not elapsed (${_persistence.lifetimeCampaignClears - lastClears} < $cooldownClears)');
+        debugPrint(
+            'ReviewCoordinator: rejected - clear cooldown not elapsed (${_persistence.lifetimeCampaignClears - lastClears} < $cooldownClears)');
         return false;
       }
     }
@@ -159,15 +176,14 @@ class ReviewCoordinator {
     await _persistence.setReviewHasEverTappedRate(true);
 
     await _analytics.logReviewPromptAction(action: 'rate', level: level);
-    await _analytics.logReviewNativeRequested(level: level);
 
+    // Store listing, not requestReview(): Play forbids wiring the quota-limited
+    // native flow to a button, since it can silently show nothing.
     try {
-      if (await _inAppReview.isAvailable()) {
-        unawaited(_inAppReview.requestReview());
-      }
+      await _inAppReview.openStoreListing();
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('InAppReview.requestReview failed: $e');
+        debugPrint('InAppReview.openStoreListing failed: $e');
       }
     }
   }

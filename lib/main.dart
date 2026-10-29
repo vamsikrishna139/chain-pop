@@ -161,6 +161,10 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
   late final GameAudioController _menuUiAudio =
       GameAudioController(voiceCount: 2);
 
+  /// Background time after which a resume counts as a new session.
+  static const Duration _sessionGap = Duration(minutes: 30);
+  DateTime? _pausedAt;
+
   @override
   void initState() {
     super.initState();
@@ -171,6 +175,7 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
       unawaited(StorageService.setReviewPromptPermanentlyDisabled(false));
       unawaited(StorageService.setReviewLastPromptEpochMs(0));
       unawaited(StorageService.setReviewLastPromptLevelClears(0));
+      unawaited(StorageService.setReviewHasEverTappedRate(false));
     }
     unawaited(NotificationService.instance.noteActivity());
   }
@@ -187,11 +192,19 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       SubscriptionLocator.instance.refresh();
       AnalyticsLocator.instance.logSessionStart();
-      unawaited(StorageService.incrementSessionCount());
+      // Only a real return counts as a new session for the review gate:
+      // full-screen ads, the store sheet and the shade also fire `resumed`.
+      final pausedAt = _pausedAt;
+      _pausedAt = null;
+      if (pausedAt != null &&
+          DateTime.now().difference(pausedAt) >= _sessionGap) {
+        unawaited(StorageService.incrementSessionCount());
+      }
       // Pushes the "you have not played in a while" reminder back out. Cheap,
       // fire-and-forget, never blocks the frame.
       unawaited(NotificationService.instance.noteActivity());
     } else if (state == AppLifecycleState.paused) {
+      _pausedAt ??= DateTime.now();
       AnalyticsLocator.instance.logSessionEnd();
     }
   }

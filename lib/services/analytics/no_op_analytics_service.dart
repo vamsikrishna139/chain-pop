@@ -65,7 +65,5 @@ class NoOpAnalyticsService implements AnalyticsService {
   Future<void> logReviewPromptAction(
       {required String action, required int level}) async {}
   @override
-  Future<void> logReviewNativeRequested({required int level}) async {}
-  @override
   Future<void> logReviewManualSettingsTapped() async {}
 }

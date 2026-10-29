@@ -16,8 +16,7 @@ void main() {
   late ReviewCoordinator coordinator;
 
   setUpAll(() async {
-    final tempDir =
-        await Directory.systemTemp.createTemp('review_coord_test_');
+    final tempDir = await Directory.systemTemp.createTemp('review_coord_test_');
     Hive.init(tempDir.path);
     persistence = HiveChainPopPersistence();
     await persistence.open();
@@ -252,8 +251,8 @@ void main() {
       await coordinator.onLaterTapped(level: 15, nowOverride: baseTime);
 
       expect(persistence.reviewLastPromptLevelClears, 15);
-      expect(persistence.reviewLastPromptEpochMs,
-          baseTime.millisecondsSinceEpoch);
+      expect(
+          persistence.reviewLastPromptEpochMs, baseTime.millisecondsSinceEpoch);
 
       // 1 day later, 0 extra clears -> false
       expect(
@@ -322,10 +321,60 @@ void main() {
       );
     });
 
+    test('Never holds even when the cooldown debug knobs are zeroed', () async {
+      final debugCoordinator = ReviewCoordinator(
+        persistence: persistence,
+        analytics: analytics,
+        inAppReview: InAppReview.instance,
+        cooldownDays: 0,
+        cooldownClears: 0,
+      );
+      await debugCoordinator.onNeverTapped(level: 15);
+
+      expect(
+        debugCoordinator.shouldShowPrompt(
+          level: 15,
+          stars: 3,
+          isWin: true,
+          isDailyChallenge: false,
+          isTutorial: false,
+          winStreak: 3,
+          isInterstitialDue: false,
+        ),
+        isFalse,
+      );
+    });
+
+    test('player who tapped Rate is never prompted again', () async {
+      final baseTime = DateTime(2026, 1, 1, 12, 0);
+      await persistence.setReviewHasEverTappedRate(true);
+      await persistence
+          .setReviewLastPromptEpochMs(baseTime.millisecondsSinceEpoch);
+      await persistence.setReviewLastPromptLevelClears(15);
+      for (var i = 0; i < 15; i++) {
+        await persistence.incrementLifetimeCampaignClears();
+      }
+
+      // Both cooldowns have elapsed; the rated flag alone blocks it.
+      expect(
+        coordinator.shouldShowPrompt(
+          level: 30,
+          stars: 3,
+          isWin: true,
+          isDailyChallenge: false,
+          isTutorial: false,
+          winStreak: 3,
+          isInterstitialDue: false,
+          nowOverride: baseTime.add(const Duration(days: 60)),
+        ),
+        isFalse,
+      );
+    });
+
     test('Annual quota limit (<= 3 per year) blocks 4th prompt', () async {
       final baseTime = DateTime(2026, 1, 1, 12, 0);
-      await persistence.recordReviewPromptPresentation(
-          baseTime.millisecondsSinceEpoch);
+      await persistence
+          .recordReviewPromptPresentation(baseTime.millisecondsSinceEpoch);
       await persistence.recordReviewPromptPresentation(
           baseTime.add(const Duration(days: 30)).millisecondsSinceEpoch);
       await persistence.recordReviewPromptPresentation(

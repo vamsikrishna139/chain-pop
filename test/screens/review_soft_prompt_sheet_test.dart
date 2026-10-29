@@ -18,8 +18,7 @@ void main() {
   late ReviewCoordinator coordinator;
 
   setUpAll(() async {
-    final tempDir =
-        await Directory.systemTemp.createTemp('review_sheet_test_');
+    final tempDir = await Directory.systemTemp.createTemp('review_sheet_test_');
     Hive.init(tempDir.path);
     persistence = HiveChainPopPersistence();
     await persistence.open();
@@ -52,7 +51,7 @@ void main() {
       ),
     );
 
-    expect(find.text('ENJOYING CHAIN POP?'), findsOneWidget);
+    expect(find.text('LEAVE A QUICK RATING'), findsOneWidget);
     expect(find.text('RATE CHAIN POP'), findsOneWidget);
     expect(find.text('REMIND ME LATER'), findsOneWidget);
     expect(find.text("DON'T ASK AGAIN"), findsOneWidget);
@@ -68,8 +67,7 @@ void main() {
           body: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () async {
-                selectedAction =
-                    await showModalBottomSheet<ReviewPromptAction>(
+                selectedAction = await showModalBottomSheet<ReviewPromptAction>(
                   context: context,
                   builder: (ctx) => ReviewSoftPromptSheet(
                     level: 15,
@@ -103,8 +101,7 @@ void main() {
           body: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () async {
-                selectedAction =
-                    await showModalBottomSheet<ReviewPromptAction>(
+                selectedAction = await showModalBottomSheet<ReviewPromptAction>(
                   context: context,
                   builder: (ctx) => ReviewSoftPromptSheet(
                     level: 15,
@@ -138,8 +135,7 @@ void main() {
           body: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () async {
-                selectedAction =
-                    await showModalBottomSheet<ReviewPromptAction>(
+                selectedAction = await showModalBottomSheet<ReviewPromptAction>(
                   context: context,
                   builder: (ctx) => ReviewSoftPromptSheet(
                     level: 15,
