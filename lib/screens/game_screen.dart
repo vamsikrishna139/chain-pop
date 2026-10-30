@@ -571,6 +571,20 @@ class GameScreenState extends State<GameScreen>
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Default to the OS accessibility setting on first run if never explicitly set.
+    if (_gameStorage.rawReducedMotion == null) {
+      final systemDisableAnimations =
+          MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+      if (systemDisableAnimations && !_settings.reducedMotion) {
+        _settings = _settings.copyWith(reducedMotion: true);
+        _pushFeedbackToGame();
+      }
+    }
+  }
+
   void _installResolvedLevel(LevelData level) {
     _levelData = level;
     _totalNodes = level.nodes.length;
@@ -662,6 +676,7 @@ class GameScreenState extends State<GameScreen>
     g.colorblindPalette = _settings.colorblindFriendly;
     g.showAimRay = _settings.showAimRay;
     g.ambientMotion = _settings.ambientMotion;
+    g.reducedMotion = _settings.reducedMotion;
     g.tutorialCoaching = widget.isTutorial;
     g.onSfx = (sfx, {double playbackRate = 1.0}) =>
         unawaited(_audio.play(sfx, playbackRate: playbackRate));
@@ -957,7 +972,7 @@ class GameScreenState extends State<GameScreen>
           // AmbientBackgroundComponent inside the Flame layer — the GameWidget
           // paints an opaque background, so nothing behind it would show.
           Positioned.fill(child: GameWidget(game: _game!)),
-          if (_hasWon && !_quickWin)
+          if (_hasWon && !_quickWin && !_settings.reducedMotion)
             Positioned.fill(
               child: IgnorePointer(
                 child: WinCelebrationOverlay(accent: accent),

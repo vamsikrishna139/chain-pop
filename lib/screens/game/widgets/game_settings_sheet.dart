@@ -159,6 +159,19 @@ Future<void> showGameSettingsSheet({
                           setModalState(() {});
                         },
                       ),
+                      const SizedBox(height: 8),
+                      _buildToggle(
+                        title: 'Reduced Motion',
+                        subtitle: 'Calm fades in place of shakes and bursts',
+                        icon: Icons.motion_photos_off_rounded,
+                        iconColor: Colors.tealAccent,
+                        value: current.reducedMotion,
+                        onChanged: (v) {
+                          current = current.copyWith(reducedMotion: v);
+                          onSettingsChanged(current);
+                          setModalState(() {});
+                        },
+                      ),
 
                       const SizedBox(height: 16),
                       Divider(color: Colors.white.withValues(alpha: 0.1)),

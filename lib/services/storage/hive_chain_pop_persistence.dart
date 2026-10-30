@@ -50,6 +50,7 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   static const String _settingsColorblindKey = 'settings_colorblind';
   static const String _settingsAimRayKey = 'settings_aim_ray';
   static const String _settingsAmbientMotionKey = 'settings_ambient_motion';
+  static const String _settingsReducedMotionKey = 'settings_reduced_motion';
 
   static const String _hintRewardCoachSeenKey = 'hint_reward_coach_seen';
 
@@ -226,7 +227,17 @@ final class HiveChainPopPersistence implements ChainPopStorage {
           _box.get(_settingsAmbientMotionKey),
           fallback: true,
         ),
+        reducedMotion: coerceHiveBool(
+          _box.get(_settingsReducedMotionKey),
+          fallback: false,
+        ),
       );
+
+  @override
+  bool? get rawReducedMotion =>
+      _box.get(_settingsReducedMotionKey) == null
+          ? null
+          : coerceHiveBool(_box.get(_settingsReducedMotionKey), fallback: false);
 
   @override
   Future<void> saveGameSettings(GameSettings settings) async {
@@ -235,6 +246,7 @@ final class HiveChainPopPersistence implements ChainPopStorage {
     await _box.put(_settingsColorblindKey, settings.colorblindFriendly);
     await _box.put(_settingsAimRayKey, settings.showAimRay);
     await _box.put(_settingsAmbientMotionKey, settings.ambientMotion);
+    await _box.put(_settingsReducedMotionKey, settings.reducedMotion);
   }
 
   @override

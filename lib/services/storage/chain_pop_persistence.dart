@@ -32,6 +32,10 @@ abstract interface class ChainPopPersistence {
 
   GameSettings get gameSettings;
 
+  /// Null when reduced motion has never been explicitly toggled by the player,
+  /// allowing first-run defaulting to the platform's accessibility settings.
+  bool? get rawReducedMotion;
+
   Future<void> saveGameSettings(GameSettings settings);
 
   // ── Level unlock ──────────────────────────────────────────────────────────

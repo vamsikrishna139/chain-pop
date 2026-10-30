@@ -59,6 +59,8 @@ class StorageService {
 
   static GameSettings get gameSettings => StorageLocator.instance.gameSettings;
 
+  static bool? get rawReducedMotion => StorageLocator.instance.rawReducedMotion;
+
   static Future<void> saveGameSettings(GameSettings settings) =>
       StorageLocator.instance.saveGameSettings(settings);
 

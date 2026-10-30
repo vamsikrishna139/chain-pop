@@ -179,6 +179,10 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// When true, background particles drift and animate.
   bool ambientMotion = true;
 
+  /// When true, heavy motion (shake, confetti, cascades, ripples) is replaced
+  /// with calm instant/fade alternatives for motion sensitivity.
+  bool reducedMotion = false;
+
   /// Plays short SFX via the Flutter layer ([GameAudioController]).
   void Function(GameSfx sfx, {double playbackRate})? onSfx;
 
@@ -642,6 +646,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _restoredCells.add((data.x, data.y));
     if (!_boardLaidOut || _cellSize <= 0) return;
     _restoredLayer?.addCell(data.x, data.y);
+    if (reducedMotion) return;
     final center = Vector2(
       (data.x + 0.5) * _cellSize,
       (data.y + 0.5) * _cellSize,
@@ -781,12 +786,19 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
             (b.x - _lastExtractedX).abs() + (b.y - _lastExtractedY).abs();
         return da.compareTo(db);
       });
-    final step = (1.2 / remaining.length).clamp(0.05, 0.09);
+    final step = reducedMotion
+        ? 0.02
+        : (1.2 / remaining.length).clamp(0.05, 0.09);
     _finaleSchedule.clear();
     for (var i = 0; i < remaining.length; i++) {
-      _finaleSchedule.add((0.15 + i * step, remaining[i].id));
+      _finaleSchedule.add((
+        reducedMotion ? 0.05 + i * step : 0.15 + i * step,
+        remaining[i].id,
+      ));
     }
-    _finaleWinAt = 0.15 + (remaining.length - 1) * step + 0.5;
+    _finaleWinAt = reducedMotion
+        ? (0.05 + remaining.length * step + 0.1)
+        : (0.15 + (remaining.length - 1) * step + 0.5);
     _finaleClock = 0;
     _finaleIndex = 0;
     _finaleActive = true;

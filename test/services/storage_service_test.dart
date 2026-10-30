@@ -165,15 +165,24 @@ void main() {
       expect(StorageService.gameSettings.soundEnabled, isTrue);
       expect(StorageService.gameSettings.hapticsEnabled, isTrue);
       expect(StorageService.gameSettings.colorblindFriendly, isFalse);
+      expect(StorageService.gameSettings.ambientMotion, isTrue);
+      expect(StorageService.gameSettings.reducedMotion, isFalse);
+      expect(StorageService.rawReducedMotion, isNull);
+
       await StorageService.saveGameSettings(const GameSettings(
         soundEnabled: false,
         hapticsEnabled: false,
         colorblindFriendly: true,
+        ambientMotion: false,
+        reducedMotion: true,
       ));
       final s = StorageService.gameSettings;
       expect(s.soundEnabled, isFalse);
       expect(s.hapticsEnabled, isFalse);
       expect(s.colorblindFriendly, isTrue);
+      expect(s.ambientMotion, isFalse);
+      expect(s.reducedMotion, isTrue);
+      expect(StorageService.rawReducedMotion, isTrue);
     });
 
     test('tutorialCompleted defaults and clears with clearProgress', () async {

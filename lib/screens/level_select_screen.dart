@@ -582,11 +582,19 @@ class _ChapterGrid extends StatelessWidget {
         final isNext = levelId == highestUnlocked + 1;
         final isFrontier = isUnlocked && levelId == highestUnlocked;
         final starCount = StorageLocator.instance.stars(mode, levelId);
+        final statusLabel = isFrontier
+            ? 'active frontier'
+            : (isUnlocked
+                ? '$starCount stars'
+                : (isNext ? 'next level' : 'locked'));
 
-        return InkWell(
-          onTap: (isUnlocked || isNext) ? () => onTap(levelId) : null,
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
+        return Semantics(
+          label: 'Level $levelId, $statusLabel',
+          button: isUnlocked || isNext,
+          child: InkWell(
+            onTap: (isUnlocked || isNext) ? () => onTap(levelId) : null,
+            borderRadius: BorderRadius.circular(12),
+            child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
@@ -674,8 +682,9 @@ class _ChapterGrid extends StatelessWidget {
               ],
             ),
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 }
