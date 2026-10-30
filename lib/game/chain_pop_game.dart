@@ -563,6 +563,9 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   @visibleForTesting
   Set<int> get newlyExtractableForTest => Set.unmodifiable(_newlyExtractable);
 
+  @visibleForTesting
+  void startCascadeFinaleForTest() => _startCascadeFinale();
+
   /// Shows a dotted ray from [node] to the grid edge or first blocker.
   /// [intensity] dims the ray for the touch-down aim guide (vs. a long press).
   void showRayPreview(NodeData node, {double intensity = 1.0}) {
