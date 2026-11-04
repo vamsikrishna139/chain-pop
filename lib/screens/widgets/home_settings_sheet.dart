@@ -142,7 +142,7 @@ class _RateAppTile extends StatelessWidget {
       label: Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          'Rate Chain Pop',
+          'Rate Unbound',
           style: GoogleFonts.rajdhani(
             color: Colors.white,
             fontWeight: FontWeight.w700,
