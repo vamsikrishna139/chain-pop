@@ -7,7 +7,7 @@ void main() {
     () {
       expect(
         ChainPopLegal.privacyPolicyUrl,
-        'https://sites.google.com/view/unbound-privacy-policy/home',
+        'https://mindglowstudios.web.app/unbound-privacy-policy',
       );
     },
   );

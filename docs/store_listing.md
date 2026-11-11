@@ -233,7 +233,7 @@ hosted privacy policy — Play cross-checks the two.
 ## 8. Privacy policy URL
 
 Declared in code as
-`https://sites.google.com/view/unbound-policy/home`
+`https://mindglowstudios.web.app/unbound-privacy-policy`
 (`lib/config/chain_pop_legal.dart`, overridable with
 `--dart-define=CHAINPOP_PRIVACY_POLICY_URL`). The in-app "Privacy policy" button
 in Settings → Privacy & Ads opens exactly this URL.
@@ -327,7 +327,7 @@ app read as one product.
 
 1. **Support/contact email** — confirm `adbkv.apps@gmail.com` is the public
    address, and publish it in the hosted privacy policy.
-2. **Privacy policy hosting** — confirm `https://sites.google.com/view/unbound-policy/home`
+2. **Privacy policy hosting** — confirm `https://mindglowstudios.web.app/unbound-privacy-policy`
    is live, public, and content-identical to `docs/privacy.md`.
 3. **IAP price point** — not set anywhere in the repo; needed for the IARC
    digital-purchase price-range answer and the Play Console product.
