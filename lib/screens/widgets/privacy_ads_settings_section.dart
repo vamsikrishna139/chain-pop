@@ -14,10 +14,15 @@ class PrivacyAdsSettingsSection extends StatefulWidget {
   /// When true, closes the parent bottom sheet before opening the UMP form.
   final bool popSheetBeforeAdChoices;
 
+  /// Enables "Delete my data" in the privacy rights sheet; called after the
+  /// local wipe. Only the home screen passes it (never mid-level).
+  final VoidCallback? onDataDeleted;
+
   const PrivacyAdsSettingsSection({
     super.key,
     required this.accent,
     this.popSheetBeforeAdChoices = true,
+    this.onDataDeleted,
   });
 
   @override
@@ -96,6 +101,7 @@ class _PrivacyAdsSettingsSectionState extends State<PrivacyAdsSettingsSection> {
                 context: context,
                 accent: widget.accent,
                 showAdChoicesButton: _privacyOptionsRequired,
+                onDataDeleted: widget.onDataDeleted,
               );
             },
             icon: const Icon(
@@ -139,7 +145,7 @@ class _PrivacyAdsSettingsSectionState extends State<PrivacyAdsSettingsSection> {
             ),
           ),
           subtitle: const Text(
-            'Anonymous gameplay stats that help us tune levels',
+            'Gameplay stats linked to a random app ID, used to tune levels',
             style: TextStyle(color: Colors.white38, fontSize: 12),
           ),
           value: AnalyticsConsent.userEnabled,

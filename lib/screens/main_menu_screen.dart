@@ -12,6 +12,7 @@ import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
 import '../game/levels/tutorial_levels.dart';
 import '../services/storage/storage_locator.dart';
+import '../services/storage/local_progress_reset.dart';
 import '../theme/app_colors.dart';
 import '../utils/progress_format.dart';
 import 'achievements_screen.dart';
@@ -153,7 +154,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
       ),
     );
     if (confirm == true) {
-      await StorageLocator.instance.clearProgress();
+      await resetLocalProgress();
       if (!mounted) return;
       setState(() => _selected = StorageLocator.instance.selectedDifficulty);
     }
@@ -276,6 +277,11 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                   context: context,
                   accent: _selected.color,
                   onResetGameData: _confirmReset,
+                  onDataDeleted: () {
+                    if (!mounted) return;
+                    setState(() => _selected =
+                        StorageLocator.instance.selectedDifficulty);
+                  },
                 );
               },
             ),

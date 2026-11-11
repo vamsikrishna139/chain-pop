@@ -14,6 +14,7 @@ Future<void> showHomeSettingsSheet({
   required BuildContext context,
   required Color accent,
   VoidCallback? onResetGameData,
+  VoidCallback? onDataDeleted,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -86,7 +87,10 @@ Future<void> showHomeSettingsSheet({
                   // Content
                   PurchasesSettingsSection(accent: accent),
                   const SizedBox(height: 16),
-                  PrivacyAdsSettingsSection(accent: accent),
+                  PrivacyAdsSettingsSection(
+                    accent: accent,
+                    onDataDeleted: onDataDeleted,
+                  ),
                   const SizedBox(height: 16),
                   Divider(color: Colors.white.withValues(alpha: 0.1)),
                   const SizedBox(height: 8),
