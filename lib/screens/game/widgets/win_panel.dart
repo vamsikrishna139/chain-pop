@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../../game/levels/generation/difficulty_mode.dart';
 import '../../../models/difficulty.dart';
+import '../../../services/app_share_actions.dart';
 import '../../../theme/app_colors.dart';
 import '../../../utils/progress_format.dart';
 import '../game_screen_constants.dart';
@@ -173,8 +174,8 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
                     icon: const Icon(Icons.share, color: Colors.white70),
                     onPressed: () {
                       SharePlus.instance.share(ShareParams(
-                        text:
-                            'I just completed Level ${widget.levelId} in Unbound! Can you beat my time?',
+                        text: AppShareActions.levelClearedShareText(
+                            '${widget.levelId}'),
                       ));
                     },
                   ),

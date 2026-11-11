@@ -2,7 +2,7 @@ name: chain_pop
 description: "A minimalist logic puzzle extraction game."
 publish_to: 'none'
 
-version: 1.0.0+2
+version: 1.0.0+8
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -30,6 +30,8 @@ dependencies:
   share_plus: ^13.3.0
   timezone: ^0.9.4
   flutter_timezone: ^5.1.0
+  device_info_plus: ^13.3.0
+  package_info_plus: ^10.2.2
   # Mocked logic for later integrations
   # applovin_max: ^...
   # firebase_remote_config: ^...

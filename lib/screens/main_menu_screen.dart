@@ -7,6 +7,7 @@ import '../game/levels/generation/difficulty_mode.dart';
 import '../models/difficulty.dart';
 import '../navigation/app_route_observer.dart';
 import '../services/ads/ad_service_factory.dart';
+import '../services/app_share_actions.dart';
 import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
 import '../game/levels/tutorial_levels.dart';
@@ -37,8 +38,8 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   }
 
   @override
-  void onReturnedTo() => setState(
-      () => _selected = StorageLocator.instance.selectedDifficulty);
+  void onReturnedTo() =>
+      setState(() => _selected = StorageLocator.instance.selectedDifficulty);
 
   Future<void> _selectDifficulty(DifficultyMode mode) async {
     if (_selected != mode &&
@@ -259,6 +260,12 @@ class _MainMenuScreenState extends State<MainMenuScreen>
               icon: Icons.calendar_today_rounded,
               color: AppColors.accentEasy,
               onTap: _openDailyChallenge,
+            ),
+            const SizedBox(width: 8),
+            _buildIconButton(
+              icon: Icons.share_rounded,
+              color: Colors.white70,
+              onTap: () => unawaited(AppShareActions.shareApp(source: 'menu')),
             ),
             const SizedBox(width: 8),
             _buildIconButton(

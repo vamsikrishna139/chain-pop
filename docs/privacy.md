@@ -267,7 +267,7 @@ Data controller: MindGlow Studios (ADBKV), India.
 > Kept in sync with `ChainPopLegal.supportEmail` in
 > `lib/config/chain_pop_legal.dart`. If that constant changes, change this line
 > too. The hosted copy of this policy
-> (`https://sites.google.com/view/unbound-privacy-policy/home`) must publish the same
+> (`https://mindglowstudios.web.app/unbound-privacy-policy`) must publish the same
 > address — Play cross-checks the in-app link, the Console field and the page.
 
 ---

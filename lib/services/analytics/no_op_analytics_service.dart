@@ -66,4 +66,8 @@ class NoOpAnalyticsService implements AnalyticsService {
       {required String action, required int level}) async {}
   @override
   Future<void> logReviewManualSettingsTapped() async {}
+  @override
+  Future<void> logShareAppTapped({required String source}) async {}
+  @override
+  Future<void> logFeedbackTapped() async {}
 }

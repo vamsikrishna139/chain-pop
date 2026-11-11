@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:in_app_review/in_app_review.dart';
 
 import '../../services/analytics/analytics_locator.dart';
+import '../../services/app_share_actions.dart';
 import 'privacy_ads_settings_section.dart';
 import 'purchases_settings_section.dart';
 
@@ -90,6 +91,27 @@ Future<void> showHomeSettingsSheet({
                   Divider(color: Colors.white.withValues(alpha: 0.1)),
                   const SizedBox(height: 8),
                   _RateAppTile(accent: accent),
+                  _SettingsActionTile(
+                    accent: accent,
+                    icon: Icons.share_rounded,
+                    label: 'Share Unbound',
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      unawaited(AppShareActions.shareApp(source: 'settings'));
+                    },
+                  ),
+                  _SettingsActionTile(
+                    accent: accent,
+                    icon: Icons.mail_outline_rounded,
+                    label: 'Send feedback',
+                    onPressed: () {
+                      // Resolve the messenger before the sheet closes so the
+                      // no-email-app snackbar still has a live context.
+                      final rootContext = Navigator.of(sheetContext).context;
+                      Navigator.pop(sheetContext);
+                      unawaited(AppShareActions.sendFeedback(rootContext));
+                    },
+                  ),
                   if (onResetGameData != null) ...[
                     const SizedBox(height: 16),
                     Divider(color: Colors.white.withValues(alpha: 0.1)),
@@ -142,7 +164,45 @@ class _RateAppTile extends StatelessWidget {
       label: Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          'Rate Chain Pop',
+          'Rate Unbound',
+          style: GoogleFonts.rajdhani(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Plain icon + label row matching [_RateAppTile]'s style.
+class _SettingsActionTile extends StatelessWidget {
+  final Color accent;
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  const _SettingsActionTile({
+    required this.accent,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton.icon(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      ),
+      icon: Icon(icon, color: accent, size: 20),
+      label: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          label,
           style: GoogleFonts.rajdhani(
             color: Colors.white,
             fontWeight: FontWeight.w700,
