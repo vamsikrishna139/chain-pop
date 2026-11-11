@@ -46,4 +46,8 @@ abstract class AnalyticsService {
   Future<void> logReviewPromptAction(
       {required String action, required int level});
   Future<void> logReviewManualSettingsTapped();
+
+  /// [source]: 'menu', 'settings' or 'win_panel'.
+  Future<void> logShareAppTapped({required String source});
+  Future<void> logFeedbackTapped();
 }

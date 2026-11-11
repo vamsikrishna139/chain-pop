@@ -151,4 +151,11 @@ class FirebaseAnalyticsService implements AnalyticsService {
   @override
   Future<void> logReviewManualSettingsTapped() =>
       logEvent('review_manual_settings_tapped');
+
+  @override
+  Future<void> logShareAppTapped({required String source}) =>
+      logEvent('share_app_tapped', parameters: {'source': source});
+
+  @override
+  Future<void> logFeedbackTapped() => logEvent('feedback_tapped');
 }
