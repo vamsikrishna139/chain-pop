@@ -65,6 +65,16 @@
         <meta-data
             android:name="firebase_analytics_collection_enabled"
             android:value="false"/>
+        <!-- Analytics never collects the advertising ID and never sends ad
+             personalization signals. AdMob still uses the ad ID for ads; this
+             only keeps it out of Analytics, which the privacy policy (§3)
+             promises. Guarded by test/config/analytics_manifest_flags_test. -->
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false"/>
+        <meta-data
+            android:name="google_analytics_default_allow_ad_personalization_signals"
+            android:value="false"/>
         <meta-data
             android:name="com.google.android.gms.version"
             android:value="@integer/google_play_services_version"/>
