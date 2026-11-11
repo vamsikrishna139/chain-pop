@@ -30,8 +30,8 @@ App version: … · Platform: …
 
 | Provider | Look up by | Delete how | Notes |
 |---|---|---|---|
-| Google Analytics 4 (Firebase `unbound-667b8`) | `app_instance_id` = Support ID | Explore → User explorer → search the ID → **Delete user** | Gone from reports in ~72 h, fully deleted in ~63 days |
-| RevenueCat | App User ID (`$RCAnonymousID:…`) | Customer page → **Delete customer** | Only RevenueCat's copy. Google Play keeps its order history |
+| Google Analytics 4 (Firebase `unbound-667b8`) | `app_instance_id` = Support ID | Explore → User explorer → filter *Effective user ID* = the ID → open it → **Delete user** (person-with-× icon, not the trash can) | Gone from reports in ~72 h, fully deleted in ~63 days |
+| RevenueCat | App User ID (`$RCAnonymousID:…`) | Search the ID (it may match as an alias) → customer page → **Manage → Delete Customer** | Only RevenueCat's copy. Google Play keeps its order history |
 | Crashlytics | — | Can't delete per user | Not linked to the Support ID; expires after ~90 days |
 | Google Play Games | — | The player manages it at myaccount.google.com | We hold no copy |
 | AdMob | — | The player resets or deletes their advertising ID on the device | Google is the controller for ad data |

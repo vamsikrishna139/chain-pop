@@ -50,14 +50,21 @@ star it until you've replied.
 
 1. Open **analytics.google.com** and select the **Unbound** GA4 property (the one
    linked to Firebase `unbound-667b8`).
-2. Go to **Explore**, then open a **User explorer** exploration. If none exists,
-   create one from the **User explorer** template.
+2. Go to **Explore** (left rail), then open the saved **User explorer**
+   exploration. If none exists, click the **User explorer** template; it saves
+   itself as a new exploration you can reuse.
 3. Set the date range to the **largest allowed** (retention is 2 months), so
-   older activity isn't hidden.
-4. Search for the full **Support ID** in the search box. App users are listed
-   by **App-instance ID**.
-5. Open the matching row. In the user's activity view, use the **Delete user**
-   action (trash icon, top right) and confirm.
+   older activity isn't hidden. The range ends **yesterday**: an ID first seen
+   today won't appear until tomorrow.
+4. The table has **no search box**. Under **Filters** (Settings column), add
+   the dimension **Effective user ID**, set it to *exactly matches*, and paste
+   the full **Support ID**. For app users the Effective user ID *is* the
+   App Instance ID. With only a few users you can also just scan the
+   **Effective user ID** column.
+5. Click the matching ID to open the user's activity view. Use **Delete user**:
+   the **person-with-an-×** icon at the top right of the exploration toolbar.
+   **Don't use the trash-can icon next to it**: that deletes the exploration
+   tab, not the user. Confirm the dialog.
 6. **If no row matches:** the ID has no data still within retention, or the
    player never sent any analytics. That counts as done. Write "no data
    found" in the log.
@@ -96,11 +103,18 @@ exact request against Google's current docs the first time you use it.
 1. Open **app.revenuecat.com**, select the **Unbound** project, then go to
    **Customers**.
 2. Paste the full **Purchase ID** (including `$RCAnonymousID:`) into the search
-   box.
-3. Open the customer. Note whether they have the ad-free entitlement; you
-   mention it in the reply.
-4. Use **Delete customer** (in the customer page's actions menu, `⋯`) and
-   confirm.
+   box (top bar, `⌘K`). Turn on **Sandbox data** first if the purchase was a
+   test purchase.
+3. **The result may show a different ID.** A reinstall or "Restore purchases"
+   adds the new ID as an **alias** of the original customer, and search finds
+   the customer from any alias. Open the result and check that the Purchase ID
+   is listed under **App User IDs** (as *Original* or *Alias #n*). That's the
+   right customer.
+4. Note whether they have the ad-free entitlement (**Entitlements → Unbound
+   Pro**); you mention it in the reply.
+5. Scroll to the bottom of the customer page. Under **Manage**, click
+   **Delete Customer** and confirm. This deletes the customer **with all of
+   its aliases**, which is what the player asked for.
 
 ### 3b. By Play order ID (no Purchase ID given)
 
@@ -167,9 +181,11 @@ out of the repo and out of chat.
 ## First-time setup (once, before the first real request)
 
 - [ ] Practise steps 2a and 3a end to end on your own Pixel's IDs.
-- [ ] Confirm GA4 retention is **2 months**, Google Signals is **off**, and
+- [x] Confirm GA4 retention is **2 months**, Google Signals is **off**, and
       there's **no Ads link**. The privacy policy states all three.
-- [ ] Create the Gmail filter: subject `Privacy Inquiry - Unbound` gets the
-      label `privacy`.
+      *(Done 2026-11-11: event + user retention 2 months, reset-on-activity
+      off; Signals off; no Google Ads or AdMob links.)*
+- [x] Create the Gmail filter: subject `Privacy Inquiry - Unbound` gets the
+      label `privacy`. *(Done 2026-11-11.)*
 - [ ] If you'll use the APIs, note where the OAuth client and RevenueCat
       secret key live, outside the repo.
