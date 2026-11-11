@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../game/daily_challenge.dart';
 import '../game/levels/generation/difficulty_mode.dart';
-import '../game/levels/level_manager.dart';
 import '../models/difficulty.dart';
 import '../navigation/app_route_observer.dart';
 import '../services/ads/ad_service_factory.dart';
@@ -13,6 +12,7 @@ import '../services/game_audio_scope.dart';
 import '../services/game_sfx.dart';
 import '../game/levels/tutorial_levels.dart';
 import '../services/storage/storage_locator.dart';
+import '../services/storage/local_progress_reset.dart';
 import '../theme/app_colors.dart';
 import '../utils/progress_format.dart';
 import 'achievements_screen.dart';
@@ -154,10 +154,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
       ),
     );
     if (confirm == true) {
-      await StorageLocator.instance.clearProgress();
-      // The box wipe drops the persisted diversity history; drop the live
-      // copy too, or this session's boards would be re-saved on the next level.
-      LevelManager.generator.diversityLedger.clear();
+      await resetLocalProgress();
       if (!mounted) return;
       setState(() => _selected = StorageLocator.instance.selectedDifficulty);
     }
@@ -280,6 +277,11 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                   context: context,
                   accent: _selected.color,
                   onResetGameData: _confirmReset,
+                  onDataDeleted: () {
+                    if (!mounted) return;
+                    setState(() => _selected =
+                        StorageLocator.instance.selectedDifficulty);
+                  },
                 );
               },
             ),

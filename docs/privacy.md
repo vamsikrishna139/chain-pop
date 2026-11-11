@@ -1,6 +1,6 @@
 # Privacy Policy — Unbound
 
-**Effective date:** October 9, 2026
+**Effective date:** November 11, 2026
 
 This policy explains what happens to data when you play **Unbound**
 (package `com.adbkv.chainpop`), published on Google Play by **MindGlow Studios**
@@ -77,8 +77,11 @@ succeeded and failed, premium restored, daily challenge opened and completed, an
 achievement unlocks. Firebase also records device model, OS version, app version,
 and derives approximate region from your IP address.
 
-Identifier used: the **Firebase App Instance ID**. We do not enable Google
-Signals or link analytics to Google advertising products.
+Identifier used: the **Firebase App Instance ID**, a random ID for this
+install of the app. The app shows its first characters as your **Support ID**
+(see §9). Analytics is configured not to collect your device's advertising ID
+and not to use ad personalization signals. We do not enable Google Signals or
+link analytics to Google advertising products.
 
 **Analytics is off until consent is checked.** The app starts with analytics
 collection disabled. In the EEA, UK and Switzerland it is switched on only if
@@ -96,7 +99,9 @@ or hits a handled error, a report is sent containing the stack trace, device sta
 OS and app version, and a **Crashlytics installation UUID**. We do not
 deliberately attach names, email addresses or other direct identifiers to crash
 reports. Crashlytics is a service provider processing on our behalf, and crash
-data is retained by Google for roughly 90 days.
+data is retained by Google for roughly 90 days. Crash reports are **not linked
+to your Support ID** and cannot be deleted individually; they expire on their
+own after that period.
 
 Crash collection is disabled in development builds and enabled in released builds.
 
@@ -152,8 +157,7 @@ build. We do not collect precise location.
 
 - **On your device:** local game data stays until you clear it, clear the app's
   storage, or uninstall.
-- **Firebase Analytics:** retained per the retention window configured in the
-  Firebase console (2 or 14 months).
+- **Firebase Analytics:** 2 months.
 - **Firebase Crashlytics:** approximately 90 days.
 - **RevenueCat:** purchase records retained until deletion is requested.
 - **AdMob and Google Play:** per Google's own policies, linked below.
@@ -193,13 +197,44 @@ Be clear about what it does and does not do:
   [myaccount.google.com](https://myaccount.google.com).
 - **Uninstall** — removes all locally stored game data.
 
-### Requesting deletion
+### Your Support ID
 
-Because there is no account, there is nothing for us to look up by identity. For
-anything held by our service providers — most practically your RevenueCat purchase
-record — email us at the address in §15 and we will action the request. Include
-enough detail (for example, your Google Play order ID) for us to locate the
-record.
+**Settings → Privacy & Ads → Privacy rights** shows a short **Support ID** for
+this install (the start of its Firebase App Instance ID) with a copy button. The
+"Request a copy of my data" and "Other request" buttons there open an email to
+us pre-filled with the full Support ID and, if you have one, your RevenueCat
+purchase ID, so we can find your data at our providers. If you declined analytics
+consent, there is no analytics ID and the screen says "None": we hold no
+analytics data linked to this install. Turning "Share usage analytics" off
+stops new collection but keeps the ID, so you can still use it to ask us to
+delete data collected before you turned it off.
+
+### "Delete my data" (in-app)
+
+**Settings → Privacy & Ads → Privacy rights → Delete my data** (from the home
+screen), then confirm. It:
+
+- erases all local game data on this device (the same data as "Reset Game Data");
+- **resets your analytics ID**, so anything collected later is not linked to
+  what was collected before, and deletes unsent crash reports;
+- keeps your **ad-free purchase** and your **privacy choices** (your analytics
+  switch and ad consent), so deleting data never quietly turns analytics back
+  on or takes back something you paid for;
+- then offers to send us a **pre-filled deletion request** carrying your
+  previous Support ID and purchase ID.
+
+Copies already held by Google Analytics and RevenueCat can't be deleted from
+your phone. When we receive the request we delete them at those providers:
+Analytics data by App Instance ID, and your RevenueCat customer record. Google
+Play keeps its own order history under Google's policies. Achievements are
+managed in your Google Play Games profile at
+[myaccount.google.com](https://myaccount.google.com).
+
+### Requesting deletion by email
+
+You can also email us at the address in §15 without using the app. Include your
+**Support ID** (and purchase ID if you have one) so we can locate your records;
+a Google Play order ID also helps for purchase records.
 
 ---
 
@@ -238,8 +273,9 @@ of your data for personalised ads may count as "sharing" or "targeted
 advertising" under those laws. You can opt out using your device's **Delete
 advertising ID / Opt out of Ads Personalization** setting, or contact us.
 
-Because the app has no account, we may ask for details (for example a Google
-Play order ID) to locate a record. We answer requests within one month.
+Because the app has no account, include your **Support ID** (Settings →
+Privacy & Ads → Privacy rights) so we can locate your records. We answer
+requests within 30 days.
 
 ## 13. Children
 
