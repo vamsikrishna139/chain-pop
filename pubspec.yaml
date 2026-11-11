@@ -2,7 +2,7 @@ name: chain_pop
 description: "A minimalist logic puzzle extraction game."
 publish_to: 'none'
 
-version: 1.0.0+5
+version: 1.0.0+7
 
 environment:
   sdk: '>=3.3.0 <4.0.0'

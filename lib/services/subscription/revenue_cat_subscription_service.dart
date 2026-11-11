@@ -8,6 +8,7 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 import '../../config/subscription_config.dart';
 import '../ads/ads_locator.dart';
 import '../analytics/analytics_locator.dart';
+import '../crash_reporting.dart';
 import '../storage/storage_locator.dart';
 import 'subscription_service.dart';
 
@@ -56,7 +57,13 @@ class RevenueCatSubscriptionService implements SubscriptionService {
       }
     } else {
       if (!kDebugMode) {
-        throw StateError('RevenueCat API key not found in release mode.');
+        // Degrade, don't die: a missing key must not block app startup.
+        // Premium stays off (or the cached value); report it non-fatally.
+        recordNonFatal(
+          StateError('RevenueCat API key not found in release mode.'),
+          StackTrace.current,
+        );
+        return;
       }
       developer.log(
         'RevenueCat API key not found in environment. Subscriptions disabled.',
