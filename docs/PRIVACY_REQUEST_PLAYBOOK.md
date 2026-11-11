@@ -55,6 +55,8 @@ App version: … · Platform: …
 
 ## Deletion request: reply template
 
+Step-by-step deletion for a given ID: [DELETE_MY_DATA_RUNBOOK.md](DELETE_MY_DATA_RUNBOOK.md).
+
 > Subject: Re: Privacy Inquiry - Unbound
 >
 > Hi,
