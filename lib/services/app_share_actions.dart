@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -13,9 +15,6 @@ import 'analytics/analytics_locator.dart';
 abstract final class AppShareActions {
   static const playStoreUrl =
       'https://play.google.com/store/apps/details?id=com.adbkv.chainpop';
-
-  /// Shown in the feedback email subject so reports name the build.
-  static const appVersion = '1.0.0+8';
 
   /// Opens the system share sheet with a short pitch and the store link.
   static Future<void> shareApp({required String source}) async {
@@ -40,15 +39,14 @@ abstract final class AppShareActions {
     unawaited(AnalyticsLocator.instance.logFeedbackTapped());
     final messenger = ScaffoldMessenger.maybeOf(context);
     const email = ChainPopLegal.supportEmail;
-    final os = Platform.isAndroid
-        ? 'Android ${Platform.operatingSystemVersion}'
-        : Platform.operatingSystemVersion;
+    final version = await _appVersion();
+    final device = await _deviceDescription();
     final uri = Uri(
       scheme: 'mailto',
       path: email,
       query: _encodeQuery({
-        'subject': 'Unbound feedback (v$appVersion)',
-        'body': '\n\n---\nApp: $appVersion\nDevice: $os\n',
+        'subject': 'Unbound feedback (v$version)',
+        'body': '\n\n---\nApp: $version\nDevice: $device\n',
       }),
     );
     var opened = false;
@@ -61,6 +59,33 @@ abstract final class AppShareActions {
             content: Text('No email app found. Write to us at $email')),
       );
     }
+  }
+
+  /// e.g. "1.0.0+8"; read from the build so it never goes stale.
+  static Future<String> _appVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return '${info.version}+${info.buildNumber}';
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  /// e.g. "Google Pixel 8a, Android 16 (API 36)".
+  static Future<String> _deviceDescription() async {
+    try {
+      final plugin = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        final a = await plugin.androidInfo;
+        return '${a.manufacturer} ${a.model}, '
+            'Android ${a.version.release} (API ${a.version.sdkInt})';
+      }
+      if (Platform.isIOS) {
+        final i = await plugin.iosInfo;
+        return '${i.utsname.machine}, ${i.systemName} ${i.systemVersion}';
+      }
+    } catch (_) {}
+    return Platform.operatingSystemVersion;
   }
 
   // Uri(queryParameters:) encodes spaces as '+', which many mail apps show
