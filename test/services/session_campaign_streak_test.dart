@@ -30,5 +30,15 @@ void main() {
       SessionCampaignStreak.reset();
       expect(SessionCampaignStreak.wins, 0);
     });
+
+    test('default tracker reads and writes the same static count', () {
+      const tracker = DefaultCampaignStreakTracker();
+      tracker.onCampaignWin();
+      tracker.onCampaignWin();
+      expect(tracker.wins, 2);
+      expect(SessionCampaignStreak.wins, 2);
+      tracker.resetSession();
+      expect(tracker.wins, 0);
+    });
   });
 }

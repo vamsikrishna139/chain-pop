@@ -24,9 +24,20 @@ abstract final class PlayGamesBootstrap {
   static bool get _supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+  /// Debug builds keep achievements local by default. A debug install signs in
+  /// with the developer's real Play Games account, so every test session used
+  /// to unlock achievements on that real profile (and made achievement fixes
+  /// impossible to re-test). Opt back in with
+  /// `--dart-define=PGS_IN_DEBUG=true` when testing the Play Games sync itself.
+  static const bool liveSyncInThisBuild =
+      !kDebugMode || bool.fromEnvironment('PGS_IN_DEBUG');
+
   /// Installs the tracker, and listens for the background auto sign-in.
-  static void install({PlayGamesAuth? auth}) {
-    if (!_supported) {
+  ///
+  /// With [liveSync] false the tracker is local-only, exactly as on platforms
+  /// without Play Games: nothing is written to the player's Play Games profile.
+  static void install({PlayGamesAuth? auth, bool liveSync = true}) {
+    if (!_supported || !liveSync) {
       AchievementsLocator.install(AchievementTracker());
       return;
     }

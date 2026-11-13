@@ -13,6 +13,11 @@ import '../levels/level.dart';
 /// Rectangular boards (null [LevelData.playCells]) get the same tile grid so
 /// every level sits on a visible "chassis" instead of floating in a void.
 ///
+/// Portal cells ([LevelData.portalPairs]) are drawn here too, as a ring with
+/// the pair's number at both ends. The number, not just the colour, is what
+/// pairs them, so the cue survives colourblind play. A portal used to be
+/// invisible until a ray happened to cross it (audit P1-6c).
+///
 /// The whole layer is static for a given layout, so it is recorded once into a
 /// [ui.Picture] and replayed each frame — zero per-frame iteration cost.
 class BoardMaskComponent extends PositionComponent {
@@ -109,7 +114,55 @@ class BoardMaskComponent extends PositionComponent {
       }
     }
 
+    _drawPortals(canvas);
+
     return recorder.endRecording();
+  }
+
+  /// One hue per pair; the number carries the pairing on its own.
+  static const List<Color> _portalColors = [
+    Color(0xFFB388FF),
+    Color(0xFF4DD0E1),
+    Color(0xFFFFB74D),
+  ];
+
+  void _drawPortals(Canvas canvas) {
+    final pairs = levelData.portalPairs;
+    for (var i = 0; i < pairs.length; i++) {
+      final color = _portalColors[i % _portalColors.length];
+      final p = pairs[i];
+      for (final (x, y) in [(p.x1, p.y1), (p.x2, p.y2)]) {
+        final c = Offset((x + 0.5) * cellSize, (y + 0.5) * cellSize);
+        canvas
+          ..drawCircle(
+            c,
+            cellSize * 0.34,
+            Paint()
+              ..color = color.withValues(alpha: 0.30)
+              ..maskFilter = MaskFilter.blur(BlurStyle.normal, cellSize * 0.10),
+          )
+          ..drawCircle(
+            c,
+            cellSize * 0.30,
+            Paint()
+              ..color = color
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = cellSize * 0.07,
+          );
+        final label = TextPainter(
+          text: TextSpan(
+            text: '${i + 1}',
+            style: TextStyle(
+              color: color,
+              fontSize: cellSize * 0.32,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        label.paint(canvas, c - Offset(label.width / 2, label.height / 2));
+      }
+    }
   }
 
   @override

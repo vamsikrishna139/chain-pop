@@ -127,6 +127,27 @@ class RayPreviewComponent extends PositionComponent
           ..style = PaintingStyle.stroke
           ..strokeWidth = (cellSize * 0.05).clamp(1.5, 3.5),
       );
+
+      if (game.colorblindPalette) {
+        // Non-colour cue: high-contrast stop "X" across the blocker cell so
+        // obstructed ray endpoints are obvious without amber tint discrimination.
+        final xPaint = Paint()
+          ..color = Colors.white.withValues(alpha: 0.9 * intensity)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = (cellSize * 0.045).clamp(1.5, 3.0)
+          ..strokeCap = StrokeCap.round;
+        final span = half * 0.5;
+        canvas.drawLine(
+          Offset(end.dx - span, end.dy - span),
+          Offset(end.dx + span, end.dy + span),
+          xPaint,
+        );
+        canvas.drawLine(
+          Offset(end.dx - span, end.dy + span),
+          Offset(end.dx + span, end.dy - span),
+          xPaint,
+        );
+      }
     }
   }
 
@@ -174,6 +195,17 @@ class RayPreviewComponent extends PositionComponent
           Offset(start.dx + unitX * next, start.dy + unitY * next),
           paint,
         );
+        if (game.colorblindPalette) {
+          final mid = (traveled + next) * 0.5;
+          final pipPaint = Paint()
+            ..color = Colors.white.withValues(alpha: 0.9 * intensity)
+            ..style = PaintingStyle.fill;
+          canvas.drawCircle(
+            Offset(start.dx + unitX * mid, start.dy + unitY * mid),
+            (cellSize * 0.02).clamp(1.0, 2.0),
+            pipPaint,
+          );
+        }
       }
       traveled = next;
       drawing = !drawing;

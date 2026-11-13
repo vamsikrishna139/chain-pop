@@ -601,7 +601,11 @@ BoardRow measure(
   required int sector,
   required String worldName,
 }) {
-  final m = LevelMetrics.compute(level, includeViablePath: true);
+  final m = LevelMetrics.compute(
+    level,
+    includeViablePath: true,
+    includeSearchEffort: true,
+  );
   final topo = LevelTopologyMetrics.compute(level);
 
   var minX = 1 << 30, minY = 1 << 30, maxX = -1, maxY = -1;

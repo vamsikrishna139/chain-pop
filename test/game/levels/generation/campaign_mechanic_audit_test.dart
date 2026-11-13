@@ -129,7 +129,9 @@ void main() {
 
     expect(budget.coreCount, equals(3));
     expect(budget.lockCount, equals(2));
-    expect(budget.relayCount, equals(2));
+    // Budgeted 2, clamped to 1 while `CampaignMechanic.multiRelay` is off:
+    // the two-relay softlock predicate is unsound (see progression_profile).
+    expect(budget.relayCount, equals(1));
     expect(budget.phaseGateCount, equals(2));
   });
 }

@@ -582,11 +582,21 @@ class _ChapterGrid extends StatelessWidget {
         final isNext = levelId == highestUnlocked + 1;
         final isFrontier = isUnlocked && levelId == highestUnlocked;
         final starCount = StorageLocator.instance.stars(mode, levelId);
+        final statusLabel = isFrontier
+            ? 'active frontier'
+            : (isUnlocked
+                ? '$starCount stars'
+                : (isNext ? 'next level' : 'locked'));
 
-        return InkWell(
-          onTap: (isUnlocked || isNext) ? () => onTap(levelId) : null,
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
+        return Semantics(
+          label: 'Level $levelId, $statusLabel',
+          // The upcoming tile is a preview only. It used to be playable, and
+          // winning it unlocked the one after — a free skip-ahead chain.
+          button: isUnlocked,
+          child: InkWell(
+            onTap: isUnlocked ? () => onTap(levelId) : null,
+            borderRadius: BorderRadius.circular(12),
+            child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             padding: const EdgeInsets.all(5),
             decoration: BoxDecoration(
@@ -656,8 +666,10 @@ class _ChapterGrid extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.play_arrow_rounded,
-                        size: 14, color: Colors.white70),
+                    // Lock, not play: this tile previews the next level but
+                    // is not tappable until the frontier is cleared.
+                    child: const Icon(Icons.lock_open_rounded,
+                        size: 14, color: Colors.white38),
                   )
                 else
                   const Icon(Icons.lock_rounded,
@@ -674,8 +686,9 @@ class _ChapterGrid extends StatelessWidget {
               ],
             ),
           ),
-        );
-      },
+        ),
+      );
+    },
     );
   }
 }

@@ -16,6 +16,7 @@ import '../../services/analytics/analytics_locator.dart';
 import '../../services/game_sfx.dart';
 import '../../services/review/review_coordinator.dart';
 import '../../services/session_campaign_streak.dart';
+import '../../services/storage/storage_locator.dart';
 import '../../services/subscription/subscription_locator.dart';
 import '../game_screen.dart';
 import '../widgets/review_soft_prompt_sheet.dart';
@@ -68,7 +69,7 @@ final class GameFlowController {
           jamCount: result.jamCount,
           undosUsed: result.undosUsed,
           hintsUsed: _host.hintAdPolicy.hintsUsedThisAttempt,
-          networkIntegrity: _host.engine.networkIntegrity,
+          networkIntegrity: _host.engine.integrityAtWin,
           nodeCount: data.nodes.length,
           coreCount: data.coreCount,
           lockCount: data.lockCount,
@@ -174,7 +175,7 @@ final class GameFlowController {
         isWin: true,
         isDailyChallenge: false,
         isTutorial: false,
-        winStreak: SessionCampaignStreak.wins,
+        winStreak: _host.streak.wins,
         isInterstitialDue: _interstitialLikelyDue(),
       );
     }
@@ -185,6 +186,7 @@ final class GameFlowController {
       _host.earnedStars = earned;
       _host.quickWin = quick;
       _host.autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
+      _host.autoAdvanceHeld = false;
     });
     if (goalCompleted) _host.showGoalCompleteToast();
 
@@ -208,11 +210,9 @@ final class GameFlowController {
       return;
     }
 
+    // Last tutorial card: no timer. It used to bounce to the menu after 3 s;
+    // the win panel now offers START CAMPAIGN (see [startCampaignFromTutorial]).
     if (_host.isTutorial && _host.tutorialIndex == tutorialLevels.length - 1) {
-      _host.timers.tutorialExitTimer?.cancel();
-      _host.timers.tutorialExitTimer = Timer(const Duration(seconds: 3), () {
-        if (_host.mounted) _host.goMenu();
-      });
       return;
     }
 
@@ -238,6 +238,7 @@ final class GameFlowController {
   /// [goNextLevel].
   void _startWinAutoAdvance() {
     if (!_host.mounted || !_host.hasWon || _host.goingNext) return;
+    if (_host.autoAdvanceHeld) return;
     _host.timers.autoAdvanceDelayTimer?.cancel();
     _host.timers.autoAdvanceTimer?.cancel();
     _host.timers.autoAdvanceDelayTimer = Timer(
@@ -246,7 +247,10 @@ final class GameFlowController {
         if (!_host.mounted || !_host.hasWon || _host.goingNext) return;
         _host.timers.autoAdvanceTimer =
             Timer.periodic(const Duration(seconds: 1), (t) {
-          if (!_host.mounted || !_host.hasWon || _host.goingNext) {
+          if (!_host.mounted ||
+              !_host.hasWon ||
+              _host.goingNext ||
+              _host.autoAdvanceHeld) {
             t.cancel();
             return;
           }
@@ -290,7 +294,10 @@ final class GameFlowController {
     if (_host.isTutorial || _host.isDailyChallenge) return false;
     // Premium users never see interstitials.
     if (SubscriptionLocator.isPremiumNow) return false;
-    return SessionCampaignStreak.wins >=
+    // Read through the injected tracker — the win is recorded through it
+    // (see `_host.streak.onCampaignWin()`), so an injected tracker must also
+    // be the one this prediction sees.
+    return _host.streak.wins >=
         SessionCampaignStreak.interstitialStreakThreshold(_host.difficulty);
   }
 
@@ -314,6 +321,7 @@ final class GameFlowController {
       _host.earnedStars = 0;
       _host.timeLeftSec = _host.timeLimitSec;
       _host.autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
+      _host.autoAdvanceHeld = false;
       _host.stopwatch
         ..reset()
         ..start();
@@ -403,13 +411,40 @@ final class GameFlowController {
     }
   }
 
+  /// Final tutorial card → straight into the Easy campaign at its frontier.
+  void startCampaignFromTutorial() {
+    if (!_host.mounted || _host.goingNext) return;
+    _host.goingNext = true;
+    cancelWinAdvanceTimers();
+    final frontier =
+        StorageLocator.instance.highestUnlocked(DifficultyMode.easy);
+    unawaited(
+        StorageLocator.instance.setSelectedDifficulty(DifficultyMode.easy));
+    Navigator.of(_host.context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => GameScreen(
+          level: frontier,
+          difficulty: DifficultyMode.easy,
+          adService: _host.adServiceOverride,
+          audioHandleFactory: _host.audioHandleFactory,
+          progressStore: _host.progressStoreOverride,
+          campaignStreak: _host.campaignStreakOverride,
+          sessionPacing: _host.sessionPacingOverride,
+        ),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 350),
+      ),
+    );
+  }
+
   void goMenu() {
     if (!_host.hasWon && !_host.engine.isGameOver) {
       AnalyticsLocator.instance.logLevelAbandon(params: _host.analyticsParams);
     }
     _host.streak.resetSession();
     _host.pacing.resetSession();
-    _host.goals.resetSession();
+    _host.goals.onReturnToMenu();
     _host.timers.tutorialExitTimer?.cancel();
     cancelWinAdvanceTimers();
     _host.goingNext = false;

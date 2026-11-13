@@ -13,6 +13,7 @@ import 'retrograde_placement.dart';
 import 'sightline_table.dart';
 import 'difficulty_profile.dart';
 import 'metrics.dart';
+import 'progression_profile.dart';
 
 /// Constructs a fully solvable level from the **empty** board outward, in
 /// reverse extraction order (last-removed first).
@@ -95,6 +96,10 @@ class RetrogradeConstructor {
   /// The portals placed during construction.
   final List<PortalPair> placedPortals = [];
 
+  /// [silhouette] minus portal cells: where nodes may actually go. A node on a
+  /// portal cell would hide the portal and block its own warp.
+  late Set<int> _placementMask;
+
   static const Map<DifficultyTier, int> _maxOpeningByTier = {
     DifficultyTier.easy: 10,
     DifficultyTier.medium: 8,
@@ -172,6 +177,7 @@ class RetrogradeConstructor {
     if (reservations.length > targetNodeCount) return null;
 
     placedPortals.clear();
+    _placementMask = silhouette;
     if (portalPairCount > 0) {
       final availableCells = silhouette.where((c) {
         for (final m in motifPlacements) {
@@ -182,20 +188,47 @@ class RetrogradeConstructor {
         return true;
       }).toList();
 
+      // Runs whether or not portals are live, so the RNG stream — and every
+      // board built from it — is the same as Gen V1 with the switch off.
       availableCells.shuffle(random);
-      int portalsCreated = 0;
 
-      while (portalsCreated < portalPairCount && availableCells.length >= 2) {
-        final c1 = availableCells.removeLast();
-        final c2 = availableCells.removeLast();
-        placedPortals
-            .add(PortalPair(c1 % 1000, c1 ~/ 1000, c2 % 1000, c2 ~/ 1000));
-        portalsCreated++;
-      }
-
-      if (placedPortals.isNotEmpty) {
-        sightlines = SightlineTable.forGrid(gridWidth, gridHeight,
-            portals: placedPortals);
+      if (PortalRollout.enabled) {
+        final portalCells = <int>{};
+        while (placedPortals.length < portalPairCount &&
+            availableCells.length >= 2 &&
+            // Portal cells hold no node, so keep room for the full target.
+            silhouette.length - portalCells.length - 2 >= targetNodeCount) {
+          final c1 = availableCells.removeLast();
+          final c2 = availableCells.removeLast();
+          placedPortals.add(PortalPair(
+              gridCellX(c1), gridCellY(c1), gridCellX(c2), gridCellY(c2)));
+          portalCells
+            ..add(c1)
+            ..add(c2);
+        }
+        if (placedPortals.isNotEmpty) {
+          sightlines = SightlineTable.forGrid(gridWidth, gridHeight,
+              portals: placedPortals);
+          _placementMask = silhouette.difference(portalCells);
+        }
+      } else {
+        // Gen V1, byte-for-byte, until the Gen V2 flip. The base-1000 decode
+        // is wrong (audit P1-6a) but not inert: cells on row 0 decode
+        // correctly, so these half-portals steer construction, and the frozen
+        // corpus plus ~12% of Dailies depend on that. `enrichLevel` strips
+        // them before anything ships. Delete this branch at the flip.
+        var created = 0;
+        while (created < portalPairCount && availableCells.length >= 2) {
+          final c1 = availableCells.removeLast();
+          final c2 = availableCells.removeLast();
+          placedPortals
+              .add(PortalPair(c1 % 1000, c1 ~/ 1000, c2 % 1000, c2 ~/ 1000));
+          created++;
+        }
+        if (placedPortals.isNotEmpty) {
+          sightlines = SightlineTable.forGrid(gridWidth, gridHeight,
+              portals: placedPortals, legacyGenV1: true);
+        }
       }
     }
 
@@ -317,7 +350,7 @@ class RetrogradeConstructor {
     final frontier = FrontierSet(
       gridWidth: gridWidth,
       gridHeight: gridHeight,
-      silhouette: silhouette,
+      silhouette: _placementMask,
       eightConnected: eightConnected,
     );
     final blacklist = <int>{};
@@ -328,7 +361,7 @@ class RetrogradeConstructor {
       final state = ConstructionState(
         gridWidth: gridWidth,
         gridHeight: gridHeight,
-        silhouette: silhouette,
+        silhouette: _placementMask,
         placed: placed,
         frontier: frontier,
         sightlines: sightlines,
@@ -386,7 +419,7 @@ class RetrogradeConstructor {
     final frontier = FrontierSet(
       gridWidth: gridWidth,
       gridHeight: gridHeight,
-      silhouette: silhouette,
+      silhouette: _placementMask,
       eightConnected: eightConnected,
     );
     final blacklist = <int>{};
@@ -565,7 +598,7 @@ class RetrogradeConstructor {
       final state = ConstructionState(
         gridWidth: gridWidth,
         gridHeight: gridHeight,
-        silhouette: silhouette,
+        silhouette: _placementMask,
         placed: placed,
         frontier: frontier,
         sightlines: sightlines,
@@ -950,6 +983,8 @@ class RetrogradeConstructor {
       gridWidth: gridWidth,
       gridHeight: gridHeight,
       nodes: nodes,
+      // Gen V1 validated on a portal-free probe; keep that while dark.
+      portalPairs: PortalRollout.enabled ? placedPortals : const [],
     );
     final profile = computeWavePeelingProfile(level);
     return profile.isEmpty ? 0 : profile.first;
@@ -985,6 +1020,8 @@ class RetrogradeConstructor {
       gridWidth: gridWidth,
       gridHeight: gridHeight,
       nodes: nodes,
+      // Gen V1 validated on a portal-free probe; keep that while dark.
+      portalPairs: PortalRollout.enabled ? placedPortals : const [],
     );
     final remaining = nodes.map((n) => n.clone()).toList();
     final byId = List<NodeData>.from(nodes)

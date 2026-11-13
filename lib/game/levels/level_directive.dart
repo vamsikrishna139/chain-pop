@@ -55,6 +55,12 @@ const Map<int, List<LevelDirective>> _kSectorDirectivePool = {
   8: [LevelDirective.flawless, LevelDirective.integrity, LevelDirective.swift],
 };
 
+const List<LevelDirective> _kCascadeFallbacks = [
+  LevelDirective.swift,
+  LevelDirective.unaided,
+  LevelDirective.integrity,
+];
+
 LevelDirective directiveFor(
     {required int levelId, required DifficultyMode mode}) {
   final sector = worldForLevel(levelId).sector.mechanicBudgetTier;
@@ -67,9 +73,11 @@ LevelDirective directiveFor(
 
   // Cascade requires cores to clear the board under the moves budget; if this
   // mode/sector generates no cores, the goal is unwinnable, so fall back.
+  // It used to always fall back to SWIFT, so every even Easy level (and all
+  // of Medium sector 1) was a speed goal. Rotate the fallback instead.
   if (chosen == LevelDirective.cascade &&
       budgetFor(levelId: levelId, mode: mode).coreCount == 0) {
-    return LevelDirective.swift;
+    return _kCascadeFallbacks[levelId % _kCascadeFallbacks.length];
   }
   return chosen;
 }
@@ -132,9 +140,14 @@ class LevelResult {
       return 1;
     }
 
-    // Campaign grading: 3 stars if the sector's directive is met, 2 stars if
-    // no jams occurred (where possible), 1 star otherwise.
-    if (meetsDirective(directiveFor(levelId: levelId, mode: mode))) return 3;
+    // Campaign grading: 3 stars if the sector's directive is met *and* the
+    // run was clean (at most one jam), 2 stars if no jams occurred, 1 star
+    // otherwise. Without the jam cap, SWIFT / UNAIDED / CASCADE handed out 3
+    // stars to runs that jammed five times.
+    if (jamCount <= 1 &&
+        meetsDirective(directiveFor(levelId: levelId, mode: mode))) {
+      return 3;
+    }
     if (jamCount == 0) return 2;
     return 1;
   }

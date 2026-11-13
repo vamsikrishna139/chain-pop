@@ -40,6 +40,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   final VoidCallback? onJam;
   final void Function(int removed, int total)? onNodeRemoved;
 
+  /// Fires when the board has nodes left but none can legally be extracted —
+  /// a dead end (only reachable through relay rotations). [GameScreen] offers
+  /// a free undo / restart instead of leaving the player to burn lives.
+  final VoidCallback? onNoMoves;
+
   /// Fires with the new extraction streak on every successful extraction.
   ///
   /// Lets [GameScreen] feed combo milestones to the achievement tracker without
@@ -179,6 +184,10 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   /// When true, background particles drift and animate.
   bool ambientMotion = true;
 
+  /// When true, heavy motion (shake, confetti, cascades, ripples) is replaced
+  /// with calm instant/fade alternatives for motion sensitivity.
+  bool reducedMotion = false;
+
   /// Plays short SFX via the Flutter layer ([GameAudioController]).
   void Function(GameSfx sfx, {double playbackRate})? onSfx;
 
@@ -195,6 +204,12 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   /// Network integrity — starts at 100%; jams reduce it.
   int networkIntegrity = 100;
+
+  /// [networkIntegrity] as it stood the moment the level was won, before the
+  /// core-win resets the live value to 100 for the finale visuals. Achievement
+  /// checks ("Untouchable") must read this, not [networkIntegrity].
+  int get integrityAtWin => _integrityAtWin ?? networkIntegrity;
+  int? _integrityAtWin;
 
   /// Total core nodes on this level (0 when classic clear-all win).
   int get totalCores => levelData.nodes.where((n) => n.isCore).length;
@@ -255,6 +270,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     this.onJam,
     this.onNodeRemoved,
     this.onComboStreak,
+    this.onNoMoves,
     this.preloadedLevel,
     WorldTheme? theme,
     this.topReserved = 140.0,
@@ -340,6 +356,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
           }
         }
       }
+      // The preview is a child of [board], so it leaves with it — but the
+      // reference would survive and pin [rayPreviewActive] true (freezing
+      // ambient motion for the rest of the level), because the NodeComponent
+      // that would deliver the hiding onTapUp is being rebuilt too.
+      hideRayPreview();
       board.removeFromParent();
       _boardLaidOut = false;
     }
@@ -554,6 +575,9 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
   @visibleForTesting
   Set<int> get newlyExtractableForTest => Set.unmodifiable(_newlyExtractable);
 
+  @visibleForTesting
+  void startCascadeFinaleForTest() => _startCascadeFinale();
+
   /// Shows a dotted ray from [node] to the grid edge or first blocker.
   /// [intensity] dims the ray for the touch-down aim guide (vs. a long press).
   void showRayPreview(NodeData node, {double intensity = 1.0}) {
@@ -629,7 +653,13 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     final removed = total - activeNodes.length;
     onNodeRemoved?.call(removed, total);
     checkWinCondition();
+    if (isDeadEnd) onNoMoves?.call();
   }
+
+  /// True when nodes remain, the level is not won, and no node can legally be
+  /// extracted (ray, lock and phase rules all applied via [_extractableIds]).
+  bool get isDeadEnd =>
+      !hasWon && activeNodes.isNotEmpty && _extractableIds.isEmpty;
 
   /// Restoration-trail marker + ring burst + ambient ripple at the vacated
   /// cell. Shared by player extractions and the cascade finale.
@@ -637,6 +667,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _restoredCells.add((data.x, data.y));
     if (!_boardLaidOut || _cellSize <= 0) return;
     _restoredLayer?.addCell(data.x, data.y);
+    if (reducedMotion) return;
     final center = Vector2(
       (data.x + 0.5) * _cellSize,
       (data.y + 0.5) * _cellSize,
@@ -749,6 +780,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     if (usesCoreWin) {
       if (coresRestored >= totalCores) {
         hasWon = true;
+        _integrityAtWin = networkIntegrity;
         networkIntegrity = 100;
         if (_boardLaidOut && activeNodes.isNotEmpty) {
           _startCascadeFinale();
@@ -760,6 +792,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     }
     if (activeNodes.isEmpty && !hasWon) {
       hasWon = true;
+      _integrityAtWin = networkIntegrity;
       onWin();
     }
   }
@@ -776,12 +809,19 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
             (b.x - _lastExtractedX).abs() + (b.y - _lastExtractedY).abs();
         return da.compareTo(db);
       });
-    final step = (1.2 / remaining.length).clamp(0.05, 0.09);
+    final step = reducedMotion
+        ? 0.02
+        : (1.2 / remaining.length).clamp(0.05, 0.09);
     _finaleSchedule.clear();
     for (var i = 0; i < remaining.length; i++) {
-      _finaleSchedule.add((0.15 + i * step, remaining[i].id));
+      _finaleSchedule.add((
+        reducedMotion ? 0.05 + i * step : 0.15 + i * step,
+        remaining[i].id,
+      ));
     }
-    _finaleWinAt = 0.15 + (remaining.length - 1) * step + 0.5;
+    _finaleWinAt = reducedMotion
+        ? (0.05 + remaining.length * step + 0.1)
+        : (0.15 + (remaining.length - 1) * step + 0.5);
     _finaleClock = 0;
     _finaleIndex = 0;
     _finaleActive = true;
@@ -800,7 +840,9 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       _spawnExtractionVisuals(node);
       playSfx(
         GameSfx.pop,
-        playbackRate: (1.0 + _finaleIndex * 0.05).clamp(1.0, 1.6),
+        // Ceiling matches GameAudio.play's clamp; anything above it is
+        // silently flattened there.
+        playbackRate: (1.0 + _finaleIndex * 0.05).clamp(1.0, 1.5),
       );
       for (final comp in board.children.whereType<NodeComponent>()) {
         if (comp.data.id == id) {
@@ -860,6 +902,7 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     hasWon = false;
     isGameOver = false;
     networkIntegrity = 100;
+    _integrityAtWin = null;
     _jamCounts.clear();
     activeNodes.clear();
     _undoStack.clear();

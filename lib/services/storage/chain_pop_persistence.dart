@@ -17,6 +17,11 @@ abstract interface class ChainPopPersistence {
 
   Future<void> setHintRewardAdCoachSeen();
 
+  /// One-time portal explainer (W2.7) has been shown.
+  bool get portalIntroSeen;
+
+  Future<void> setPortalIntroSeen();
+
   // ── Difficulty preference ─────────────────────────────────────────────────
 
   DifficultyMode get selectedDifficulty;
@@ -26,6 +31,10 @@ abstract interface class ChainPopPersistence {
   // ── Preferences ───────────────────────────────────────────────────────────
 
   GameSettings get gameSettings;
+
+  /// Null when reduced motion has never been explicitly toggled by the player,
+  /// allowing first-run defaulting to the platform's accessibility settings.
+  bool? get rawReducedMotion;
 
   Future<void> saveGameSettings(GameSettings settings);
 
@@ -119,6 +128,14 @@ abstract interface class ChainPopPersistence {
   bool get reviewHasEverTappedRate;
 
   Future<void> setReviewHasEverTappedRate(bool value);
+
+  // ── Level generation ──────────────────────────────────────────────────────
+
+  /// Campaign [DiversityLedger] history (`DiversityLedger.serialize`), oldest
+  /// first, so novelty survives an app restart. Empty when never saved.
+  List<int> get diversityLedgerBits;
+
+  Future<void> saveDiversityLedgerBits(List<int> bits);
 
   // ── Achievements (schema v3) ──────────────────────────────────────────────
 

@@ -50,8 +50,13 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   static const String _settingsColorblindKey = 'settings_colorblind';
   static const String _settingsAimRayKey = 'settings_aim_ray';
   static const String _settingsAmbientMotionKey = 'settings_ambient_motion';
+  static const String _settingsReducedMotionKey = 'settings_reduced_motion';
 
   static const String _hintRewardCoachSeenKey = 'hint_reward_coach_seen';
+
+  static const String _diversityLedgerKey = 'diversity_ledger_bits';
+
+  static const String _portalIntroSeenKey = 'portal_intro_seen';
 
   static const String _achievementUnlockedKey = 'ach_unlocked_ids';
   static const String _achievementCursorKey = 'ach_sync_cursor';
@@ -178,6 +183,17 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   }
 
   @override
+  bool get portalIntroSeen => coerceHiveBool(
+        _box.get(_portalIntroSeenKey),
+        fallback: false,
+      );
+
+  @override
+  Future<void> setPortalIntroSeen() async {
+    await _box.put(_portalIntroSeenKey, true);
+  }
+
+  @override
   DifficultyMode get selectedDifficulty {
     final raw = _box.get(_difficultyKey, defaultValue: 'easy');
     if (raw is! String) return DifficultyMode.easy;
@@ -211,7 +227,17 @@ final class HiveChainPopPersistence implements ChainPopStorage {
           _box.get(_settingsAmbientMotionKey),
           fallback: true,
         ),
+        reducedMotion: coerceHiveBool(
+          _box.get(_settingsReducedMotionKey),
+          fallback: false,
+        ),
       );
+
+  @override
+  bool? get rawReducedMotion =>
+      _box.get(_settingsReducedMotionKey) == null
+          ? null
+          : coerceHiveBool(_box.get(_settingsReducedMotionKey), fallback: false);
 
   @override
   Future<void> saveGameSettings(GameSettings settings) async {
@@ -220,6 +246,7 @@ final class HiveChainPopPersistence implements ChainPopStorage {
     await _box.put(_settingsColorblindKey, settings.colorblindFriendly);
     await _box.put(_settingsAimRayKey, settings.showAimRay);
     await _box.put(_settingsAmbientMotionKey, settings.ambientMotion);
+    await _box.put(_settingsReducedMotionKey, settings.reducedMotion);
   }
 
   @override
@@ -477,6 +504,22 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   @override
   Future<void> setReviewHasEverTappedRate(bool value) async {
     await _box.put(_reviewHasEverTappedRateKey, value);
+  }
+
+  @override
+  List<int> get diversityLedgerBits {
+    final raw = _box.get(_diversityLedgerKey);
+    if (raw is! List) return const [];
+    // Fingerprints are 26-bit packed values; anything else is corruption.
+    return [
+      for (final e in raw)
+        if (e is int && e >= 0 && e < (1 << 26)) e,
+    ];
+  }
+
+  @override
+  Future<void> saveDiversityLedgerBits(List<int> bits) async {
+    await _box.put(_diversityLedgerKey, List<int>.from(bits));
   }
 
   // ── Achievements ──────────────────────────────────────────────────────────

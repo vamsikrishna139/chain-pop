@@ -576,6 +576,13 @@ class LevelGenerator {
   /// campaign milestone layouts never hijack the date key. [targetTier], when
   /// non-null, lets daily / special callers ask the Phase-2 evaluator to use
   /// the Expert band even though the underlying [config] is Medium.
+  ///
+  /// [workBudget] is the deterministic counterpart of [timeBudget]: it trips
+  /// the same over-budget escapes, but after that many constructions (K-loop
+  /// iterations plus renegotiations) on the procedural path instead of after
+  /// wall-clock time. A board chosen under [timeBudget] depends on how fast the
+  /// device is; one chosen under [workBudget] does not. It does not cover the
+  /// seeded path, which keeps its own stopwatch.
   Result<LevelData, GenerationError> generateFromConfiguration(
     LevelConfiguration config, {
     required int primarySeed,
@@ -583,6 +590,7 @@ class LevelGenerator {
     int maxAttempts = 40,
     DifficultyTier? targetTier,
     Duration? timeBudget,
+    int? workBudget,
     bool allowMechanicShortFallback = false,
   }) {
     // T0.0c: fold generationVersion into seed derivation (identity at v1)
@@ -788,6 +796,12 @@ class LevelGenerator {
     // runs the same [timeBudget] on its own stopwatch instead, so a fall-
     // through arrives here with a full clock.
     final budgetWatch = timeBudget != null ? (Stopwatch()..start()) : null;
+    final workStart = _kloopIterations + _renegotiationCount;
+    final hasBudget = budgetWatch != null || workBudget != null;
+    bool overBudget() =>
+        (budgetWatch != null && budgetWatch.elapsed >= timeBudget!) ||
+        (workBudget != null &&
+            _kloopIterations + _renegotiationCount - workStart >= workBudget);
 
     /// Valid + solvable, but missed the ideal removal-wave band.
     LevelData? budgetFallback;
@@ -797,8 +811,7 @@ class LevelGenerator {
     LevelData? mechanicShortFallback;
 
     for (int attempt = 0; attempt < maxAttempts; attempt++) {
-      final overBudgetNow =
-          budgetWatch != null && budgetWatch.elapsed >= timeBudget!;
+      final overBudgetNow = hasBudget && overBudget();
       final overBudgetShippable = budgetFallback ??
           (allowMechanicShortFallback ? mechanicShortFallback : null);
       if (overBudgetNow && overBudgetShippable != null) {
@@ -850,9 +863,7 @@ class LevelGenerator {
         rng,
         targetTier: targetTier,
         overrideArchetype: currentArchetype,
-        overBudget: budgetWatch == null
-            ? null
-            : () => budgetWatch.elapsed >= timeBudget!,
+        overBudget: hasBudget ? overBudget : null,
       );
       if (result.isSuccess) {
         // F1 — reject a board whose core floor cannot be met, rather than
@@ -940,7 +951,7 @@ class LevelGenerator {
         // Over budget: ship this freshly-staged valid level immediately
         // (commits its telemetry + ledger record), skipping the wave-band
         // preference. Bounds worst-case generation latency.
-        if (budgetWatch != null && budgetWatch.elapsed >= timeBudget!) {
+        if (hasBudget && overBudget()) {
           _assertGeneratedLayout(enriched);
           _commitPendingEmission();
           return Result.success(enriched);
@@ -1022,11 +1033,13 @@ class LevelGenerator {
   /// [timeBudget] bounds the search the same way the campaign path is bounded;
   /// `null` leaves it **fully unbounded** (40 attempts × 8 K × 4 renegotiations),
   /// which is what produced the 5.5 s outlier on 2026-08-19. Production passes
-  /// `LevelManager.dailyGenerationBudget`; the generation test suites leave it
-  /// null so their results stay byte-identical.
+  /// [workBudget] (`LevelManager.dailyWorkBudget`) and no [timeBudget], so the
+  /// board does not depend on device speed; the generation test suites leave
+  /// both null so their results stay byte-identical.
   Result<LevelData, GenerationError> generateDailyChallenge(
     int dayKey, {
     Duration? timeBudget,
+    int? workBudget,
   }) {
     final config = LevelConfiguration.forDailyChallenge(dayKey);
     return generateFromConfiguration(
@@ -1036,6 +1049,7 @@ class LevelGenerator {
       maxAttempts: 40,
       targetTier: DifficultyTier.expert,
       timeBudget: timeBudget,
+      workBudget: workBudget,
       // Daily is the path where a mechanic-budget shortfall used to burn all 40
       // attempts regardless of the clock; campaign deliberately keeps retrying.
       allowMechanicShortFallback: true,
@@ -1089,6 +1103,7 @@ class LevelGenerator {
   ///
   /// Zero by default, so the shipped behaviour is untouched and no board
   /// moves. Only `p2b_cud_isolation_report_test.dart` writes it.
+  @visibleForTesting
   @visibleForTesting
   static int cudFloorRelaxation = 0;
 
@@ -1306,17 +1321,18 @@ class LevelGenerator {
       }
     }
 
-    if (inBandCandidates.isNotEmpty) {
-      final best = _selectBestInBandCandidate(
-        inBandCandidates,
-        evaluatorTier,
-      );
-      if (_isHardExpertTier(evaluatorTier)) {
-        _guardHardExpertOpening(
-          best.metrics,
-          context: 'in-band Hard/Expert emission',
-        );
-      }
+    final best = inBandCandidates.isEmpty
+        ? null
+        : _selectBestInBandCandidate(inBandCandidates, evaluatorTier);
+    // W2.5: a Hard/Expert in-band pick that breaks the opening ceiling falls
+    // through to the out-of-band paths below instead of shipping (or, as this
+    // used to, throwing a StateError on the level-load path in release).
+    if (best != null &&
+        (!_isHardExpertTier(evaluatorTier) ||
+            _hardExpertOpeningHolds(
+              best.metrics,
+              context: 'in-band Hard/Expert emission',
+            ))) {
       _retrogradeInBandSuccessCount++;
       _retrogradeSuccessCount++;
       _noteFallbackReason('in-band');
@@ -1381,13 +1397,12 @@ class LevelGenerator {
     // Ship best novel out-of-band when the K-loop found no in-band candidate.
     // Hard/Expert may still ship here when opening is within [3,11] but other
     // metrics missed band — the opening ceiling is the hard guard.
-    if (novelOutOfBand != null) {
-      if (_isHardExpertTier(evaluatorTier)) {
-        _guardHardExpertOpening(
-          novelOutOfBandMetrics!,
-          context: 'metrics-OOB Hard/Expert emission',
-        );
-      }
+    if (novelOutOfBand != null &&
+        (!_isHardExpertTier(evaluatorTier) ||
+            _hardExpertOpeningHolds(
+              novelOutOfBandMetrics!,
+              context: 'metrics-OOB Hard/Expert emission',
+            ))) {
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
       _noteFallbackReason('novel-out-of-band');
@@ -1433,13 +1448,12 @@ class LevelGenerator {
         nonNovelFallback = null;
       }
     }
-    if (nonNovelFallback != null) {
-      if (_isHardExpertTier(evaluatorTier)) {
-        _guardHardExpertOpening(
-          nonNovelMetrics!,
-          context: 'non-novel Hard/Expert emission',
-        );
-      }
+    if (nonNovelFallback != null &&
+        (!_isHardExpertTier(evaluatorTier) ||
+            _hardExpertOpeningHolds(
+              nonNovelMetrics!,
+              context: 'non-novel Hard/Expert emission',
+            ))) {
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
       _noteFallbackReason('non-novel');
@@ -2296,18 +2310,24 @@ class LevelGenerator {
   }
 
   /// Hard ceiling on opening width for Hard/Expert emissions (Option A band).
-  static void _guardHardExpertOpening(
+  ///
+  /// Every call site is pre-filtered, so this should never fail; a failure is
+  /// a generator bug. It asserts in debug so the bug is loud, and in release
+  /// returns false so the caller rejects the candidate rather than throwing a
+  /// StateError on the level-load path (W2.5 / audit P2-5).
+  static bool _hardExpertOpeningHolds(
     LevelMetrics metrics, {
     required String context,
   }) {
     const band = DifficultyProfile.hardExpertOpeningBand;
-    if (metrics.firstLegalMoveCount > band.max ||
-        metrics.waveZeroWidth > band.max) {
-      throw StateError(
-        '$context: opening=${metrics.firstLegalMoveCount} '
-        'waveZero=${metrics.waveZeroWidth} exceeds band max ${band.max}',
-      );
-    }
+    final holds = metrics.firstLegalMoveCount <= band.max &&
+        metrics.waveZeroWidth <= band.max;
+    assert(
+      holds,
+      '$context: opening=${metrics.firstLegalMoveCount} '
+      'waveZero=${metrics.waveZeroWidth} exceeds band max ${band.max}',
+    );
+    return holds;
   }
 
   void _assertGeneratedLayout(LevelData level) {

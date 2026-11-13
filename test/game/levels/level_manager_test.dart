@@ -1,4 +1,5 @@
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/level.dart';
 import 'package:chain_pop/game/levels/level_manager.dart';
 import 'package:chain_pop/game/levels/level_solver.dart';
@@ -96,6 +97,51 @@ void main() {
       expect(sig(d1), isNot(sig(d2)));
       expect(LevelSolver.isSolvable(d1), isTrue);
       expect(LevelSolver.isSolvable(d2), isTrue);
+    });
+  });
+
+  group('diversity ledger persistence (W2.4)', () {
+    tearDown(() {
+      LevelManager.onDiversityLedgerChanged = null;
+      LevelManager.generator = LevelGenerator.neutral();
+    });
+
+    test('getLevel hands the updated history to the save hook', () {
+      LevelManager.generator = LevelGenerator.neutral();
+      final saved = <List<int>>[];
+      LevelManager.onDiversityLedgerChanged = saved.add;
+
+      LevelManager.getLevel(5, mode: DifficultyMode.medium);
+      LevelManager.getLevel(6, mode: DifficultyMode.medium);
+
+      expect(saved, hasLength(2));
+      expect(saved.last,
+          equals(LevelManager.generator.diversityLedger.serialize()));
+      expect(saved.last.length, greaterThanOrEqualTo(saved.first.length));
+    });
+
+    test('restoreDiversityLedger seeds the campaign generator', () {
+      LevelManager.generator = LevelGenerator.neutral();
+      LevelManager.restoreDiversityLedger([3, 0x2a5f3]);
+      expect(
+        LevelManager.generator.diversityLedger.serialize(),
+        equals([3, 0x2a5f3]),
+      );
+    });
+
+    test('the Daily ignores a restored campaign history', () {
+      final date = DateTime(2026, 9, 1);
+      LevelManager.generator = LevelGenerator.neutral();
+      final pristine = LevelManager.getDailyChallenge(date);
+
+      LevelManager.generator = LevelGenerator.neutral();
+      LevelManager.restoreDiversityLedger(
+          [for (var i = 0; i < 100; i++) (i * 2654435761) & 0x3ffffff]);
+      final afterRestore = LevelManager.getDailyChallenge(date);
+
+      String sig(LevelData l) =>
+          l.nodes.map((n) => '${n.x},${n.y},${n.dir.name}').join('|');
+      expect(sig(afterRestore), equals(sig(pristine)));
     });
   });
 }

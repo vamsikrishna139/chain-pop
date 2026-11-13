@@ -19,6 +19,9 @@
 // correctness story. `_generateDaily` now uses a fresh generator.
 library;
 
+import 'dart:io';
+import 'dart:isolate';
+
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
 import 'package:chain_pop/game/levels/generation/level_generator.dart';
 import 'package:chain_pop/game/levels/level.dart';
@@ -63,4 +66,45 @@ void main() {
 
     LevelManager.generator = LevelGenerator();
   });
+
+  // W2.2: the other half of the contract — the board must not depend on how
+  // fast the device is. It used to: the Daily ran on a 400 ms stopwatch, and
+  // the over-budget escape ships whatever valid board it holds when the clock
+  // trips, so a slow phone (or this suite under load) got a different board.
+  // These keys need 93–172 constructions unbounded (probe, 2027), i.e. well
+  // past both the old 400 ms and the new work budget, so they exercise the
+  // escape on every run.
+  test('the Daily board does not depend on CPU load', () async {
+    final heavyKeys = [
+      DateTime(2027, 12, 13),
+      DateTime(2027, 4, 19),
+      DateTime(2027, 11, 18),
+      DateTime(2027, 12, 10),
+    ];
+    final quiet = [
+      for (final d in heavyKeys) _signature(LevelManager.getDailyChallenge(d)),
+    ];
+
+    // Saturate every core while generating again on this isolate.
+    final hogs = [
+      for (var i = 0; i < Platform.numberOfProcessors; i++)
+        Isolate.run(() {
+          final until = DateTime.now().add(const Duration(seconds: 10));
+          var x = 0;
+          while (DateTime.now().isBefore(until)) {
+            x = (x * 31 + 7) & 0xffff;
+          }
+          return x;
+        }),
+    ];
+    final loaded = [
+      for (final d in heavyKeys) _signature(LevelManager.getDailyChallenge(d)),
+    ];
+    await Future.wait(hogs);
+
+    expect(loaded, equals(quiet),
+        reason: 'A Daily changed under CPU load, so something on the Daily '
+            'path is still wall-clock driven. The Daily budget must count '
+            'work (LevelManager.dailyWorkBudget), never time.');
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }

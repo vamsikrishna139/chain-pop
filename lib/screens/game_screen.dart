@@ -187,6 +187,7 @@ class GameScreenState extends State<GameScreen>
   int? _timeLimitSec;
 
   int _autoAdvanceSec = GameScreenConstants.winAutoAdvanceSeconds;
+  bool _autoAdvanceHeld = false;
 
   bool _isPaused = false;
 
@@ -313,6 +314,19 @@ class GameScreenState extends State<GameScreen>
 
   @override
   set autoAdvanceSec(int value) => _autoAdvanceSec = value;
+
+  @override
+  bool get autoAdvanceHeld => _autoAdvanceHeld;
+
+  @override
+  set autoAdvanceHeld(bool value) => _autoAdvanceHeld = value;
+
+  /// Player touched the win panel: stop the countdown and wait for them.
+  void _holdWinAutoAdvance() {
+    if (_autoAdvanceHeld || !_hasWon) return;
+    _gameFlow.cancelWinAdvanceTimers();
+    setState(() => _autoAdvanceHeld = true);
+  }
 
   @override
   int? get timeLeftSec => _timeLeftSec;
@@ -550,7 +564,10 @@ class GameScreenState extends State<GameScreen>
           recordNonFatal(e, st);
           if (!mounted) return;
           _installResolvedLevel(
-            LevelManager.emergencyFallbackLevel(widget.level),
+            LevelManager.emergencyFallbackLevel(
+              widget.level,
+              mode: widget.difficulty,
+            ),
           );
         }
       });
@@ -568,8 +585,25 @@ class GameScreenState extends State<GameScreen>
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Default to the OS accessibility setting on first run if never explicitly set.
+    if (_gameStorage.rawReducedMotion == null) {
+      final systemDisableAnimations =
+          MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+      if (systemDisableAnimations && !_settings.reducedMotion) {
+        _settings = _settings.copyWith(reducedMotion: true);
+        _pushFeedbackToGame();
+      }
+    }
+  }
+
   void _installResolvedLevel(LevelData level) {
     _levelData = level;
+    if (_isCampaign) {
+      _goals.skipIfUnachievable(boardHasCores: level.coreCount > 0);
+    }
     _totalNodes = level.nodes.length;
     if (widget.isDailyChallenge) {
       _timeLimitSec = computeDailyChallengeTimeLimit(_totalNodes);
@@ -608,6 +642,7 @@ class GameScreenState extends State<GameScreen>
 
     _adCoordinator.preloadForLevelStartup();
     _adCoordinator.scheduleRewardedHintsEntryCoachIfNeeded();
+    _schedulePortalIntroIfNeeded();
 
     AnalyticsLocator.instance.logLevelStart(params: analyticsParams);
     if (widget.isTutorial && widget.tutorialIndex == 0) {
@@ -641,14 +676,66 @@ class GameScreenState extends State<GameScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.inactive:
+        _gameFlow.flushLifetimeGameplayDelta();
       case AppLifecycleState.paused:
       case AppLifecycleState.detached:
       case AppLifecycleState.hidden:
         _gameFlow.flushLifetimeGameplayDelta();
+        // Leaving the app (home, a call, the app switcher) must not burn the
+        // clock: show the pause panel so the player resumes deliberately.
+        // `inactive` alone (notification shade, system dialogs) is left alone.
+        _pauseForBackground();
       case AppLifecycleState.resumed:
         break;
     }
   }
+
+  /// Pauses an in-progress level when the app is backgrounded. No-op once the
+  /// level is won or lost, already paused, or still generating — those states
+  /// already hold the clock (or have none running).
+  void _pauseForBackground() {
+    if (!mounted || _game == null || _levelData == null) return;
+    if (_isPaused || _hasWon || _engine.hasWon || _engine.isGameOver) return;
+    if (widget.autoplay) return;
+    // A stopped stopwatch means something already holds the clock — a
+    // rewarded ad (its own activity, which also fires `paused`), the settings
+    // sheet, or an intro dialog. Pausing on top of those would greet the
+    // player with a pause panel after every rewarded hint.
+    if (!_stopwatch.isRunning) return;
+    _togglePause();
+  }
+
+  /// Stops the countdown, stopwatch, hint timers and engine while a modal
+  /// (settings sheet, one-off intro dialog) covers the board. Pair with
+  /// [_releaseGameplayClock]. `_isPaused` is deliberately untouched — these
+  /// are soft holds with their own overlay, not the pause panel.
+  void _holdGameplayClock() {
+    _stopwatch.stop();
+    _timers.countdownTimer?.cancel();
+    _timers.ghostHintTimer?.cancel();
+    _timers.easyHudTimer?.cancel();
+    if (_game != null) _engine.pauseEngine();
+  }
+
+  /// Restarts what [_holdGameplayClock] stopped, unless the level ended or the
+  /// pause panel took over in the meantime (e.g. the app was backgrounded).
+  void _releaseGameplayClock() {
+    if (!mounted || _isPaused || _hasWon) return;
+    if (_game != null && (_engine.hasWon || _engine.isGameOver)) return;
+    if (_game != null) _engine.resumeEngine();
+    if (!_stopwatch.isRunning) _stopwatch.start();
+    if (!widget.suppressGameplayTimers) {
+      _timerController.startCountdown();
+      _timerController.resetGhostHintTimer();
+      _timerController.startEasyHudTimer();
+    }
+  }
+
+  @override
+  void holdGameplayClock() => _holdGameplayClock();
+
+  @override
+  void releaseGameplayClock() => _releaseGameplayClock();
 
   void _pushFeedbackToGame() {
     final g = _game;
@@ -658,6 +745,7 @@ class GameScreenState extends State<GameScreen>
     g.colorblindPalette = _settings.colorblindFriendly;
     g.showAimRay = _settings.showAimRay;
     g.ambientMotion = _settings.ambientMotion;
+    g.reducedMotion = _settings.reducedMotion;
     g.tutorialCoaching = widget.isTutorial;
     g.onSfx = (sfx, {double playbackRate = 1.0}) =>
         unawaited(_audio.play(sfx, playbackRate: playbackRate));
@@ -680,10 +768,76 @@ class GameScreenState extends State<GameScreen>
       onJam: _handleFoul,
       onNodeRemoved: _handleNodeRemoved,
       onComboStreak: _handleComboStreak,
+      onNoMoves: widget.autoplay ? null : _handleNoMoves,
       preloadedLevel: _levelData!,
       theme: WorldTheme.fromAccent(accent),
     );
     _pushFeedbackToGame();
+  }
+
+  bool _noMovesDialogOpen = false;
+
+  /// The board is in a dead end (nodes left, none extractable). Only relay
+  /// rotations can cause this, and generation is meant to rule it out — this
+  /// is the safety net. The player is never charged a life for it: they get a
+  /// free undo of the move that caused it, or a restart.
+  void _handleNoMoves() {
+    if (_noMovesDialogOpen || !mounted) return;
+    _noMovesDialogOpen = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _hasWon || !_engine.isDeadEnd) {
+        _noMovesDialogOpen = false;
+        return;
+      }
+      _holdGameplayClock();
+      // A dead end means generation shipped an unsafe board — report it the
+      // way generation fallbacks are reported so it shows up in the same view.
+      unawaited(AnalyticsLocator.instance.logEvent(
+        'level_dead_end',
+        parameters: {
+          ...analyticsParams,
+          'moves': _engine.movesTaken,
+          'nodes_left': _engine.activeNodes.length,
+        },
+      ));
+      recordNonFatal(
+        StateError('Dead-end board: ${widget.difficulty.name} '
+            '${widget.isDailyChallenge ? widget.dailyDayKey : widget.level} '
+            'after ${_engine.movesTaken} taps'),
+        StackTrace.current,
+      );
+      final choice = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surfaceDialog,
+          title: const Text('No moves left'),
+          content: const Text(
+            'Every remaining arrow is blocked. Undo your last move or restart '
+            'the board — this one is on us, no life lost.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('restart'),
+              child: const Text('RESTART'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop('undo'),
+              child: const Text('UNDO LAST MOVE'),
+            ),
+          ],
+        ),
+      );
+      _noMovesDialogOpen = false;
+      if (!mounted) return;
+      if (choice == 'restart') {
+        _gameFlow.resetForRetry();
+        return;
+      }
+      _engine.undo();
+      setState(() {});
+      _releaseGameplayClock();
+    });
   }
 
   /// Reports combo milestones to the achievement tracker.
@@ -701,7 +855,7 @@ class GameScreenState extends State<GameScreen>
   }
 
   void _handleFoul() {
-    if (_hasWon) return;
+    if (!mounted || _hasWon) return;
     setState(() {
       _livesRemaining--;
     });
@@ -723,17 +877,57 @@ class GameScreenState extends State<GameScreen>
     _timerController.resetGhostHintTimer();
   }
 
+  bool _leaveDialogOpen = false;
+
+  /// Back arrow / system back. Mid-level with moves made, ask first — a stray
+  /// tap used to throw the board away with no warning.
+  Future<void> _confirmLeave() async {
+    if (_leaveDialogOpen) return;
+    final midLevel = _game != null &&
+        !_hasWon &&
+        !_engine.isGameOver &&
+        !widget.autoplay &&
+        _engine.movesTaken > 0;
+    if (!midLevel) {
+      _gameFlow.goMenu();
+      return;
+    }
+    _leaveDialogOpen = true;
+    _holdGameplayClock();
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Leave this level?'),
+        content: const Text('Your progress on this board will be lost.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('KEEP PLAYING'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('LEAVE'),
+          ),
+        ],
+      ),
+    );
+    _leaveDialogOpen = false;
+    if (!mounted) return;
+    if (leave == true) {
+      _gameFlow.goMenu();
+    } else {
+      _releaseGameplayClock();
+    }
+  }
+
   String? _headerModeLabel() {
     if (_isSurge) return '⚡ SURGE';
     if (widget.isTutorial) {
       return 'TUTORIAL ${widget.tutorialIndex + 1}/${tutorialLevels.length}';
     }
-    if (widget.isDailyChallenge) {
-      return DailyChallenge.incidentTitle(widget.dailyDayKey!);
-    }
-    if (widget.difficulty == DifficultyMode.hard) {
-      return 'LEVEL ${ProgressFormat.level(widget.level)}';
-    }
+    // Kept short: the title never shrinks (see GameHeaderHud), the directive
+    // pill beside it takes whatever width is left.
+    if (widget.isDailyChallenge) return 'DAILY';
     return 'LEVEL ${ProgressFormat.level(widget.level)}';
   }
 
@@ -801,11 +995,10 @@ class GameScreenState extends State<GameScreen>
     _engine.playSfx(GameSfx.uiTap);
     if (!mounted) return;
 
-    _stopwatch.stop();
-    _timers.countdownTimer?.cancel();
-    _timers.ghostHintTimer?.cancel();
-    _timers.easyHudTimer?.cancel();
-    _engine.pauseEngine();
+    // Deliberately a *soft* pause: the clock and engine stop, but `_isPaused`
+    // stays false — the sheet is its own overlay (no pause panel under it), and
+    // the ambient bed keeps playing so sound toggles are audible as you flip them.
+    _holdGameplayClock();
 
     final accent = widget.difficulty.color;
     await showGameSettingsSheet(
@@ -821,15 +1014,39 @@ class GameScreenState extends State<GameScreen>
     );
 
     if (!mounted) return;
-    if (!_isPaused) {
-      _engine.resumeEngine();
-      if (!_stopwatch.isRunning) _stopwatch.start();
-      if (!widget.suppressGameplayTimers) {
-        _timerController.startCountdown();
-        _timerController.resetGhostHintTimer();
-        _timerController.startEasyHudTimer();
-      }
-    }
+    _releaseGameplayClock();
+  }
+
+  /// W2.7: portals are not taught in the tutorial, so the first board that
+  /// carries one explains them once. The clock is held while it is open.
+  void _schedulePortalIntroIfNeeded() {
+    if (_levelData?.portalPairs.isEmpty ?? true) return;
+    if (_gameStorage.portalIntroSeen) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _gameStorage.portalIntroSeen) return;
+      _holdGameplayClock();
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Portals'),
+          content: Text(
+            'The two rings with the same number are linked. An arrow that '
+            'flies into one comes out of the other, still heading the same '
+            'way — so it can be blocked on the far side.',
+            style: Theme.of(ctx).textTheme.bodyMedium,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      await _gameStorage.setPortalIntroSeen();
+      _releaseGameplayClock();
+    });
   }
 
   String _tutorialHintText() {
@@ -851,7 +1068,8 @@ class GameScreenState extends State<GameScreen>
         return 'The green-ringed arrow is a SPINNER. Tap it to turn its whole row '
             'and free the arrows stuck facing each other.';
       case 7:
-        return 'The padlocked arrow is LOCKED. Clear the tiles right next to it '
+        return 'The arrow in corner brackets is LOCKED. Clear the tiles right '
+            'next to it '
             'first, then tap it.';
       case 8:
         return 'The two dim arrows are PHASE-LOCKED. Their paths are already '
@@ -859,7 +1077,7 @@ class GameScreenState extends State<GameScreen>
             'watch the dim ones light up.';
       case 9:
         return 'FINAL TEST — every arrow type at once. Clear the bright ones '
-            'first: SPINNER turns its row, PADLOCK opens once its neighbour '
+            'first: SPINNER turns its row, the BRACKETED arrow opens once its neighbour '
             'goes. That lights up the dim PHASE arrows and the gold CORES — '
             'take both cores to win.';
       default:
@@ -898,215 +1116,232 @@ class GameScreenState extends State<GameScreen>
 
     _playfieldInsetController.scheduleSync();
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
-        key: _bodyStackKey,
-        children: [
-          // Ambient backdrop (world gradient, vignette, motes) is rendered by
-          // AmbientBackgroundComponent inside the Flame layer — the GameWidget
-          // paints an opaque background, so nothing behind it would show.
-          Positioned.fill(child: GameWidget(game: _game!)),
-          if (_hasWon && !_quickWin)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: WinCelebrationOverlay(accent: accent),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) unawaited(_confirmLeave());
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Stack(
+          key: _bodyStackKey,
+          children: [
+            // Ambient backdrop (world gradient, vignette, motes) is rendered by
+            // AmbientBackgroundComponent inside the Flame layer — the GameWidget
+            // paints an opaque background, so nothing behind it would show.
+            Positioned.fill(child: GameWidget(game: _game!)),
+            if (_hasWon && !_quickWin && !_settings.reducedMotion)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: WinCelebrationOverlay(accent: accent),
+                ),
               ),
-            ),
-          if (_hasWon && _quickWin)
-            Positioned.fill(
-              child: QuickWinBanner(
-                stars: _earnedStars,
-                levelLabel: 'LEVEL ${ProgressFormat.level(widget.level)} CLEAR',
-                directiveLabel: _isCampaign
-                    ? directiveFor(
-                            levelId: widget.level, mode: widget.difficulty)
-                        .label
-                    : null,
-                sessionWins: _pacing.winsThisSession,
-                accent: accent,
+            if (_hasWon && _quickWin)
+              Positioned.fill(
+                child: QuickWinBanner(
+                  stars: _earnedStars,
+                  levelLabel:
+                      'LEVEL ${ProgressFormat.level(widget.level)} CLEAR',
+                  directiveLabel: _isCampaign
+                      ? directiveFor(
+                              levelId: widget.level, mode: widget.difficulty)
+                          .label
+                      : null,
+                  sessionWins: _pacing.winsThisSession,
+                  accent: accent,
+                ),
               ),
+            GameHeaderHud(
+              measureKey: _headerHudKey,
+              onBack: () => unawaited(_confirmLeave()),
+              onOpenSettings: _openSettings,
+              livesRemaining: _livesRemaining,
+              difficulty: widget.difficulty,
+              headerModeLabel: _headerModeLabel(),
+              missionLabel: _missionLabel(),
+              removedNodes: _removedNodes,
+              totalNodes: _totalNodes,
+              coresRestored: _engine.usesCoreWin ? _engine.coresRestored : null,
+              totalCores: _engine.usesCoreWin ? _engine.totalCores : null,
+              // Tutorial: surface Integrity from the cores step on, so the player
+              // sees it react live (drops on a misfire, rises as cores restore).
+              networkIntegrity: widget.isTutorial
+                  ? (widget.tutorialIndex >= 5
+                      ? _engine.networkIntegrity
+                      : null)
+                  : (_hardOrDailyFeatures ? _engine.networkIntegrity : null),
+              timeLeftSec: _timeLeftSec,
+              timeLimitSec: _timeLimitSec,
+              elapsed: _stopwatch.elapsed,
+              onTogglePause: _togglePause,
+              sessionGoalLabel: _isCampaign && !_hasWon && !_goals.isComplete
+                  ? _goals.activeGoal.label
+                  : null,
+              sessionGoalProgress: _isCampaign && !_hasWon && !_goals.isComplete
+                  ? _goals.progress
+                  : null,
+              sessionGoalTarget: _isCampaign && !_hasWon && !_goals.isComplete
+                  ? _goals.target
+                  : null,
             ),
-          GameHeaderHud(
-            measureKey: _headerHudKey,
-            onBack: _gameFlow.goMenu,
-            onOpenSettings: _openSettings,
-            livesRemaining: _livesRemaining,
-            difficulty: widget.difficulty,
-            headerModeLabel: _headerModeLabel(),
-            missionLabel: _missionLabel(),
-            removedNodes: _removedNodes,
-            totalNodes: _totalNodes,
-            coresRestored: _engine.usesCoreWin ? _engine.coresRestored : null,
-            totalCores: _engine.usesCoreWin ? _engine.totalCores : null,
-            // Tutorial: surface Integrity from the cores step on, so the player
-            // sees it react live (drops on a misfire, rises as cores restore).
-            networkIntegrity: widget.isTutorial
-                ? (widget.tutorialIndex >= 5 ? _engine.networkIntegrity : null)
-                : (_hardOrDailyFeatures ? _engine.networkIntegrity : null),
-            timeLeftSec: _timeLeftSec,
-            timeLimitSec: _timeLimitSec,
-            elapsed: _stopwatch.elapsed,
-            onTogglePause: _togglePause,
-            sessionGoalLabel: _isCampaign && !_hasWon && !_goals.isComplete
-                ? _goals.activeGoal.label
-                : null,
-            sessionGoalProgress: _isCampaign && !_hasWon && !_goals.isComplete
-                ? _goals.progress
-                : null,
-            sessionGoalTarget: _isCampaign && !_hasWon && !_goals.isComplete
-                ? _goals.target
-                : null,
-          ),
 
-          if (widget.isTutorial && !_hasWon)
-            Positioned(
-              top: _hudBannerTop,
-              left: 12,
-              right: 12,
-              child: IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: _isPaused ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 220),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.42),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: accent.withValues(alpha: 0.55),
+            if (widget.isTutorial && !_hasWon)
+              Positioned(
+                top: _hudBannerTop,
+                left: 12,
+                right: 12,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _isPaused ? 0.0 : 1.0,
+                    duration: const Duration(milliseconds: 220),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.42),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: accent.withValues(alpha: 0.55),
+                        ),
                       ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      child: Text(
-                        _tutorialHintText(),
-                        textAlign: TextAlign.center,
-                        maxLines: 5,
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: true,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.92),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          height: 1.25,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        child: Text(
+                          _tutorialHintText(),
+                          textAlign: TextAlign.center,
+                          maxLines: 5,
+                          overflow: TextOverflow.ellipsis,
+                          softWrap: true,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.92),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            height: 1.25,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          if (!(_hasWon || _engine.hasWon))
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ValueListenableBuilder<bool>(
-                    valueListenable:
-                        SubscriptionLocator.instanceOrNull?.isPremium ??
-                            _kNeverPremium,
-                    builder: (context, isPremium, _) => GameBottomToolbar(
-                      measureKey: _footerHudKey,
-                      accent: accent,
-                      // Premium users get hints without an ad, so no badge.
-                      showHintAdBadge: _hardOrDailyFeatures && !isPremium,
-                      axisGuidesVisible: _engine.axisGuidesVisible,
-                      canUndo: _engine.canUndo,
-                      onHint: () => unawaited(_adCoordinator.handleHint()),
-                      onToggleGuides: () {
-                        if (_isPaused) return;
-                        _engine.toggleAxisGuides();
-                        setState(() {});
-                      },
-                      onZoomIn: widget.isTutorial
-                          ? () {
-                              if (_isPaused) return;
-                              _engine.zoomInStep();
-                            }
-                          : null,
-                      onResetView: () {
-                        if (_isPaused) return;
-                        _engine.resetView();
-                      },
-                      onUndo: () => unawaited(_adCoordinator.handleUndo()),
-                      onRestart: _gameFlow.resetForRetry,
+            if (!(_hasWon || _engine.hasWon))
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ValueListenableBuilder<bool>(
+                      valueListenable:
+                          SubscriptionLocator.instanceOrNull?.isPremium ??
+                              _kNeverPremium,
+                      builder: (context, isPremium, _) => GameBottomToolbar(
+                        measureKey: _footerHudKey,
+                        accent: accent,
+                        // Premium users get hints without an ad, so no badge.
+                        showHintAdBadge: _hardOrDailyFeatures && !isPremium,
+                        axisGuidesVisible: _engine.axisGuidesVisible,
+                        canUndo: _engine.canUndo,
+                        onHint: () => unawaited(_adCoordinator.handleHint()),
+                        onToggleGuides: () {
+                          if (_isPaused) return;
+                          _engine.toggleAxisGuides();
+                          setState(() {});
+                        },
+                        onZoomIn: widget.isTutorial
+                            ? () {
+                                if (_isPaused) return;
+                                _engine.zoomInStep();
+                              }
+                            : null,
+                        onResetView: () {
+                          if (_isPaused) return;
+                          _engine.resetView();
+                        },
+                        onUndo: () => unawaited(_adCoordinator.handleUndo()),
+                        onRestart: _gameFlow.resetForRetry,
+                      ),
                     ),
-                  ),
-                  ValueListenableBuilder<bool>(
-                    valueListenable:
-                        SubscriptionLocator.instanceOrNull?.isPremium ??
-                            _kNeverPremium,
-                    builder: (context, _, __) =>
-                        _ads.buildGameScreenBanner(context),
-                  ),
-                ],
+                    ValueListenableBuilder<bool>(
+                      valueListenable:
+                          SubscriptionLocator.instanceOrNull?.isPremium ??
+                              _kNeverPremium,
+                      builder: (context, _, __) =>
+                          _ads.buildGameScreenBanner(context),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          if (_isPaused && !_hasWon)
-            GamePauseOverlay(
-              difficulty: widget.difficulty,
-              timeLeftSec: _timeLeftSec,
-              timeLimitSec: _timeLimitSec,
-              elapsed: _stopwatch.elapsed,
-              onMenuFromPause: _menuFromPause,
-              onTogglePause: _togglePause,
-              onRestartFromPause: _restartFromPause,
-              pauseBanner: widget.isTutorial
-                  ? const SizedBox.shrink()
-                  : _ads.buildGamePauseBanner(context),
-            ),
-          AnimatedSlide(
-            offset: (_hasWon && !_quickWin) ? Offset.zero : const Offset(0, 1),
-            duration: const Duration(milliseconds: 450),
-            curve: Curves.easeOutQuart,
-            child: AnimatedOpacity(
-              opacity: (_hasWon && !_quickWin) ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: WinPanel(
-                  levelId: widget.isDailyChallenge
-                      ? widget.dailyDayKey!
-                      : widget.level,
-                  difficulty: widget.difficulty,
-                  stars: _earnedStars,
-                  foulCount: GameScreenConstants.maxLives - _livesRemaining,
-                  timeTaken: _stopwatch.elapsed,
-                  autoAdvanceSec: _autoAdvanceSec,
-                  onMenu: _gameFlow.goMenu,
-                  onRetry: _gameFlow.resetForRetry,
-                  onNext: () => unawaited(_gameFlow.goNextLevel()),
-                  showNextAndAutoAdvance: !widget.isDailyChallenge &&
-                      (!widget.isTutorial ||
-                          widget.tutorialIndex < tutorialLevels.length - 1),
-                  titleLine: widget.isDailyChallenge
-                      ? DailyChallenge.incidentTitle(widget.dailyDayKey!)
-                      : (widget.isTutorial
-                          ? 'TUTORIAL ${widget.tutorialIndex + 1} CLEAR'
-                          : 'LEVEL ${ProgressFormat.level(widget.level)}'),
-                  directiveLabel: _isCampaign
-                      ? directiveFor(
-                              levelId: widget.level, mode: widget.difficulty)
-                          .label
-                      : null,
-                  missionLabel:
-                      _isCampaign ? missionShortForLevel(widget.level) : null,
-                  sessionGoalLabel:
-                      _isCampaign ? _goals.activeGoal.label : null,
-                  sessionGoalProgress: _isCampaign ? _goals.progress : null,
-                  sessionGoalTarget: _isCampaign ? _goals.target : null,
-                  sessionGoalComplete: _isCampaign ? _goals.isComplete : null,
+            if (_isPaused && !_hasWon)
+              GamePauseOverlay(
+                difficulty: widget.difficulty,
+                timeLeftSec: _timeLeftSec,
+                timeLimitSec: _timeLimitSec,
+                elapsed: _stopwatch.elapsed,
+                onMenuFromPause: _menuFromPause,
+                onTogglePause: _togglePause,
+                onRestartFromPause: _restartFromPause,
+                pauseBanner: widget.isTutorial
+                    ? const SizedBox.shrink()
+                    : _ads.buildGamePauseBanner(context),
+              ),
+            AnimatedSlide(
+              offset:
+                  (_hasWon && !_quickWin) ? Offset.zero : const Offset(0, 1),
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeOutQuart,
+              child: AnimatedOpacity(
+                opacity: (_hasWon && !_quickWin) ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: WinPanel(
+                    levelId: widget.isDailyChallenge
+                        ? widget.dailyDayKey!
+                        : widget.level,
+                    difficulty: widget.difficulty,
+                    stars: _earnedStars,
+                    foulCount: GameScreenConstants.maxLives - _livesRemaining,
+                    timeTaken: _stopwatch.elapsed,
+                    autoAdvanceSec: _autoAdvanceSec,
+                    autoAdvanceHeld: _autoAdvanceHeld,
+                    onHoldAutoAdvance: _holdWinAutoAdvance,
+                    onMenu: _gameFlow.goMenu,
+                    onRetry: _gameFlow.resetForRetry,
+                    onNext: () => unawaited(_gameFlow.goNextLevel()),
+                    finalActionLabel: widget.isTutorial &&
+                            widget.tutorialIndex == tutorialLevels.length - 1
+                        ? 'START CAMPAIGN'
+                        : null,
+                    onFinalAction: _gameFlow.startCampaignFromTutorial,
+                    showNextAndAutoAdvance: !widget.isDailyChallenge &&
+                        (!widget.isTutorial ||
+                            widget.tutorialIndex < tutorialLevels.length - 1),
+                    titleLine: widget.isDailyChallenge
+                        ? DailyChallenge.incidentTitle(widget.dailyDayKey!)
+                        : (widget.isTutorial
+                            ? 'TUTORIAL ${widget.tutorialIndex + 1} CLEAR'
+                            : 'LEVEL ${ProgressFormat.level(widget.level)}'),
+                    directiveLabel: _isCampaign
+                        ? directiveFor(
+                                levelId: widget.level, mode: widget.difficulty)
+                            .label
+                        : null,
+                    missionLabel:
+                        _isCampaign ? missionShortForLevel(widget.level) : null,
+                    sessionGoalLabel:
+                        _isCampaign ? _goals.activeGoal.label : null,
+                    sessionGoalProgress: _isCampaign ? _goals.progress : null,
+                    sessionGoalTarget: _isCampaign ? _goals.target : null,
+                    sessionGoalComplete: _isCampaign ? _goals.isComplete : null,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

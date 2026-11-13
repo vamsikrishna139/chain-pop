@@ -59,6 +59,25 @@ class TemporalArcSpec {
 /// the per-step bands (BF, first-legal, CUD, FSR, wave depth) and the
 /// FSR-vs-nodeCount cap, but does **not** reject a level for having an
 /// out-of-band [LevelMetrics.nodeCount].
+///
+/// **The bands describe board structure, before mechanics (W2.6 decision,
+/// 2026-10-30).** The generator checks them on the raw retrograde board;
+/// `enrichLevel` then adds locks and phase gates, which only ever make the
+/// shipped board *harder*. That is by design — the bands are the structural
+/// floor, the mechanic budget adds a known amount on top — so do not read a
+/// shipped board's metrics against these ranges and call it out of band, and
+/// do not move the check after enrichment without re-calibrating every band.
+/// Measured drift on boards with mechanics (median, p95 tail):
+///
+/// | tier   | first legal | wave depth | FSR          | avg BF |
+/// |--------|-------------|------------|--------------|--------|
+/// | Medium | −1 (p5 −3)  | 0 (p95 +3) | +0.04 (+0.26)| −0.90  |
+/// | Hard   | −1 (p5 −5)  | 0 (p95 +3) | 0.00 (+0.17) | −1.12  |
+/// | Expert (Daily) | −4 (p5 −6) | +2 (p95 +4) | +0.08 (+0.18) | −3.21 |
+///
+/// Easy has no mechanics, so no drift. CUD does not move: it is computed from
+/// ray dependencies and ignores locks and gates. Relay rotation is modelled by
+/// none of these metrics. Full report: `docs/playtests/enrichment_drift_w26.md`.
 class DifficultyProfile {
   final DifficultyTier tier;
   final MetricRange<int> nodeCount;
@@ -264,7 +283,7 @@ class DifficultyProfile {
       if (!hardExpertOpeningBand.contains(w0)) return false;
     }
 
-    // Temporary: Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
+    // TODO(temporary): Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
     // if ((tier == DifficultyTier.hard || tier == DifficultyTier.expert) &&
     //     metrics.tempoProfile.isNotEmpty &&
     //     !passesTemporalArc(metrics.tempoProfile)) {

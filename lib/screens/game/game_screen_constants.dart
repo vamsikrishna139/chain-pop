@@ -5,7 +5,11 @@ abstract final class GameScreenConstants {
   GameScreenConstants._();
 
   static const int maxLives = 3;
-  static const int winAutoAdvanceSeconds = 5;
+
+  /// Full win panel countdown. Was 5 s, which outran players who stopped to
+  /// read the card (they tapped Menu and landed in the next level). Any touch
+  /// on the panel now holds the countdown entirely (see [WinPanel]).
+  static const int winAutoAdvanceSeconds = 8;
   static const int winAutoAdvanceDelayMs = 700;
 
   /// Fast clears under this elapsed time use the lightweight [QuickWinBanner]

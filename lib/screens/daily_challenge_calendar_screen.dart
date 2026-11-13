@@ -95,7 +95,7 @@ class _DailyChallengeCalendarScreenState
     // Generated on a worker isolate. The synchronous call that used to sit here
     // blocked the UI thread inside this tap handler, and on a pathological date
     // key that is measured in seconds, not milliseconds — key 20260819 takes
-    // 4.4 s regardless of `dailyGenerationBudget`, because the budget cannot
+    // 4.4 s regardless of the Daily budget, because the budget cannot
     // preempt a single retrograde construction. Android's input-dispatch
     // timeout is 5 s, so the tap produced a real "Unbound isn't responding"
     // dialog. See [LevelManager.getDailyChallengeAsync].
@@ -146,7 +146,7 @@ class _DailyChallengeCalendarScreenState
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          'Network Incidents · ${DailyChallenge.monthYearTitle(y, m)}',
+          'Daily Incidents · ${DailyChallenge.monthYearTitle(y, m)}',
           style: const TextStyle(fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
@@ -162,7 +162,7 @@ class _DailyChallengeCalendarScreenState
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     children: [
                       Text(
-                        'Network incidents',
+                        'Daily incidents',
                         style: tt.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),

@@ -34,6 +34,9 @@ abstract final class SessionCampaignStreak {
 
 /// Injectable façade so [GameScreen] tests can observe streak side-effects without globals.
 abstract interface class CampaignStreakTracker {
+  /// Campaign wins recorded through this tracker since the last reset.
+  int get wins;
+
   void onCampaignWin();
 
   void resetSession();
@@ -41,6 +44,9 @@ abstract interface class CampaignStreakTracker {
 
 final class DefaultCampaignStreakTracker implements CampaignStreakTracker {
   const DefaultCampaignStreakTracker();
+
+  @override
+  int get wins => SessionCampaignStreak.wins;
 
   @override
   void onCampaignWin() => SessionCampaignStreak.onWin();

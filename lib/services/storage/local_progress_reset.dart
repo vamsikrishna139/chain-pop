@@ -9,4 +9,5 @@ import 'storage_locator.dart';
 Future<void> resetLocalProgress() async {
   await StorageLocator.instance.clearProgress();
   LevelManager.generator.diversityLedger.clear();
+  LevelManager.clearServedLevels();
 }

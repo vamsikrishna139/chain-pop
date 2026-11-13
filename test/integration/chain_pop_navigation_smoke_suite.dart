@@ -46,7 +46,7 @@ void registerChainPopNavigationSmoke({
     expect(find.text('EASY'), findsWidgets);
     expect(find.text('MEDIUM'), findsWidgets);
     expect(find.text('HARD'), findsWidgets);
-    final play = find.text('Play');
+    final play = find.textContaining('PLAY FRONTIER');
     expect(play, findsOneWidget);
     await tester.ensureVisible(play.first);
     await tester.tap(play);

@@ -148,5 +148,24 @@ void main() {
       clone.restore(bytes);
       expect(clone.historical.map((f) => f.bits).toList(), equals(bytes));
     });
+
+    test('restore keeps the newest entries when given more than the cap', () {
+      final clone = DiversityLedger(windowSize: 2, historicalCap: 3);
+      clone.restore([1, 2, 3, 4, 5]);
+      expect(clone.historical.map((f) => f.bits).toList(), equals([3, 4, 5]));
+      expect(clone.window.map((f) => f.bits).toList(), equals([4, 5]));
+    });
+
+    test('a restored ledger still rejects what was served before restart', () {
+      // W2.4: this is the whole point of persisting it.
+      final before = DiversityLedger();
+      const served = LevelFingerprint(0x2a5f3);
+      before.record(served);
+
+      final afterRestart = DiversityLedger()..restore(before.serialize());
+      expect(afterRestart.isNovel(served), isFalse);
+      expect(DiversityLedger().isNovel(served), isTrue,
+          reason: 'control: a fresh ledger has forgotten it');
+    });
   });
 }

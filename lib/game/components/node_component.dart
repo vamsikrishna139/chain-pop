@@ -22,6 +22,9 @@ class NodeComponent extends PositionComponent
   double _nudgeTimer = -1.0; // < 0 = idle
   double _freedTimer = -1.0; // < 0 = idle; one-shot "now freed" chain pulse
   double _blockerFlashTimer = -1.0; // < 0 = idle; "this is blocking you" flash
+
+  bool get _isReducedMotion => isMounted && game.reducedMotion;
+  bool get _isColorblindPalette => isMounted && game.colorblindPalette;
   double _arrowSpin = 0.0; // current arrow rotation offset (rad), eases to 0
   double _arrowSpinTimer = -1.0; // < 0 = idle; relay-rotation arrow animation
   bool _longPressActive = false;
@@ -221,7 +224,7 @@ class NodeComponent extends PositionComponent
   /// Brief scale dip when a 4-adjacent neighbor is extracted — makes chains
   /// feel physically connected.
   void nudge() {
-    if (isPopping || isJamming) return;
+    if (isPopping || isJamming || _isReducedMotion) return;
     _nudgeTimer = 0.0;
   }
 
@@ -277,7 +280,7 @@ class NodeComponent extends PositionComponent
     if (isHighlighted) {
       _renderHighlighted(canvas);
     } else {
-      if (isPopping) {
+      if (isPopping && !_isReducedMotion) {
         _renderGhostTrails(canvas);
       }
       // Uniform brightness — legal moves are not telegraphed; wrong taps jam.
@@ -346,6 +349,16 @@ class NodeComponent extends PositionComponent
       ..color = const Color(0xFFFF5252).withValues(alpha: opacity)
       ..strokeWidth = cellSize * 0.08;
     canvas.drawRRect(_rrect, _ringPaint);
+
+    if (_isColorblindPalette) {
+      // Non-colour cue: high-contrast outline so the blocker warning flash is
+      // readable without red/green color discrimination.
+      final outlinePaint = Paint()
+        ..color = Colors.white.withValues(alpha: opacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = cellSize * 0.04;
+      canvas.drawRRect(_rrect.inflate(cellSize * 0.05), outlinePaint);
+    }
   }
 
   /// Expanding accent ring radiating once from the node when it becomes
@@ -354,11 +367,14 @@ class NodeComponent extends PositionComponent
   void _renderFreedPulse(Canvas canvas) {
     final t = (_freedTimer / _freedDuration).clamp(0.0, 1.0);
     final base = _rect.width * 0.5;
-    final radius = base + t * base * 0.7;
+    final radius = _isReducedMotion
+        ? base * 1.05
+        : (base + t * base * 0.7);
     final opacity = (1.0 - t) * 0.6;
     if (opacity <= 0.005) return;
     _ringPaint
-      ..color = game.theme.accent.withValues(alpha: opacity)
+      ..color = (isMounted ? game.theme.accent : const Color(0xFF00FF87))
+          .withValues(alpha: opacity)
       ..strokeWidth = (cellSize * 0.06) * (1.0 - t * 0.5);
     canvas.drawCircle(_rect.center, radius, _ringPaint);
   }
@@ -374,6 +390,28 @@ class NodeComponent extends PositionComponent
         ..color = const Color(0xFFFFD54F).withValues(alpha: 0.55 + 0.4 * pulse)
         ..strokeWidth = cellSize * 0.07;
       canvas.drawRRect(_rrect, _ringPaint);
+
+      if (_isColorblindPalette) {
+        // Non-colour cue: dashed ring pattern along the border so Core nodes
+        // are identified by shape rather than gold hue alone.
+        final dashPaint = Paint()
+          ..color = const Color(0xFFFFD54F).withValues(alpha: 0.85 + 0.15 * pulse)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cellSize * 0.06
+          ..strokeCap = StrokeCap.round;
+        final path = Path()..addRRect(_rrect);
+        final dashLen = cellSize * 0.14;
+        final gapLen = cellSize * 0.10;
+        for (final metric in path.computeMetrics()) {
+          final total = metric.length;
+          double dist = 0.0;
+          while (dist < total) {
+            final next = math.min(dist + dashLen, total);
+            canvas.drawPath(metric.extractPath(dist, next), dashPaint);
+            dist += dashLen + gapLen;
+          }
+        }
+      }
     }
     if (data.kind == NodeKind.locked) {
       final bracketPaint = Paint()
@@ -455,6 +493,24 @@ class NodeComponent extends PositionComponent
         false,
         strokePaint,
       );
+
+      if (_isColorblindPalette) {
+        // Non-colour cue: central relay glyph (high-contrast diamond) so Relays
+        // are identified by shape rather than green hue alone.
+        final glyphPaint = Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = cellSize * 0.035
+          ..strokeCap = StrokeCap.round;
+        final g = cellSize * 0.06;
+        final diamond = Path()
+          ..moveTo(0, -g)
+          ..lineTo(g, 0)
+          ..lineTo(0, g)
+          ..lineTo(-g, 0)
+          ..close();
+        canvas.drawPath(diamond, glyphPaint);
+      }
 
       canvas.restore();
     }
@@ -606,9 +662,13 @@ class NodeComponent extends PositionComponent
         position.setFrom(_originalPos);
         _shakeTimer = 0.0;
       } else {
-        final shakeAmount = (1.0 - (_shakeTimer / _shakeDuration)) * 10.0;
-        final offset = math.sin(_shakeTimer * 60) * shakeAmount;
-        position = _originalPos + _directionVector() * offset;
+        if (_isReducedMotion) {
+          position.setFrom(_originalPos);
+        } else {
+          final shakeAmount = (1.0 - (_shakeTimer / _shakeDuration)) * 10.0;
+          final offset = math.sin(_shakeTimer * 60) * shakeAmount;
+          position = _originalPos + _directionVector() * offset;
+        }
       }
     }
   }

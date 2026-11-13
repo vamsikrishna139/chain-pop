@@ -110,7 +110,7 @@ Future<void> showGameSettingsSheet({
                       const SizedBox(height: 8),
                       _buildToggle(
                         title: 'Haptic Vibration',
-                        subtitle: 'Tactile impulses on release & fouls',
+                        subtitle: 'Tactile impulses on release & jams',
                         icon: Icons.vibration_rounded,
                         iconColor: accent,
                         value: current.hapticsEnabled,
@@ -155,6 +155,19 @@ Future<void> showGameSettingsSheet({
                         value: current.ambientMotion,
                         onChanged: (v) {
                           current = current.copyWith(ambientMotion: v);
+                          onSettingsChanged(current);
+                          setModalState(() {});
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _buildToggle(
+                        title: 'Reduced Motion',
+                        subtitle: 'Calm fades in place of shakes and bursts',
+                        icon: Icons.motion_photos_off_rounded,
+                        iconColor: Colors.tealAccent,
+                        value: current.reducedMotion,
+                        onChanged: (v) {
+                          current = current.copyWith(reducedMotion: v);
                           onSettingsChanged(current);
                           setModalState(() {});
                         },

@@ -157,7 +157,7 @@ void main() {
 
     await tester.runAsync(() => state.debugSimulateWinForTest());
     await _settle(tester);
-    expect(find.text('Next level in 5s'), findsOneWidget);
+    expect(find.text('Next level in 8s'), findsOneWidget);
 
     // e.g. Rate opened the Play Store over the app.
     _setLifecycle(tester, [
@@ -166,7 +166,7 @@ void main() {
       AppLifecycleState.paused,
     ]);
     await _waitReal(tester, const Duration(milliseconds: 2900));
-    expect(find.text('Next level in 5s'), findsOneWidget);
+    expect(find.text('Next level in 8s'), findsOneWidget);
 
     _setLifecycle(tester, [
       AppLifecycleState.hidden,
@@ -174,7 +174,7 @@ void main() {
       AppLifecycleState.resumed,
     ]);
     await _waitReal(tester, const Duration(milliseconds: 1300));
-    expect(find.text('Next level in 5s'), findsNothing);
+    expect(find.text('Next level in 8s'), findsNothing);
   });
 
   testWidgets('a surge level shows the SURGE header label', (tester) async {

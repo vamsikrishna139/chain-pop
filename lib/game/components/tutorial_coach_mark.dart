@@ -41,24 +41,38 @@ class TutorialCoachMark extends PositionComponent
     if (!_visible || game.hasWon || game.isGameOver) return;
     final accent = game.theme.accent;
 
-    // ── Pulsing ring on the tile ─────────────────────────────────────────────
-    final t = (_clock % 1.3) / 1.3;
-    final ringR = cellSize * 0.55 + t * cellSize * 0.35;
-    final ringOpacity = (1.0 - t) * 0.7;
-    if (ringOpacity > 0.01) {
+    final isReduced = game.reducedMotion;
+
+    // ── Ring on the tile (steady under reduced motion; pulsing otherwise) ───
+    if (isReduced) {
       canvas.drawCircle(
         Offset.zero,
-        ringR,
+        cellSize * 0.65,
         Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = cellSize * 0.05 * (1.0 - t * 0.5)
-          ..color = accent.withValues(alpha: ringOpacity),
+          ..strokeWidth = cellSize * 0.04
+          ..color = accent.withValues(alpha: 0.55),
       );
+    } else {
+      final t = (_clock % 1.3) / 1.3;
+      final ringR = cellSize * 0.55 + t * cellSize * 0.35;
+      final ringOpacity = (1.0 - t) * 0.7;
+      if (ringOpacity > 0.01) {
+        canvas.drawCircle(
+          Offset.zero,
+          ringR,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = cellSize * 0.05 * (1.0 - t * 0.5)
+            ..color = accent.withValues(alpha: ringOpacity),
+        );
+      }
     }
 
-    // ── Bouncing arrow from the lower-right, pointing up-left at the tile ─────
-    final bounce =
-        (math.sin(_clock * math.pi * 2) * 0.5 + 0.5) * cellSize * 0.12;
+    // ── Arrow from the lower-right (bounce omitted under reduced motion) ─────
+    final bounce = isReduced
+        ? 0.0
+        : (math.sin(_clock * math.pi * 2) * 0.5 + 0.5) * cellSize * 0.12;
     final dir = const Offset(-1, -1) / math.sqrt2; // points up-left
     final perp = const Offset(-1, 1) / math.sqrt2;
     final tip = Offset(cellSize * 0.34, cellSize * 0.34) + dir * -bounce;

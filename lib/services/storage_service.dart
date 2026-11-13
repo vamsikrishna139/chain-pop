@@ -59,6 +59,8 @@ class StorageService {
 
   static GameSettings get gameSettings => StorageLocator.instance.gameSettings;
 
+  static bool? get rawReducedMotion => StorageLocator.instance.rawReducedMotion;
+
   static Future<void> saveGameSettings(GameSettings settings) =>
       StorageLocator.instance.saveGameSettings(settings);
 
@@ -158,18 +160,14 @@ class StorageService {
   static bool get reviewHasEverTappedRate =>
       StorageLocator.instance.reviewHasEverTappedRate;
 
+  static List<int> get diversityLedgerBits =>
+      StorageLocator.instance.diversityLedgerBits;
+
+  static Future<void> saveDiversityLedgerBits(List<int> bits) =>
+      StorageLocator.instance.saveDiversityLedgerBits(bits);
+
   static Future<void> setReviewHasEverTappedRate(bool value) =>
       StorageLocator.instance.setReviewHasEverTappedRate(value);
-
-  @Deprecated('Use highestUnlocked(DifficultyMode) instead')
-  static int get highestUnlockedLevel =>
-      StorageLocator.instance.highestUnlocked(
-        StorageLocator.instance.selectedDifficulty,
-      );
-
-  @Deprecated('Use unlockLevel(DifficultyMode, int) instead')
-  static Future<void> unlockLevelLegacy(int level) =>
-      unlockLevel(selectedDifficulty, level);
 
   static Future<void> clearProgress() =>
       StorageLocator.instance.clearProgress();
