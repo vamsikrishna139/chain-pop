@@ -76,6 +76,48 @@ class LevelManager {
   /// so release builds skipped the bounds, duplicate-cell and play-cell checks
   /// entirely; they are cheap next to generation itself.
   static LevelData getLevel(int levelId, {DifficultyMode? mode}) {
+    // Serve the board this player already saw for (mode, id). Generation reads
+    // the diversity ledger and a wall-clock budget, so regenerating a level —
+    // backing out and re-entering, or the menu's Play after an abandon — used
+    // to deal a *different* board for the same level number (and let players
+    // reroll a hard one). The board just served is also in the ledger, which
+    // all but guaranteed the reroll.
+    final cacheKey = _servedKey(levelId, mode);
+    final cached = _served.remove(cacheKey);
+    if (cached != null) {
+      _served[cacheKey] = cached; // refresh LRU position
+      return cached;
+    }
+    _lastGenerationFellBack = false;
+    final level = _generate(levelId, mode: mode);
+    // A fallback board is not "the" level — let the next visit try again.
+    if (_lastGenerationFellBack) return level;
+    _served[cacheKey] = level;
+    while (_served.length > servedCacheCapacity) {
+      _served.remove(_served.keys.first);
+    }
+    return level;
+  }
+
+  /// How many recently served campaign boards [getLevel] remembers. Covers any
+  /// realistic back-and-forth within a session; the cache is in-memory only.
+  static const int servedCacheCapacity = 64;
+
+  /// Insertion-ordered (LRU) map of `mode:id` → the board served for it.
+  static final Map<String, LevelData> _served = {};
+
+  // Keyed by generator identity too: swapping [generator] (tests, a future
+  // Gen V2 switch) must never serve a board the old generator made.
+  static String _servedKey(int levelId, DifficultyMode? mode) =>
+      '${identityHashCode(generator)}:${(mode ?? DifficultyMode.easy).name}:'
+      '$levelId';
+
+  static bool _lastGenerationFellBack = false;
+
+  /// Drops every remembered board. For tests and progress resets.
+  static void clearServedLevels() => _served.clear();
+
+  static LevelData _generate(int levelId, {DifficultyMode? mode}) {
     final result = generator.generate(
       levelId,
       mode: mode,
@@ -95,6 +137,7 @@ class LevelManager {
       failure = _describe(result.error);
     }
     _reportFallback('campaign', levelId, failure);
+    _lastGenerationFellBack = true;
     return fallbackLevel(levelId, mode: mode ?? DifficultyMode.easy);
   }
 

@@ -26,7 +26,7 @@ extension SessionGoalKindX on SessionGoalKind {
         SessionGoalKind.winThree => 'Win 3 levels',
         SessionGoalKind.comboSix => 'Reach a ×6 combo',
         SessionGoalKind.clearSurge => 'Clear a SURGE',
-        SessionGoalKind.restoreCores => 'Restore 5 reactors',
+        SessionGoalKind.restoreCores => 'Restore 5 cores',
         SessionGoalKind.flawlessClear => 'Win 2 levels jam-free',
         SessionGoalKind.clearNodes => 'Clear 120 nodes',
       };
@@ -61,6 +61,24 @@ abstract final class SessionGoals {
     if (_active == null) {
       _rotation = dayKey % SessionGoalKind.values.length;
     }
+  }
+
+  /// Moves past the active goal when the board about to be played can never
+  /// advance it and it has not been started — today that is "restore cores" on
+  /// a board without cores (all of Easy, Medium sector 1). Without this a
+  /// player could be shown an unwinnable goal for a whole session.
+  static void skipIfUnachievable({required bool boardHasCores}) {
+    if (_done || _progress > 0) return;
+    if (active == SessionGoalKind.restoreCores && !boardHasCores) {
+      resetSession();
+    }
+  }
+
+  /// Called when the player leaves to the menu. Progress on an unfinished
+  /// goal is kept (a menu visit used to wipe it silently); a completed goal
+  /// rotates so the next run gets a fresh one.
+  static void onReturnToMenu() {
+    if (_done) resetSession();
   }
 
   static void resetSession() {
@@ -153,6 +171,8 @@ abstract interface class SessionGoalsController {
   bool recordFlawlessWin();
   void seedRotation(int dayKey);
   void resetSession();
+  void skipIfUnachievable({required bool boardHasCores});
+  void onReturnToMenu();
 }
 
 final class DefaultSessionGoalsController implements SessionGoalsController {
@@ -181,6 +201,11 @@ final class DefaultSessionGoalsController implements SessionGoalsController {
   void seedRotation(int dayKey) => SessionGoals.seedRotation(dayKey);
   @override
   void resetSession() => SessionGoals.resetSession();
+  @override
+  void skipIfUnachievable({required bool boardHasCores}) =>
+      SessionGoals.skipIfUnachievable(boardHasCores: boardHasCores);
+  @override
+  void onReturnToMenu() => SessionGoals.onReturnToMenu();
 }
 
 const SessionGoalsController defaultSessionGoalsController =

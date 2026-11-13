@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../game/daily_challenge.dart';
@@ -113,6 +114,15 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     });
   }
 
+  int _clearedLevelsForMode(DifficultyMode mode) {
+    final frontier = StorageLocator.instance.highestUnlocked(mode);
+    var n = 0;
+    for (var i = 1; i <= frontier; i++) {
+      if (StorageLocator.instance.stars(mode, i) > 0) n++;
+    }
+    return n;
+  }
+
   int _totalStarsForMode(DifficultyMode mode) {
     final frontier = StorageLocator.instance.highestUnlocked(mode);
     var sum = 0;
@@ -178,13 +188,40 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     });
   }
 
+  DateTime? _lastBackPress;
+
+  /// Android Back on the menu used to close the app on the first press. Now
+  /// the first press shows a hint and only a second press within 2 s exits.
+  void _handleSystemBack() {
+    final now = DateTime.now();
+    final last = _lastBackPress;
+    if (last != null && now.difference(last) < const Duration(seconds: 2)) {
+      unawaited(SystemNavigator.pop());
+      return;
+    }
+    _lastBackPress = now;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Press back again to exit'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+  }
+
   @override
   Widget build(BuildContext context) {
     final accent = _selected.color;
     final isHard = _selected == DifficultyMode.hard;
     final isMedium = _selected == DifficultyMode.medium;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleSystemBack();
+      },
+      child: Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
@@ -216,6 +253,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
             ],
           ),
         ),
+      ),
       ),
     );
   }
@@ -360,11 +398,14 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   Widget _buildProgressionCard(Color accent, bool isHard, bool isMedium) {
     final frontier = StorageLocator.instance.highestUnlocked(_selected);
     final totalStars = _totalStarsForMode(_selected);
-    final maxStars = frontier * 3;
+    // Count only cleared levels (stars > 0). The frontier itself is unplayed,
+    // and counting it made four 3-star wins read "12/15 · AVG 2.4".
+    final cleared = _clearedLevelsForMode(_selected);
+    final maxStars = cleared * 3;
     final progressFrac =
         maxStars > 0 ? (totalStars / maxStars).clamp(0.0, 1.0) : 0.0;
 
-    final avg = ProgressFormat.avgStarsPerClearedStage(totalStars, frontier);
+    final avg = ProgressFormat.avgStarsPerClearedStage(totalStars, cleared);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -379,6 +420,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
               spreadRadius: -10),
         ],
       ),
+      // Keep the corner glow inside the card's rounded edge (it used to bleed
+      // over the mode selector above).
+      clipBehavior: Clip.antiAlias,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -406,11 +450,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isHard
-                            ? 'HARD · GATEWAY'
-                            : isMedium
-                                ? 'MEDIUM · SECTOR'
-                                : 'EASY · CAMPAIGN',
+                        '${_selected.label.toUpperCase()} · CAMPAIGN',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 11,
                           letterSpacing: 1.5,

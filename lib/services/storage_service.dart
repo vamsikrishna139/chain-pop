@@ -169,16 +169,6 @@ class StorageService {
   static Future<void> setReviewHasEverTappedRate(bool value) =>
       StorageLocator.instance.setReviewHasEverTappedRate(value);
 
-  @Deprecated('Use highestUnlocked(DifficultyMode) instead')
-  static int get highestUnlockedLevel =>
-      StorageLocator.instance.highestUnlocked(
-        StorageLocator.instance.selectedDifficulty,
-      );
-
-  @Deprecated('Use unlockLevel(DifficultyMode, int) instead')
-  static Future<void> unlockLevelLegacy(int level) =>
-      unlockLevel(selectedDifficulty, level);
-
   static Future<void> clearProgress() =>
       StorageLocator.instance.clearProgress();
 

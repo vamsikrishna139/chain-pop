@@ -283,7 +283,7 @@ class DifficultyProfile {
       if (!hardExpertOpeningBand.contains(w0)) return false;
     }
 
-    // Temporary: Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
+    // TODO(temporary): Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
     // if ((tier == DifficultyTier.hard || tier == DifficultyTier.expert) &&
     //     metrics.tempoProfile.isNotEmpty &&
     //     !passesTemporalArc(metrics.tempoProfile)) {

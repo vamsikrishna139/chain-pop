@@ -146,7 +146,7 @@ class _DailyChallengeCalendarScreenState
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          'Network Incidents · ${DailyChallenge.monthYearTitle(y, m)}',
+          'Daily Incidents · ${DailyChallenge.monthYearTitle(y, m)}',
           style: const TextStyle(fontWeight: FontWeight.w800),
         ),
         centerTitle: true,
@@ -162,7 +162,7 @@ class _DailyChallengeCalendarScreenState
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     children: [
                       Text(
-                        'Network incidents',
+                        'Daily incidents',
                         style: tt.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),

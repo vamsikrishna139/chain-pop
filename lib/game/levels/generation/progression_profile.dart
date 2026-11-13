@@ -22,9 +22,16 @@ abstract final class PortalRollout {
 }
 
 /// Clamp mechanics behind Phase feature flags until they are ready.
+///
+/// [CampaignMechanic.multiRelay] is **off**: the two-relay softlock predicate
+/// in `level_enrichment.dart` is unsound (`relay_softlock_property_test`'s
+/// two-relay case finds boards it passes that still dead-end), and Hard
+/// sector 7+ (L751+) plus every Daily (sector 8) budgeted two relays — so the
+/// unsound path was reachable in shipped boards. With the flag off
+/// `clampRelay` caps every board at one relay, whose safety argument is sound.
+/// Re-enable only once the two-relay predicate is fixed.
 const Set<CampaignMechanic> _kEnabledMechanics = {
   CampaignMechanic.phaseGate,
-  CampaignMechanic.multiRelay,
   CampaignMechanic.portalPair
 };
 

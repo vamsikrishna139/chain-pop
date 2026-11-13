@@ -26,6 +26,7 @@ import 'services/crash_reporting.dart';
 import 'services/game_audio.dart';
 import 'services/game_audio_scope.dart';
 import 'services/notification_service.dart';
+import 'services/session_goals.dart';
 import 'services/storage_service.dart';
 import 'services/subscription/no_op_subscription_service.dart';
 import 'services/subscription/revenue_cat_subscription_service.dart';
@@ -89,7 +90,9 @@ Future<void> bootstrapChainPop() async {
   // After storage: the tracker reads Hive on construction of its first
   // snapshot. Installs the Play Games sink on Android and kicks off sign-in
   // without blocking; everywhere else this is a local-only tracker.
-  PlayGamesBootstrap.install();
+  PlayGamesBootstrap.install(
+    liveSync: PlayGamesBootstrap.liveSyncInThisBuild,
+  );
 
   await _bootstrapThirdPartySdks();
 }
@@ -223,6 +226,9 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
       if (pausedAt != null &&
           DateTime.now().difference(pausedAt) >= _sessionGap) {
         unawaited(StorageService.incrementSessionCount());
+        // A real return starts a new play session, so the session goal starts
+        // over too (menu visits no longer reset it — see SessionGoals).
+        SessionGoals.resetSession();
       }
       // Pushes the "you have not played in a while" reminder back out. Cheap,
       // fire-and-forget, never blocks the frame.

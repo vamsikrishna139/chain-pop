@@ -62,9 +62,9 @@ void main() {
         // (which would otherwise hang until the 10-minute per-test timeout).
         await tester.runAsync(() => state.debugSimulateWinForTest());
         if (i == tutorialLevels.length - 1) {
-          // The final step schedules a 3-second tutorialExitTimer to return to menu.
-          // Pump past it so it fires and clears from the event queue.
+          // The final step no longer auto-exits; it offers START CAMPAIGN.
           await tester.pump(const Duration(seconds: 4));
+          expect(find.text('START CAMPAIGN'), findsOneWidget);
         } else {
           await tester.pump(const Duration(milliseconds: 600));
         }

@@ -1104,6 +1104,7 @@ class LevelGenerator {
   /// Zero by default, so the shipped behaviour is untouched and no board
   /// moves. Only `p2b_cud_isolation_report_test.dart` writes it.
   @visibleForTesting
+  @visibleForTesting
   static int cudFloorRelaxation = 0;
 
   Result<LevelData, GenerationError> _attemptDirectorDrivenGeneration(

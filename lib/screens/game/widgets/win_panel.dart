@@ -22,12 +22,24 @@ class WinPanel extends StatefulWidget {
   final int? sessionGoalTarget;
   final bool? sessionGoalComplete;
   final int autoAdvanceSec;
+
+  /// The player touched the panel, so the countdown is stopped for good.
+  final bool autoAdvanceHeld;
+
+  /// Called on the first touch anywhere on the panel (buttons included —
+  /// their own action still runs).
+  final VoidCallback? onHoldAutoAdvance;
   final VoidCallback onMenu;
   final VoidCallback onRetry;
   final VoidCallback onNext;
 
   /// When false, hides auto-advance copy and the Next button (daily puzzle).
   final bool showNextAndAutoAdvance;
+
+  /// Optional primary action shown in place of NEXT when there is no next
+  /// level in this flow (the last tutorial card → START CAMPAIGN).
+  final String? finalActionLabel;
+  final VoidCallback? onFinalAction;
 
   /// Replaces the default `LEVEL … · MODE` caption when non-null.
   final String? titleLine;
@@ -48,10 +60,14 @@ class WinPanel extends StatefulWidget {
     this.sessionGoalTarget,
     this.sessionGoalComplete,
     required this.autoAdvanceSec,
+    this.autoAdvanceHeld = false,
+    this.onHoldAutoAdvance,
     required this.onMenu,
     required this.onRetry,
     required this.onNext,
     this.showNextAndAutoAdvance = true,
+    this.finalActionLabel,
+    this.onFinalAction,
     this.titleLine,
     this.directiveLabel,
   });
@@ -119,300 +135,332 @@ class _WinPanelState extends State<WinPanel> with TickerProviderStateMixin {
     const totalSec = GameScreenConstants.winAutoAdvanceSeconds;
     final frac = widget.autoAdvanceSec / totalSec;
 
-    return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: accent.withValues(alpha: 0.3), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: accent.withValues(alpha: 0.2),
-              blurRadius: 40,
-              spreadRadius: 4,
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                widget.titleLine ??
-                    'LEVEL ${ProgressFormat.level(widget.levelId)} · ${widget.difficulty.label}',
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2,
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: widget.showNextAndAutoAdvance && !widget.autoAdvanceHeld
+          ? (_) => widget.onHoldAutoAdvance?.call()
+          : null,
+      child: SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(28),
+            border:
+                Border.all(color: accent.withValues(alpha: 0.3), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.2),
+                blurRadius: 40,
+                spreadRadius: 4,
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.titleLine ??
+                      'LEVEL ${ProgressFormat.level(widget.levelId)} · ${widget.difficulty.label}',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: accent,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                const Center(
-                  child: Text(
-                    'Complete!',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
+              const SizedBox(height: 6),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Center(
+                    child: Text(
+                      'Complete!',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: IconButton(
-                    icon: const Icon(Icons.share, color: Colors.white70),
-                    onPressed: () {
-                      SharePlus.instance.share(ShareParams(
-                        text: AppShareActions.levelClearedShareText(
-                            '${widget.levelId}'),
-                      ));
-                    },
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      icon: const Icon(Icons.share, color: Colors.white70),
+                      onPressed: () {
+                        SharePlus.instance.share(ShareParams(
+                          text: AppShareActions.levelClearedShareText(
+                              '${widget.levelId}'),
+                        ));
+                      },
+                    ),
                   ),
-                ),
-              ],
-            ),
-            if (widget.directiveLabel != null) ...[
-              const SizedBox(height: 10),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        widget.directiveLabel!,
-                        maxLines: 1,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                      if (widget.missionLabel != null) ...[
-                        const Text(
-                          ' · ',
+                ],
+              ),
+              if (widget.directiveLabel != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          widget.directiveLabel!,
                           maxLines: 1,
-                          style: TextStyle(
-                            color: Colors.white24,
+                          style: const TextStyle(
+                            color: Colors.white70,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.5,
                           ),
                         ),
-                        Text(
-                          widget.missionLabel!,
-                          maxLines: 1,
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
+                        if (widget.missionLabel != null) ...[
+                          const Text(
+                            ' · ',
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: Colors.white24,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          Text(
+                            widget.missionLabel!,
+                            maxLines: 1,
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(3, (i) {
+                  final earned = i < widget.stars;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: ScaleTransition(
+                      scale: _starScale[i],
+                      child: Icon(
+                        earned
+                            ? Icons.star_rounded
+                            : Icons.star_outline_rounded,
+                        size: 50,
+                        color: earned ? AppColors.starGold : Colors.white24,
+                        shadows: earned
+                            ? [
+                                Shadow(
+                                  color:
+                                      AppColors.starGold.withValues(alpha: 0.7),
+                                  blurRadius: 16,
+                                )
+                              ]
+                            : [],
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _WinStatChip(label: 'TIME', value: _fmt(widget.timeTaken)),
+                  const SizedBox(width: 16),
+                  _WinStatChip(
+                    label: 'JAMS',
+                    value: '${widget.foulCount}',
+                  ),
+                ],
+              ),
+              if (widget.sessionGoalLabel != null) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(
+                      widget.sessionGoalComplete == true
+                          ? Icons.check_circle_rounded
+                          : Icons.flag_rounded,
+                      size: 13,
+                      color: widget.sessionGoalComplete == true
+                          ? const Color(0xFF00FF87)
+                          : accent,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        widget.sessionGoalLabel!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    if (widget.sessionGoalComplete == true)
+                      const Text(
+                        'COMPLETE',
+                        style: TextStyle(
+                          color: Color(0xFF00FF87),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      )
+                    else ...[
+                      SizedBox(
+                        width: 48,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: (widget.sessionGoalTarget ?? 1) == 0
+                                ? 0.0
+                                : (widget.sessionGoalProgress ?? 0) /
+                                    widget.sessionGoalTarget!,
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.1),
+                            color: accent,
+                            minHeight: 4,
                           ),
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${widget.sessionGoalProgress}/${widget.sessionGoalTarget}',
+                        style: TextStyle(
+                          color: accent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              if (widget.showNextAndAutoAdvance && widget.autoAdvanceHeld) ...[
+                const SizedBox(height: 20),
+                const Text(
+                  'Tap Next when ready',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              ],
+              if (widget.showNextAndAutoAdvance && !widget.autoAdvanceHeld) ...[
+                const SizedBox(height: 20),
+                Semantics(
+                  liveRegion: true,
+                  label:
+                      'Next level in ${widget.autoAdvanceSec} seconds. Tap Next to skip the wait.',
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.skip_next_rounded,
+                            size: 14,
+                            color: Colors.white38,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Next level in ${widget.autoAdvanceSec}s',
+                            style: const TextStyle(
+                              color: Colors.white38,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: frac.clamp(0.0, 1.0),
+                          backgroundColor: Colors.white12,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            accent.withValues(alpha: 0.6),
+                          ),
+                          minHeight: 3,
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (i) {
-                final earned = i < widget.stars;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: ScaleTransition(
-                    scale: _starScale[i],
-                    child: Icon(
-                      earned ? Icons.star_rounded : Icons.star_outline_rounded,
-                      size: 50,
-                      color: earned ? AppColors.starGold : Colors.white24,
-                      shadows: earned
-                          ? [
-                              Shadow(
-                                color:
-                                    AppColors.starGold.withValues(alpha: 0.7),
-                                blurRadius: 16,
-                              )
-                            ]
-                          : [],
-                    ),
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _WinStatChip(label: 'TIME', value: _fmt(widget.timeTaken)),
-                const SizedBox(width: 16),
-                _WinStatChip(
-                  label: 'FOULS',
-                  value: '${widget.foulCount}',
-                ),
               ],
-            ),
-            if (widget.sessionGoalLabel != null) ...[
-              const SizedBox(height: 16),
+              SizedBox(height: widget.showNextAndAutoAdvance ? 20 : 8),
               Row(
                 children: [
-                  Icon(
-                    widget.sessionGoalComplete == true
-                        ? Icons.check_circle_rounded
-                        : Icons.flag_rounded,
-                    size: 13,
-                    color: widget.sessionGoalComplete == true
-                        ? const Color(0xFF00FF87)
-                        : accent,
-                  ),
-                  const SizedBox(width: 6),
                   Expanded(
-                    child: Text(
-                      widget.sessionGoalLabel!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                      ),
+                    child: _WinOutlineButton(
+                      label: 'MENU',
+                      icon: Icons.home_rounded,
+                      onPressed: widget.onMenu,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  if (widget.sessionGoalComplete == true)
-                    const Text(
-                      'COMPLETE',
-                      style: TextStyle(
-                        color: Color(0xFF00FF87),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    )
-                  else ...[
-                    SizedBox(
-                      width: 48,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: (widget.sessionGoalTarget ?? 1) == 0
-                              ? 0.0
-                              : (widget.sessionGoalProgress ?? 0) /
-                                  widget.sessionGoalTarget!,
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                          color: accent,
-                          minHeight: 4,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${widget.sessionGoalProgress}/${widget.sessionGoalTarget}',
-                      style: TextStyle(
-                        color: accent,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ],
-            if (widget.showNextAndAutoAdvance) ...[
-              const SizedBox(height: 20),
-              Semantics(
-                liveRegion: true,
-                label:
-                    'Next level in ${widget.autoAdvanceSec} seconds. Tap Next to skip the wait.',
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.skip_next_rounded,
-                          size: 14,
-                          color: Colors.white38,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Next level in ${widget.autoAdvanceSec}s',
-                          style: const TextStyle(
-                            color: Colors.white38,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: frac.clamp(0.0, 1.0),
-                        backgroundColor: Colors.white12,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          accent.withValues(alpha: 0.6),
-                        ),
-                        minHeight: 3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            SizedBox(height: widget.showNextAndAutoAdvance ? 20 : 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _WinOutlineButton(
-                    label: 'MENU',
-                    icon: Icons.home_rounded,
-                    onPressed: widget.onMenu,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _WinOutlineButton(
-                    label: 'RETRY',
-                    icon: Icons.refresh_rounded,
-                    onPressed: widget.onRetry,
-                  ),
-                ),
-                if (widget.showNextAndAutoAdvance) ...[
                   const SizedBox(width: 10),
                   Expanded(
-                    flex: 2,
-                    child: _WinPrimaryButton(
-                      label: 'NEXT',
-                      icon: Icons.arrow_forward_rounded,
-                      color: accent,
-                      onPressed: widget.onNext,
+                    child: _WinOutlineButton(
+                      label: 'RETRY',
+                      icon: Icons.refresh_rounded,
+                      onPressed: widget.onRetry,
                     ),
                   ),
+                  if (!widget.showNextAndAutoAdvance &&
+                      widget.finalActionLabel != null &&
+                      widget.onFinalAction != null) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: _WinPrimaryButton(
+                        label: widget.finalActionLabel!,
+                        icon: Icons.play_arrow_rounded,
+                        color: accent,
+                        onPressed: widget.onFinalAction!,
+                      ),
+                    ),
+                  ],
+                  if (widget.showNextAndAutoAdvance) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 2,
+                      child: _WinPrimaryButton(
+                        label: 'NEXT',
+                        icon: Icons.arrow_forward_rounded,
+                        color: accent,
+                        onPressed: widget.onNext,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

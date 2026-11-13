@@ -110,7 +110,7 @@ Future<void> showGameSettingsSheet({
                       const SizedBox(height: 8),
                       _buildToggle(
                         title: 'Haptic Vibration',
-                        subtitle: 'Tactile impulses on release & fouls',
+                        subtitle: 'Tactile impulses on release & jams',
                         icon: Icons.vibration_rounded,
                         iconColor: accent,
                         value: current.hapticsEnabled,

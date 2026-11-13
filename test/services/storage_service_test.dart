@@ -148,19 +148,6 @@ void main() {
       expect(StorageService.selectedDifficulty, DifficultyMode.hard);
     });
 
-    test('highestUnlockedLevel follows selected difficulty', () async {
-      await StorageService.setSelectedDifficulty(DifficultyMode.medium);
-      await StorageService.unlockLevel(DifficultyMode.medium, 12);
-      expect(StorageService.highestUnlockedLevel, 12);
-    });
-
-    test('unlockLevelLegacy uses selected difficulty', () async {
-      await StorageService.setSelectedDifficulty(DifficultyMode.easy);
-      await StorageService.unlockLevelLegacy(6);
-      expect(StorageService.highestUnlocked(DifficultyMode.easy), 6);
-      expect(StorageService.highestUnlocked(DifficultyMode.medium), 1);
-    });
-
     test('gameSettings defaults and saveGameSettings persists', () async {
       expect(StorageService.gameSettings.soundEnabled, isTrue);
       expect(StorageService.gameSettings.hapticsEnabled, isTrue);
