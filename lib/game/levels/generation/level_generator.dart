@@ -5,6 +5,7 @@ import '../grid_cell_key.dart';
 import '../level.dart';
 import '../level_solver.dart';
 import 'archetype.dart';
+import 'core_metrics.dart';
 import 'candidate_scorer.dart';
 import 'difficulty_mode.dart';
 import 'difficulty_profile.dart';
@@ -48,7 +49,31 @@ import 'visual_composition.dart';
 /// The monotone / strip fallbacks (`_generateFallbackLevel`,
 /// `_generateOneDirection`, `_levelDataRowMajorMonotone`, `_levelDataMonotone`)
 /// were retired in Phase 3 — the Director Renegotiation now plays that role.
+/// D2: Gen V2 blocking-flip window, as a share of the removal order.
+const double kGenV2CrunchStart = 0.12;
+const double kGenV2CrunchEnd = 0.92;
+
+/// P2: micro-twist level. Position 17 in each 25-level world is a lock-cluster
+/// finale (two locks). Pure function of the level id; Daily ids are exempt.
+/// A forced-relay twist (1.1-2.6 s per board) and a forced zero-mechanic twist
+/// (same cost, from shortfall retries) were tried and dropped.
+///
+/// P3 (V2c) lock variance rides the same sawtooth: relief levels (1-3) carry
+/// no locks, build-up (15-19) two, climax (20-24) three. The generator's
+/// mechanic-shortfall check only ever requires `min(base, override)`, so a
+/// twist can lower the requirement but never adds a rejection (that extra
+/// rejection is what made the earlier zero-mechanic twist slow).
+MechanicBudgetOverride? genV2TwistOverride(int levelId) {
+  final pos = LevelConfiguration.genV2WorldPosition(levelId);
+  if (pos == null) return null;
+  if (pos <= 3) return const MechanicBudgetOverride(lockCount: 0);
+  if (pos >= 15 && pos <= 19) return const MechanicBudgetOverride(lockCount: 2);
+  if (pos >= 20 && pos <= 24) return const MechanicBudgetOverride(lockCount: 3);
+  return null;
+}
+
 class LevelGenerator {
+
   final LevelValidator _validator;
 
   /// Director that picks archetype / silhouette / scorer-weights per attempt.
@@ -555,17 +580,28 @@ class LevelGenerator {
   ///
   /// Checks for milestone levels first, then falls back to the normal
   /// backward-generation loop with archetype-driven shape/bias selection.
+  ///
+  /// [generationVersion] 2 selects Gen V2 (docs/GEN_V2_PLAN.md). V2 callers
+  /// pass [workBudget], never [timeBudget], so the board does not depend on
+  /// device speed.
   Result<LevelData, GenerationError> generate(
     int levelId, {
     DifficultyMode? mode,
     Duration? timeBudget,
+    int? workBudget,
+    int generationVersion = 1,
   }) {
-    final config = LevelConfiguration.fromLevelId(levelId, mode: mode);
+    final config = LevelConfiguration.fromLevelId(
+      levelId,
+      mode: mode,
+      generationVersion: generationVersion,
+    );
     return generateFromConfiguration(
       config,
       primarySeed: levelId,
       applyMilestones: true,
       timeBudget: timeBudget,
+      workBudget: workBudget,
     );
   }
 
@@ -596,6 +632,11 @@ class LevelGenerator {
     // T0.0c: fold generationVersion into seed derivation (identity at v1)
     if (kGenerationVersion > 1) {
       primarySeed = primarySeed ^ ((kGenerationVersion - 1) * 73856093);
+    }
+    // Gen V2 dense boards draw from their own seed stream, so a V2 board is
+    // never a near-copy of the V1 board for the same id.
+    if (config.isGenV2Dense) {
+      primarySeed = primarySeed ^ 0x2B992DDF;
     }
 
     final validation = config.validate();
@@ -638,6 +679,7 @@ class LevelGenerator {
             irregularMaskProbability: config.irregularMaskProbability,
             irregularLayoutExtraTries: config.irregularLayoutExtraTries,
             minimumTargetNodeCount: config.minimumTargetNodeCount,
+            generationVersion: config.generationVersion,
           );
           final validation = seedConfig.validate();
           if (!validation.isValid) {
@@ -694,6 +736,17 @@ class LevelGenerator {
           );
           if (seedResult.isError) {
             _bumpSeed(_seedConstructionFailureCounts, seed.id);
+          }
+          // Gen V2: a seed whose canonical silhouette cannot carry the V2
+          // density floor on the portrait frame (the milestone diamond is ~25
+          // cells on 7x9 → 22 nodes) is dropped for the procedural V2 board.
+          // The canonical mask is fixed per seed, so retrying cannot help.
+          if (seedResult.isSuccess &&
+              config.isGenV2Dense &&
+              seed.targetNodeCount == null &&
+              seedResult.value.nodes.length < kGenV2MinNodes) {
+            _discardPendingEmission();
+            break;
           }
           if (seedResult.isSuccess) {
             final enriched = _enrichLevel(
@@ -836,6 +889,10 @@ class LevelGenerator {
                         config.difficulty.minNodes,
                         config.targetNodeCount,
                       );
+              // Gen V2 never retries below its density floor.
+              if (config.isGenV2Dense && scaledTarget < kGenV2MinNodes) {
+                scaledTarget = min(kGenV2MinNodes, config.targetNodeCount);
+              }
               final minFloor = config.minimumTargetNodeCount;
               if (minFloor != null && scaledTarget < minFloor) {
                 scaledTarget = minFloor;
@@ -851,6 +908,7 @@ class LevelGenerator {
                 irregularMaskProbability: config.irregularMaskProbability,
                 irregularLayoutExtraTries: config.irregularLayoutExtraTries,
                 minimumTargetNodeCount: config.minimumTargetNodeCount,
+                generationVersion: config.generationVersion,
               );
             }();
 
@@ -912,8 +970,15 @@ class LevelGenerator {
           continue;
         }
 
-        final budget =
+        var budget =
             budgetFor(levelId: config.levelId, mode: config.difficulty.mode);
+        if (config.isGenV2Dense) {
+          final twist = genV2TwistOverride(config.levelId);
+          final twistLocks = twist?.lockCount;
+          if (twistLocks != null && twistLocks < budget.lockCount) {
+            budget = budget.copyWith(lockCount: twistLocks);
+          }
+        }
         final lockCount =
             enriched.nodes.where((n) => n.kind == NodeKind.locked).length;
         final relayCount =
@@ -1040,8 +1105,12 @@ class LevelGenerator {
     int dayKey, {
     Duration? timeBudget,
     int? workBudget,
+    int generationVersion = 1,
   }) {
-    final config = LevelConfiguration.forDailyChallenge(dayKey);
+    final config = LevelConfiguration.forDailyChallenge(
+      dayKey,
+      generationVersion: generationVersion,
+    );
     return generateFromConfiguration(
       config,
       primarySeed: dayKey,
@@ -1217,13 +1286,21 @@ class LevelGenerator {
 
       final level = once.value;
       final metrics = LevelMetrics.compute(level);
-      if (!DifficultyProfile.passesFsrCap(metrics)) {
+      // Gen V2 judges each candidate on bands scaled to its own node count
+      // (`DifficultyProfile.scaledForGenV2`). V1 keeps the shared profile.
+      final candidateProfile = config.isGenV2Dense
+          ? evaluatorProfile.scaledForGenV2(metrics.nodeCount)
+          : evaluatorProfile;
+      if (config.isGenV2Dense
+          ? !candidateProfile.passesOwnFsrCap(metrics)
+          : !DifficultyProfile.passesFsrCap(metrics)) {
         _evaluatorRejectionCount++;
         _fsrCapRejects++;
         continue;
       }
 
-      final visual = evaluateVisualComposition(level, evaluatorTier);
+      final visual = evaluateVisualComposition(level, evaluatorTier,
+          genV2Scaled: config.isGenV2Dense);
       // T2.4a — record the composition score for BOTH populations. Shadow mode:
       // the decision below is untouched, this only observes. T2.4b needs the
       // *rejected* distribution as much as the accepted one, and the generator
@@ -1248,7 +1325,7 @@ class LevelGenerator {
         continue;
       }
 
-      final inBand = evaluatorProfile.passes(metrics) && !visual.softFailed;
+      final inBand = candidateProfile.passes(metrics) && !visual.softFailed;
       if (!inBand) {
         _evaluatorRejectionCount++;
         _outOfBandNoted++;
@@ -1323,7 +1400,8 @@ class LevelGenerator {
 
     final best = inBandCandidates.isEmpty
         ? null
-        : _selectBestInBandCandidate(inBandCandidates, evaluatorTier);
+        : _selectBestInBandCandidate(inBandCandidates, evaluatorTier,
+            genV2: config.isGenV2Dense);
     // W2.5: a Hard/Expert in-band pick that breaks the opening ceiling falls
     // through to the out-of-band paths below instead of shipping (or, as this
     // used to, throwing a StateError on the level-load path in release).
@@ -1332,6 +1410,7 @@ class LevelGenerator {
             _hardExpertOpeningHolds(
               best.metrics,
               context: 'in-band Hard/Expert emission',
+              genV2: config.isGenV2Dense,
             ))) {
       _retrogradeInBandSuccessCount++;
       _retrogradeSuccessCount++;
@@ -1356,7 +1435,8 @@ class LevelGenerator {
     // Hard/Expert: discard novel OOB candidates that violate the opening ceiling.
     if (novelOutOfBand != null &&
         _isHardExpertTier(evaluatorTier) &&
-        !_openingWithinHardExpertBand(novelOutOfBandMetrics!)) {
+        !_openingWithinHardExpertBand(novelOutOfBandMetrics!,
+            genV2: config.isGenV2Dense)) {
       novelOutOfBand = null;
     }
 
@@ -1402,6 +1482,7 @@ class LevelGenerator {
             _hardExpertOpeningHolds(
               novelOutOfBandMetrics!,
               context: 'metrics-OOB Hard/Expert emission',
+              genV2: config.isGenV2Dense,
             ))) {
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
@@ -1444,7 +1525,8 @@ class LevelGenerator {
     // `docs/playtests/p2b_t28_isolated.md`.
     if (nonNovelFallback != null) {
       if (_isHardExpertTier(evaluatorTier) &&
-          !_openingWithinHardExpertBand(nonNovelMetrics!)) {
+          !_openingWithinHardExpertBand(nonNovelMetrics!,
+              genV2: config.isGenV2Dense)) {
         nonNovelFallback = null;
       }
     }
@@ -1453,6 +1535,7 @@ class LevelGenerator {
             _hardExpertOpeningHolds(
               nonNovelMetrics!,
               context: 'non-novel Hard/Expert emission',
+              genV2: config.isGenV2Dense,
             ))) {
       _retrogradeOutOfBandSuccessCount++;
       _retrogradeSuccessCount++;
@@ -1535,8 +1618,15 @@ class LevelGenerator {
 
   _InBandCandidate _selectBestInBandCandidate(
     List<_InBandCandidate> candidates,
-    DifficultyTier tier,
-  ) {
+    DifficultyTier tier, {
+    bool genV2 = false,
+  }) {
+    if (genV2 && candidates.length > 1) {
+      // D3 ranking term, measured lazily: only when there is a choice.
+      for (final c in candidates) {
+        c.coreFraction = CoreMetrics.compute(c.result.value).coreTapFraction;
+      }
+    }
     candidates.sort((a, b) => _compareInBandCandidates(a, b, tier));
 
     if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
@@ -1557,6 +1647,7 @@ class LevelGenerator {
             renegotiations: c.renegotiations,
             constructionTelemetry: c.constructionTelemetry,
             compositionScore: c.compositionScore,
+            coreFraction: c.coreFraction,
           );
         }
       }
@@ -1591,8 +1682,19 @@ class LevelGenerator {
     if (compositionBand != 0) return compositionBand;
 
     final profile = DifficultyProfile.forTier(tier);
+    final genV2Pair = a.coreFraction >= 0 && b.coreFraction >= 0;
+    if (genV2Pair) {
+      // D3 ranking term: more of the board must matter to the cores.
+      final coreBand = (b.coreFraction / 0.05)
+          .floor()
+          .compareTo((a.coreFraction / 0.05).floor());
+      if (coreBand != 0) return coreBand;
+    }
     if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
-      final w0 = b.metrics.waveZeroWidth.compareTo(a.metrics.waveZeroWidth);
+      // Gen V2 (D1): prefer the NARROWER opening; V1 keeps the wider one.
+      final w0 = genV2Pair
+          ? a.metrics.waveZeroWidth.compareTo(b.metrics.waveZeroWidth)
+          : b.metrics.waveZeroWidth.compareTo(a.metrics.waveZeroWidth);
       if (w0 != 0) return w0;
     }
 
@@ -1671,7 +1773,8 @@ class LevelGenerator {
       level,
       config,
       tier,
-      mechanicOverride: mechanicOverride,
+      mechanicOverride: mechanicOverride ??
+          (config.isGenV2Dense ? genV2TwistOverride(config.levelId) : null),
       onCoreSelection: onCoreSelection,
     );
   }
@@ -1802,6 +1905,20 @@ class LevelGenerator {
     );
   }
 
+  /// D1: archetype-driven opening cap (target + 1) for Gen V2 Hard boards.
+  static int _genV2OpeningCap(GenerationArchetype kind, int levelId) {
+    if (kind == GenerationArchetype.cleanAuthored) return 6;
+    // D1 v3: spread openings by level, not only by archetype (archetype alone
+    // left 2/3 of boards in the 9-11 bucket). Sawtooth-biased: relief levels
+    // open wide, climax levels narrow, the rest rotate narrow/mid/wide.
+    final pos = LevelConfiguration.genV2WorldPosition(levelId);
+    if (pos != null && pos <= 3) return 12;
+    if (pos != null && pos >= 20 && pos <= 24) return 7;
+    const caps = [7, 8, 12];
+    final base = caps[(levelId * 7 + 3) % 3];
+    return kind == GenerationArchetype.strongMotif && base > 10 ? 9 : base;
+  }
+
   ({Result<LevelData, GenerationError> result, ConstructionTelemetry telemetry})
       _runRetrogradeForPlan(
     GenerationPlan plan,
@@ -1828,6 +1945,14 @@ class LevelGenerator {
         motifPlacements: plan.motifs,
         tier: tier,
         portalPairCount: budget.portalPairCount,
+        crunchStartFrac: config.isGenV2Dense ? kGenV2CrunchStart : 0.35,
+        crunchEndFrac: config.isGenV2Dense ? kGenV2CrunchEnd : 0.65,
+        openingCapOverride:
+            config.isGenV2Dense
+                ? _genV2OpeningCap(plan.spec.kind, config.levelId)
+                : null,
+        reinsertOpeningMoves:
+            config.isGenV2Dense && plan.targetNodeCount <= 34,
       );
       final placements = constructor.construct();
       final telemetry = ConstructionTelemetry(
@@ -2303,8 +2428,19 @@ class LevelGenerator {
   static bool _isHardExpertTier(DifficultyTier tier) =>
       tier == DifficultyTier.hard || tier == DifficultyTier.expert;
 
-  static bool _openingWithinHardExpertBand(LevelMetrics metrics) {
-    const band = DifficultyProfile.hardExpertOpeningBand;
+  /// Opening band for [metrics]: the shared V1 band, or under Gen V2 the
+  /// band scaled to the board's node count (`scaledForGenV2`).
+  static MetricRange<int> _openingBandFor(
+      LevelMetrics metrics, bool genV2) {
+    if (!genV2) return DifficultyProfile.hardExpertOpeningBand;
+    return DifficultyProfile.hard
+        .scaledForGenV2(metrics.nodeCount)
+        .openingBandOverride!;
+  }
+
+  static bool _openingWithinHardExpertBand(LevelMetrics metrics,
+      {bool genV2 = false}) {
+    final band = _openingBandFor(metrics, genV2);
     return band.contains(metrics.firstLegalMoveCount) &&
         band.contains(metrics.waveZeroWidth);
   }
@@ -2318,8 +2454,9 @@ class LevelGenerator {
   static bool _hardExpertOpeningHolds(
     LevelMetrics metrics, {
     required String context,
+    bool genV2 = false,
   }) {
-    const band = DifficultyProfile.hardExpertOpeningBand;
+    final band = _openingBandFor(metrics, genV2);
     final holds = metrics.firstLegalMoveCount <= band.max &&
         metrics.waveZeroWidth <= band.max;
     assert(
@@ -2436,7 +2573,11 @@ class _InBandCandidate {
   /// T2.4c — `VisualCompositionResult.score`, 0..1, higher is better.
   final double compositionScore;
 
-  const _InBandCandidate({
+  /// D3 (Gen V2 only): share of the board in the cores' prerequisite closure;
+  /// -1 when not measured (V1), which keeps the V1 ordering untouched.
+  double coreFraction;
+
+  _InBandCandidate({
     required this.result,
     required this.plan,
     required this.metrics,
@@ -2445,5 +2586,6 @@ class _InBandCandidate {
     required this.renegotiations,
     required this.constructionTelemetry,
     required this.compositionScore,
+    this.coreFraction = -1,
   });
 }

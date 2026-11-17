@@ -43,6 +43,17 @@ void main() {
       }
     });
 
+    test('tray sits between background and tiles so both layers read', () {
+      for (final w in kWorlds) {
+        final theme = WorldTheme.fromAccent(w.accent);
+        final tray = theme.trayFill.computeLuminance();
+        expect(tray, greaterThan(theme.backgroundTint.computeLuminance()));
+        expect(tray, lessThan(theme.tileFill.computeLuminance()));
+        expect(theme.trayFill.a, 1.0); // opaque: hides the glow's inner half
+        expect(theme.voidMarker.a, lessThan(0.15)); // hint, never a node
+      }
+    });
+
     test('overlay colors are translucent', () {
       final theme = WorldTheme.fromAccent(const Color(0xFF00E5FF));
       expect(theme.silhouetteGlow.a, lessThan(0.5));

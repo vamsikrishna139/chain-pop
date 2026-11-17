@@ -24,6 +24,8 @@ class _BrokenGenerator extends LevelGenerator {
     int levelId, {
     DifficultyMode? mode,
     Duration? timeBudget,
+    int? workBudget,
+    int generationVersion = 1,
   }) =>
       bad != null
           ? Result.success(bad!)

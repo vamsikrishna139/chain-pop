@@ -90,7 +90,7 @@ void main() {
       final engine = state.engine;
       final top = engine.topReserved;
       final bottom = engine.bottomReserved;
-      final bandW = w - 2 * kRefMargin;
+      final bandW = w - 2 * kRefSideMargin;
       final bandH = h - top - bottom - kRefMargin;
 
       print('  $label: safeTop=$safeTop safeBottom=$safeBottom '

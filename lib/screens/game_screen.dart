@@ -1230,48 +1230,69 @@ class GameScreenState extends State<GameScreen>
                 bottom: 0,
                 left: 0,
                 right: 0,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ValueListenableBuilder<bool>(
-                      valueListenable:
-                          SubscriptionLocator.instanceOrNull?.isPremium ??
-                              _kNeverPremium,
-                      builder: (context, isPremium, _) => GameBottomToolbar(
-                        measureKey: _footerHudKey,
-                        accent: accent,
-                        // Premium users get hints without an ad, so no badge.
-                        showHintAdBadge: _hardOrDailyFeatures && !isPremium,
-                        axisGuidesVisible: _engine.axisGuidesVisible,
-                        canUndo: _engine.canUndo,
-                        onHint: () => unawaited(_adCoordinator.handleHint()),
-                        onToggleGuides: () {
-                          if (_isPaused) return;
-                          _engine.toggleAxisGuides();
-                          setState(() {});
-                        },
-                        onZoomIn: widget.isTutorial
-                            ? () {
+                // The footer's height changes on its own (the banner slot
+                // reserves space, then the ad arrives) without rebuilding this
+                // screen. Re-measure on every size change, or the board stays
+                // fitted to a stale toolbar position and runs under it.
+                child: NotificationListener<SizeChangedLayoutNotification>(
+                  onNotification: (_) {
+                    _playfieldInsetController.scheduleSync();
+                    return true;
+                  },
+                  child: SizeChangedLayoutNotifier(
+                    // The system (gesture bar) inset goes under the whole
+                    // footer, below the banner, not between toolbar and ad.
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ValueListenableBuilder<bool>(
+                            valueListenable:
+                                SubscriptionLocator.instanceOrNull?.isPremium ??
+                                    _kNeverPremium,
+                            builder: (context, isPremium, _) =>
+                                GameBottomToolbar(
+                              measureKey: _footerHudKey,
+                              accent: accent,
+                              // Premium users get hints without an ad, so no badge.
+                              showHintAdBadge:
+                                  _hardOrDailyFeatures && !isPremium,
+                              axisGuidesVisible: _engine.axisGuidesVisible,
+                              canUndo: _engine.canUndo,
+                              onHint: () =>
+                                  unawaited(_adCoordinator.handleHint()),
+                              onToggleGuides: () {
                                 if (_isPaused) return;
-                                _engine.zoomInStep();
-                              }
-                            : null,
-                        onResetView: () {
-                          if (_isPaused) return;
-                          _engine.resetView();
-                        },
-                        onUndo: () => unawaited(_adCoordinator.handleUndo()),
-                        onRestart: _gameFlow.resetForRetry,
+                                _engine.toggleAxisGuides();
+                                setState(() {});
+                              },
+                              onZoomIn: widget.isTutorial
+                                  ? () {
+                                      if (_isPaused) return;
+                                      _engine.zoomInStep();
+                                    }
+                                  : null,
+                              onResetView: () {
+                                if (_isPaused) return;
+                                _engine.resetView();
+                              },
+                              onUndo: () =>
+                                  unawaited(_adCoordinator.handleUndo()),
+                              onRestart: _gameFlow.resetForRetry,
+                            ),
+                          ),
+                          ValueListenableBuilder<bool>(
+                            valueListenable:
+                                SubscriptionLocator.instanceOrNull?.isPremium ??
+                                    _kNeverPremium,
+                            builder: (context, _, __) =>
+                                _ads.buildGameScreenBanner(context),
+                          ),
+                        ],
                       ),
                     ),
-                    ValueListenableBuilder<bool>(
-                      valueListenable:
-                          SubscriptionLocator.instanceOrNull?.isPremium ??
-                              _kNeverPremium,
-                      builder: (context, _, __) =>
-                          _ads.buildGameScreenBanner(context),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             if (_isPaused && !_hasWon)

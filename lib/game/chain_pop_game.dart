@@ -234,18 +234,62 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   static const double _insetConfigEpsilon = 1.0;
 
+  // ── First-layout reveal ──────────────────────────────────────────────────
+  // The board is first laid out with default HUD reserves, before Flutter has
+  // measured the header, toolbar and banner. The real insets arrive one or
+  // more frames later and re-fit the board, which on height-bound (tall)
+  // boards showed as a zoom-in-then-settle on every level launch. The board
+  // stays hidden until the insets have stopped changing for
+  // [_revealSettleSeconds] (capped at [_revealMaxSeconds] so it can never
+  // stay hidden).
+  static const double _revealSettleSeconds = 0.15;
+  static const double _revealMaxSeconds = 1.0;
+  bool _boardRevealed = false;
+  bool _insetsSeen = false;
+  double _insetSettleClock = 0;
+  double _revealClock = 0;
+
+  /// Whether the board has been shown after its first stable layout.
+  bool get boardRevealed => _boardRevealed;
+
+  void _tickBoardReveal(double dt) {
+    if (_boardRevealed || !_boardLaidOut) return;
+    _insetSettleClock += dt;
+    _revealClock += dt;
+    if ((_insetsSeen && _insetSettleClock >= _revealSettleSeconds) ||
+        _revealClock >= _revealMaxSeconds) {
+      _boardRevealed = true;
+      (board as _BoardLayer).isVisible = true;
+    }
+  }
+
   /// Sync vertical bands with the real [GameScreen] HUD (measured in Flutter).
   void configurePlayfieldInsets({
     required double top,
     required double bottom,
   }) {
+    _insetsSeen = true;
     if ((top - topReserved).abs() < _insetConfigEpsilon &&
         (bottom - bottomReserved).abs() < _insetConfigEpsilon) {
       return;
     }
     topReserved = top;
     bottomReserved = bottom;
-    if (!isLoaded || !_boardLaidOut) return;
+    _insetSettleClock = 0;
+    if (!isLoaded || !_boardLaidOut) {
+      // Insets can arrive while the engine is still loading (a re-entered
+      // level): the board was already fitted to the defaults, so refit it on
+      // the first update instead of leaving it under the toolbar.
+      _insetRefitPending = _boardLaidOut;
+      return;
+    }
+    _refitToInsets();
+  }
+
+  bool _insetRefitPending = false;
+
+  void _refitToInsets() {
+    _insetRefitPending = false;
     _targetZoom = _minZoom;
     _displayZoom = _minZoom;
     _pan.setZero();
@@ -320,6 +364,8 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   @override
   void update(double dt) {
+    if (_insetRefitPending && isLoaded && _boardLaidOut) _refitToInsets();
+    _tickBoardReveal(dt);
     _tickZoomAndPan(dt);
     _applyBoardTransform();
     super.update(dt);
@@ -372,12 +418,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     final screenW = size.x;
     final screenH = size.y;
 
-    const margin = 24.0;
-    final usableW = math.max(0.0, screenW - margin * 2);
+    final usableW = math.max(0.0, screenW - kBoardSideMargin * 2);
     // Shrink vertical space to avoid overlapping Flutter HUD layers.
     final usableH = math.max(
       0.0,
-      screenH - topReserved - bottomReserved - margin,
+      screenH - topReserved - bottomReserved - kBoardVerticalMargin,
     );
 
     final bounds = OccupiedBounds.fromLevel(levelData, pad: 1);
@@ -423,11 +468,11 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
     _usableSize.setValues(usableW, usableH);
     _boardCenter.setValues(screenW / 2, topReserved + usableH / 2);
 
-    board = PositionComponent(
+    board = _BoardLayer(
       position: _boardCenter - _occupiedOffset * _displayZoom + _pan,
       size: Vector2(gridPixelW, gridPixelH),
       anchor: Anchor.center,
-    );
+    )..isVisible = _boardRevealed;
 
     final mask = BoardMaskComponent(
       levelData: levelData,
@@ -964,4 +1009,10 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
       (hint.y + 0.5) * _cellSize,
     ));
   }
+}
+
+/// Board root. [HasVisibility] lets the game hide the whole board (and every
+/// node under it) until its first stable layout; see `_tickBoardReveal`.
+class _BoardLayer extends PositionComponent with HasVisibility {
+  _BoardLayer({super.position, super.size, super.anchor});
 }

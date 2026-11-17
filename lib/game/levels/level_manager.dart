@@ -65,6 +65,60 @@ class LevelManager {
   /// which measured 5.5 s on one key before any budget existed.
   static const int dailyWorkBudget = 64;
 
+  /// Gen V2 campaign work budget, in constructions (docs/GEN_V2_PLAN.md).
+  /// V2 never uses [generationBudget]: a wall-clock budget lets a slow phone
+  /// ship a different board than a fast one for the same level.
+  static const int genV2WorkBudget = 48;
+
+  /// Per-mode Gen V2 cut-over: campaign levels with `id >= genV2FromLevel[mode]`
+  /// generate with V2. A mode with no entry stays entirely on V1, so tests and
+  /// any caller that never ran the bootstrap keep V1 boards.
+  ///
+  /// Set once at startup from [resolveGenV2FromLevel] and persisted, so a
+  /// level a player had already reached keeps the board they saw.
+  static final Map<DifficultyMode, int> genV2FromLevel = {};
+
+  /// First Daily date key (yyyymmdd) generated with V2. Earlier dates keep
+  /// their V1 board, so a past Daily a player has stars for never changes.
+  /// Null = Daily stays on V1. **Set to the release date key when shipping.**
+  static int? genV2DailyFromKey = kGenV2DailyFromKeyDefault;
+
+  /// Release-date default for [genV2DailyFromKey]. A test build can move it
+  /// with `--dart-define=GEN_V2_DAILY_FROM=yyyymmdd` (device checklist item 7:
+  /// play a post-cut-over Daily without touching the device clock). Release
+  /// builds pass no define, so this stays 20261201.
+  static const int kGenV2DailyFromKeyDefault =
+      int.fromEnvironment('GEN_V2_DAILY_FROM', defaultValue: 20261201);
+
+  /// Where V2 starts for a mode, given what storage knows.
+  ///
+  /// * [stored] wins whenever present: the cut-over is decided once.
+  /// * A player with no progress in the mode (nothing beyond level 1 unlocked
+  ///   and no stars on it) gets V2 from level 1.
+  /// * Anyone else gets V2 from the first level they have not unlocked yet,
+  ///   so every board they could already have seen stays V1.
+  static int resolveGenV2FromLevel({
+    required int? stored,
+    required int highestUnlocked,
+    required bool hasProgress,
+  }) {
+    if (stored != null && stored >= 1) return stored;
+    if (!hasProgress) return 1;
+    return highestUnlocked + 1;
+  }
+
+  /// Generator version for campaign level [levelId] in [mode].
+  static int generationVersionFor(int levelId, DifficultyMode? mode) {
+    final from = genV2FromLevel[mode ?? DifficultyMode.easy];
+    return (from != null && levelId >= from) ? 2 : 1;
+  }
+
+  /// Generator version for the Daily on [dayKey].
+  static int dailyGenerationVersionFor(int dayKey) {
+    final from = genV2DailyFromKey;
+    return (from != null && dayKey >= from) ? 2 : 1;
+  }
+
   /// Returns a valid, solvable [LevelData] for [levelId].
   ///
   /// Uses the full generation pipeline from [LevelGenerator]. If generation
@@ -108,9 +162,11 @@ class LevelManager {
 
   // Keyed by generator identity too: swapping [generator] (tests, a future
   // Gen V2 switch) must never serve a board the old generator made.
+  // The generator version is part of the key so a cut-over change can never
+  // serve a V1 board as V2 or the reverse.
   static String _servedKey(int levelId, DifficultyMode? mode) =>
       '${identityHashCode(generator)}:${(mode ?? DifficultyMode.easy).name}:'
-      '$levelId';
+      'v${generationVersionFor(levelId, mode)}:$levelId';
 
   static bool _lastGenerationFellBack = false;
 
@@ -118,18 +174,35 @@ class LevelManager {
   static void clearServedLevels() => _served.clear();
 
   static LevelData _generate(int levelId, {DifficultyMode? mode}) {
-    final result = generator.generate(
-      levelId,
-      mode: mode,
-      timeBudget: generationBudget,
-    );
+    final version = generationVersionFor(levelId, mode);
+    // V2 is a pure function of (levelId, mode): a work budget, never the wall
+    // clock, and a fresh generator, never the shared one. The shared
+    // generator's diversity ledger is persisted and grows with play, so a V2
+    // board generated from it changed after every app restart. Measured on
+    // Hard L1-150: a fresh generator gives 90 distinct masks vs 95 with the
+    // ledger, and the same back-to-back repeat rate (4).
+    final result = version >= 2
+        ? LevelGenerator.neutral().generate(
+            levelId,
+            mode: mode,
+            workBudget: genV2WorkBudget,
+            generationVersion: 2,
+          )
+        : generator.generate(
+            levelId,
+            mode: mode,
+            timeBudget: generationBudget,
+          );
 
     final String failure;
     if (result.isSuccess) {
       final level = result.value;
       final layoutMsg = LevelData.layoutValidationMessage(level);
       if (layoutMsg == null) {
-        onDiversityLedgerChanged?.call(generator.diversityLedger.serialize());
+        if (version < 2) {
+          onDiversityLedgerChanged
+              ?.call(generator.diversityLedger.serialize());
+        }
         return level;
       }
       failure = 'invalid layout: $layoutMsg';
@@ -151,7 +224,8 @@ class LevelManager {
   static LevelData getDailyChallenge([DateTime? date]) {
     final when = date ?? DateTime.now();
     final dayKey = DailyChallenge.dateKeyLocal(when);
-    return _reportDaily(dayKey, _generateDaily(dayKey));
+    return _reportDaily(
+        dayKey, _generateDaily(dayKey, dailyGenerationVersionFor(dayKey)));
   }
 
   /// [getDailyChallenge] off the calling isolate.
@@ -191,11 +265,13 @@ class LevelManager {
   static Future<LevelData> getDailyChallengeAsync([DateTime? date]) async {
     final when = date ?? DateTime.now();
     final dayKey = DailyChallenge.dateKeyLocal(when);
+    // Resolved here: the worker isolate starts from fresh statics.
+    final version = dailyGenerationVersionFor(dayKey);
     _DailyOutcome outcome;
     try {
-      outcome = await Isolate.run(() => _generateDaily(dayKey));
+      outcome = await Isolate.run(() => _generateDaily(dayKey, version));
     } catch (_) {
-      outcome = _generateDaily(dayKey);
+      outcome = _generateDaily(dayKey, version);
     }
     // Reported here, not inside [_generateDaily]: the worker isolate starts
     // from fresh statics, so [onGenerationFallback] is null over there.
@@ -209,7 +285,7 @@ class LevelManager {
   }
 
   /// The Daily board for [dayKey], plus why it is a fallback board if it is.
-  static _DailyOutcome _generateDaily(int dayKey) {
+  static _DailyOutcome _generateDaily(int dayKey, int generationVersion) {
     // The Daily contract is `dayKey -> identical board`, for every player and
     // on every call. It is generated from a **fresh generator**, never the
     // static [generator].
@@ -238,6 +314,7 @@ class LevelManager {
     final result = LevelGenerator.neutral().generateDailyChallenge(
       dayKey,
       workBudget: dailyWorkBudget,
+      generationVersion: generationVersion,
     );
 
     final String failure;

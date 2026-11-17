@@ -1,4 +1,7 @@
+import 'dart:math' as math;
+
 import '../world_registry.dart';
+import 'level_manager.dart';
 import 'generation/difficulty_mode.dart';
 import 'generation/progression_profile.dart';
 import '../../screens/game/game_time_limit.dart';
@@ -69,7 +72,18 @@ LevelDirective directiveFor(
   // Boss slots (every 25th level) pin the sector's signature directive so the
   // world finale always tests the thing that world was about.
   final isBoss = levelId % 25 == 0;
-  final chosen = isBoss ? pool.first : pool[levelId % pool.length];
+  var chosen = isBoss ? pool.first : pool[levelId % pool.length];
+
+  // P3 (Gen V2 levels only, so already-played levels keep their goal): every
+  // directive appears once in each block of five levels, in a per-block
+  // seeded order, so no single goal (SWIFT especially) dominates.
+  final v2From = LevelManager.genV2FromLevel[mode];
+  if (!isBoss && v2From != null && levelId >= v2From) {
+    final block = (levelId - 1) ~/ 5;
+    final order = [...LevelDirective.values]
+      ..shuffle(math.Random(block * 2654435761 + 17));
+    chosen = order[(levelId - 1) % 5];
+  }
 
   // Cascade requires cores to clear the board under the moves budget; if this
   // mode/sector generates no cores, the goal is unwinnable, so fall back.

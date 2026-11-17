@@ -9,6 +9,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'bootstrap/firebase_bootstrap.dart';
 import 'dev/autoplay_harness.dart';
+import 'game/levels/generation/difficulty_mode.dart';
 import 'game/levels/level_manager.dart';
 import 'navigation/app_route_observer.dart';
 import 'screens/main_menu_screen.dart';
@@ -69,6 +70,21 @@ Future<void> bootstrapChainPop() async {
   LevelManager.restoreDiversityLedger(StorageService.diversityLedgerBits);
   LevelManager.onDiversityLedgerChanged =
       (bits) => unawaited(StorageService.saveDiversityLedgerBits(bits));
+  // Gen V2 cut-over (docs/GEN_V2_PLAN.md): decided once per mode and stored,
+  // so levels a player already reached keep their V1 board.
+  for (final mode in DifficultyMode.values) {
+    final stored = StorageService.genV2FromLevel(mode);
+    final highest = StorageService.highestUnlocked(mode);
+    final from = LevelManager.resolveGenV2FromLevel(
+      stored: stored,
+      highestUnlocked: highest,
+      hasProgress: highest > 1 || StorageService.stars(mode, 1) > 0,
+    );
+    LevelManager.genV2FromLevel[mode] = from;
+    if (stored == null) {
+      unawaited(StorageService.saveGenV2FromLevel(mode, from));
+    }
+  }
   // A fallback board is playable but means generation failed — make it loud
   // in Crashlytics and countable in analytics instead of silent (W2.5).
   LevelManager.onGenerationFallback = (kind, id, reason) {

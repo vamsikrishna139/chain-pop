@@ -34,7 +34,11 @@ class GameBottomToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // No bottom inset here: the toolbar sits above the banner ad, and the
+    // game screen applies the system inset once, under the whole footer.
+    // Insetting here left a dead strip between the toolbar and the ad.
     return SafeArea(
+      bottom: false,
       child: Padding(
         key: measureKey,
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),

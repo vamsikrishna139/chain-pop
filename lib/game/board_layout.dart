@@ -13,8 +13,24 @@ import 'package:chain_pop/game/levels/level.dart';
 /// the 210-board corpus (`report_*_test.dart`, 390×844): cell 34.2 → 40.2 px at
 /// 8×8, band coverage 40.7 % → 56.2 %.
 ///
-/// **Rollback:** set both back to `0.80`.
-const double kBoardWidthFill = 0.94;
+/// Raised 0.94 → 0.98 together with [kBoardSideMargin] 24 → 12. Experiment A
+/// (docs/AGENT_STATE.md) showed the fitter is width-bound on almost every
+/// board — an 8-column grid on a portrait band cannot use the height — so the
+/// only layout lever left is horizontal room. On 390×844 this takes an 8-wide
+/// cell from 40.2 px to ≈44 px (the 44 pt touch target the per-axis fix could
+/// not reach) without touching generation.
+///
+/// **Rollback:** `kBoardWidthFill = 0.94`, `kBoardSideMargin = 24.0`.
+const double kBoardWidthFill = 0.98;
+
+/// Horizontal margin between the screen edge and the playfield band, per side.
+/// Was the shared 24 px [kBoardVerticalMargin]; halved because width is the
+/// binding term. The remaining 12 px plus `1 − kBoardWidthFill` slack still
+/// clears the board tray's pad, rim and glow.
+const double kBoardSideMargin = 12.0;
+
+/// Margin subtracted from the vertical band (unchanged at 24 px).
+const double kBoardVerticalMargin = 24.0;
 
 /// Share of the playfield band height the board is fitted into. See
 /// [kBoardWidthFill]. Slightly higher than the width fill because the vertical

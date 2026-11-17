@@ -588,7 +588,6 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     final frontier = StorageLocator.instance.highestUnlocked(_selected);
     return InkWell(
       onTap: _play,
-      onLongPress: _confirmReset,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         width: double.infinity,

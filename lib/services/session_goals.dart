@@ -28,7 +28,7 @@ extension SessionGoalKindX on SessionGoalKind {
         SessionGoalKind.clearSurge => 'Clear a SURGE',
         SessionGoalKind.restoreCores => 'Restore 5 cores',
         SessionGoalKind.flawlessClear => 'Win 2 levels jam-free',
-        SessionGoalKind.clearNodes => 'Clear 120 nodes',
+        SessionGoalKind.clearNodes => 'Session: clear 120 nodes',
       };
 }
 

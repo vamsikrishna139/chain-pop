@@ -10,6 +10,7 @@ import 'level_seed.dart';
 import 'motifs.dart';
 import 'sightline_table.dart';
 import 'silhouettes.dart';
+import 'visual_composition.dart';
 
 /// T2.2 — the mask cell floor, as a fraction of the tier's node-band floor.
 ///
@@ -62,6 +63,11 @@ const double kMaskCellFloorRatio = 1.0;
 /// (sparse Hard boards with large voids), and if `bboxOccupancy` /
 /// `largestEmptyRegion` regress this is the first value to walk back.
 const double kMaskAreaSlack = 1.5;
+
+/// S1: share of Gen V2 boards that start from the full frame and are carved.
+/// Default 0: measured at 0.30 it gave no gain (taps 14->13, in-band 100->99,
+/// same nodes-per-cell density), so it ships off.
+const double kGenV2CarveProbability = 0.0;
 
 /// T2.3 — archetypes whose whole point is an irregular outline, and which the
 /// density clamp therefore must not silhouette-substitute.
@@ -459,8 +465,8 @@ class Director {
   ) {
     if (previous.renegotiationDepth >= maxRenegotiations) return null;
 
-    final downscaled = max(
-        config.difficulty.minNodes, (previous.targetNodeCount * 0.9).round());
+    final downscaled = max(_renegotiationNodeFloor(config, previous),
+        (previous.targetNodeCount * 0.9).round());
     SilhouetteId nextSilhouette = previous.silhouette;
     Set<int> nextMask = previous.silhouetteMask;
     // Every other renegotiation, swap silhouette as well to escape silhouette
@@ -520,7 +526,7 @@ class Director {
 
     final drop = 2 + random.nextInt(2); // 2 or 3
     var downscaled = max(
-      config.difficulty.minNodes,
+      _renegotiationNodeFloor(config, previous),
       previous.targetNodeCount - drop,
     );
 
@@ -926,7 +932,24 @@ class Director {
   ///
   /// **Seeded plans do not use this** — see the call site in
   /// `choosePlanFromSeed`.
+  /// Lowest node target a renegotiation may shrink to. Gen V2 holds its
+  /// density floor ([kGenV2MinNodes]) — without this, two renegotiations took
+  /// a 28-node plan to 25-26 and shipped below the V2 floor (L19, L59, ...).
+  /// Never above the previous target, so a seeded plan that started below the
+  /// floor is not pushed up.
+  int _renegotiationNodeFloor(
+      LevelConfiguration config, GenerationPlan previous) {
+    if (config.isGenV2Dense) {
+      return min(kGenV2MinNodes, previous.targetNodeCount);
+    }
+    return config.difficulty.minNodes;
+  }
+
   int _proceduralMaskFloor(DifficultyTier tier, LevelConfiguration config) {
+    if (config.isGenV2Dense) {
+      // Room for the V2 node floor at the V2 max mask occupancy.
+      return (kGenV2MinNodes / kGenV2MaxNodesPerMaskCell).ceil();
+    }
     final tierFloor = max(
       DifficultyProfile.forTier(tier).nodeCount.min,
       config.difficulty.minNodes,
@@ -1012,7 +1035,7 @@ class Director {
     required int minCells,
     bool varied = true,
   }) {
-    Set<int>? attempt(SilhouetteId id) {
+    Set<int>? attempt1(SilhouetteId id) {
       final mask = buildSilhouetteMask(
         id: id,
         gridWidth: config.gridWidth,
@@ -1026,6 +1049,59 @@ class Director {
         jitterSeed: varied ? config.levelId + 1 : 0,
       );
       return (mask != null && mask.length >= minCells) ? mask : null;
+    }
+
+    Set<int>? attempt(SilhouetteId id) {
+      if (!config.isGenV2Dense || !varied) return attempt1(id);
+      // S1: ~30% of V2 boards start from the FULL frame and lose 1-4 boundary
+      // "bites" (optionally mirrored), which reads as a deliberate silhouette
+      // instead of a leftover. Falls through to the normal builders on failure.
+      if (Random(config.levelId * 31337 + 7).nextDouble() < kGenV2CarveProbability) {
+        final carved = genV2CarveMask(
+          gridWidth: config.gridWidth,
+          gridHeight: config.gridHeight,
+          minCells: minCells,
+          maxCells: (config.targetNodeCount / 0.75).ceil(),
+          random: Random(config.levelId * 7907 + 13),
+        );
+        if (carved != null) return carved;
+      }
+      // S1: Gen V2 re-rolls masks that leave a big dark rectangle or a big
+      // connected void (diagonal / L voids hold no big rectangle) in the
+      // frame; keeps the fullest roll if none passes. Deterministic.
+      double score(Set<int> m) =>
+          genV2MaskEmptinessScore(m, config.gridWidth, config.gridHeight);
+      Set<int>? best;
+      var bestScore = double.infinity;
+      for (var i = 0; i < 6; i++) {
+        final m = attempt1(id);
+        if (m == null) break;
+        final d = score(m);
+        if (d < bestScore) {
+          best = m;
+          bestScore = d;
+        }
+        if (d <= 1.0) return best;
+      }
+      if (best == null) return null;
+      // Still too empty: fall back to fuller dense silhouettes (the plan keeps
+      // the requested id's label; only the cell set differs).
+      // The start of the list rotates with the level id so neighbouring
+      // levels that both fall back don't all land on the same shape.
+      const fallbacks = [
+        SilhouetteId.organicBlob,
+        SilhouetteId.diamond,
+        SilhouetteId.cross,
+        SilhouetteId.ring,
+        SilhouetteId.rectangle,
+      ];
+      for (var k = 0; k < fallbacks.length; k++) {
+        final alt = fallbacks[(config.levelId + k) % fallbacks.length];
+        if (alt == id) continue;
+        final m = attempt1(alt);
+        if (m != null && score(m) <= 1.0) return m;
+      }
+      return best;
     }
 
     final direct = attempt(silhouette);
@@ -1082,6 +1158,19 @@ class Director {
     required Random random,
   }) {
     final profile = DifficultyProfile.forTier(tier);
+    if (config.isGenV2Dense &&
+        (tier == DifficultyTier.hard || tier == DifficultyTier.expert)) {
+      // Gen V2: the target comes from the frame's effective fill
+      // (`LevelConfiguration.genV2TargetNodeCount`), not from the mask, so a
+      // 7x9 frame carries ~28-38 nodes instead of V1's 25-node floor.
+      final v2Lo = max(kGenV2MinNodes, profile.nodeCount.min);
+      final v2Hi = min(
+        min(kGenV2MaxNodes, profile.nodeCount.max),
+        (mask.length * kGenV2MaxNodesPerMaskCell).floor(),
+      );
+      if (v2Hi <= v2Lo) return v2Hi.clamp(1, mask.length);
+      return config.targetNodeCount.clamp(v2Lo, v2Hi);
+    }
     final lo = max(profile.nodeCount.min, config.difficulty.minNodes);
     final hi = min(profile.nodeCount.max, mask.length);
 

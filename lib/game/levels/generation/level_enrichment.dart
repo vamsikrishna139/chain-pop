@@ -30,7 +30,8 @@ LevelData enrichLevel(
 }) {
   var nodes = level.nodes.map((n) => n.clone()).toList();
   nodes = _markCoreNodes(
-      nodes, config.difficulty.mode, level, mechanicOverride, onCoreSelection);
+      nodes, config.difficulty.mode, level, mechanicOverride, onCoreSelection,
+      config.isGenV2Dense ? kGenV2CoreDepthTarget : null);
   nodes = _markSpecialNodes(nodes, config, level, mechanicOverride);
   return _rebuild(level, nodes);
 }
@@ -404,12 +405,21 @@ const Map<DifficultyMode, _CoreFloor> _kCoreFloors = {
 /// contract C1 (zero-fallback) holds structurally rather than by policy.
 const int _kMaxCoreRepickRungs = 3;
 
+/// Gen V2 depth (D3 via core placement): the share of a V2 Hard board that
+/// the cores' prerequisite closure should cover. A *soft* target: when the
+/// band selection falls short, the cores are re-picked by greedy deepest
+/// coverage; a board that cannot reach it keeps its deepest set and is never
+/// rejected (so generation cost and the reject funnel are unchanged). Only
+/// geometry-reading, no RNG: board layout is untouched, only `isCore` flags.
+const double kGenV2CoreDepthTarget = 0.50;
+
 List<NodeData> _markCoreNodes(
   List<NodeData> nodes,
   DifficultyMode mode,
   LevelData level,
   MechanicBudgetOverride? mechanicOverride, [
   void Function(CoreSelectionRecord record)? onCoreSelection,
+  double? softDepthFraction,
 ]) {
   final budget = budgetForLevel(
     levelId: level.levelId,
@@ -457,6 +467,16 @@ List<NodeData> _markCoreNodes(
     requestedCount: budget.coreCount,
   );
   coreIds = quality.ids;
+  if (softDepthFraction != null) {
+    coreIds = _deepenTowardsTarget(
+      coreIds: coreIds,
+      nodes: nodes,
+      probe: probe,
+      closures: closures,
+      count: coreIds.length,
+      target: (softDepthFraction * nodes.length).ceil(),
+    );
+  }
 
   final record = CoreSelectionRecord(
     levelId: level.levelId,
@@ -668,6 +688,109 @@ _CoreQualityOutcome _ensureCoreQuality({
     rungs: rungs,
     escalated: false,
   );
+}
+
+/// Gen V2 soft depth target: if [coreIds] cover fewer than [target] taps,
+/// try the same greedy rungs [_ensureCoreQuality] uses and keep the deepest
+/// set seen (never fewer taps than the incoming set, never more cores).
+Set<int> _deepenTowardsTarget({
+  required Set<int> coreIds,
+  required List<NodeData> nodes,
+  required LevelData probe,
+  required _ClosureIndex closures,
+  required int count,
+  required int target,
+}) {
+  final incomingDepth = closures.tapDepthOf(coreIds);
+  if (incomingDepth >= target) return coreIds;
+  final centrality = _centralityOf(nodes);
+  final pools = <List<NodeData>>[
+    [
+      for (final n in nodes)
+        if (n.kind == NodeKind.normal && !LevelSolver.canRemove(n, nodes, probe))
+          n,
+    ],
+    [
+      for (final n in nodes)
+        if (n.kind == NodeKind.normal) n,
+    ],
+  ];
+  // Candidates: sets aimed AT the target (so a board does not overshoot to a
+  // near-full trace-back with nothing left for the cascade finale), and the
+  // max-coverage sets as the fallback for boards that cannot reach it.
+  final candidates = <Set<int>>[
+    for (final pool in pools)
+      _targetedCoreSet(
+          pool: pool,
+          closures: closures,
+          count: count,
+          target: target,
+          centrality: centrality),
+    for (final pool in pools)
+      _greedyDeepestCoreSet(
+          pool: pool, closures: closures, count: count, centrality: centrality),
+  ];
+  Set<int>? bestReaching;
+  var bestReachingDepth = 1 << 30;
+  var deepest = coreIds;
+  var deepestDepth = incomingDepth;
+  for (final c in candidates) {
+    if (c.length < count) continue;
+    final d = closures.tapDepthOf(c);
+    if (d >= target && d < bestReachingDepth) {
+      bestReaching = c;
+      bestReachingDepth = d;
+    }
+    if (d > deepestDepth) {
+      deepest = c;
+      deepestDepth = d;
+    }
+  }
+  return bestReaching ?? deepest;
+}
+
+/// Greedy core set that tracks a tap-depth target: pick `i` aims the running
+/// coverage at `target * (i + 1) / count`. Same spread rule and tie-break as
+/// [_greedyDeepestCoreSet]; deterministic.
+Set<int> _targetedCoreSet({
+  required List<NodeData> pool,
+  required _ClosureIndex closures,
+  required int count,
+  required int target,
+  required double Function(NodeData) centrality,
+}) {
+  final picks = <NodeData>[];
+  final covered = Uint32List(closures.words);
+  var coveredCount = 0;
+  while (picks.length < count) {
+    final goal = (target * (picks.length + 1) / count).ceil();
+    NodeData? best;
+    var bestMiss = 1 << 30;
+    var bestGain = 0;
+    for (final n in pool) {
+      if (picks.any((p) => p.id == n.id)) continue;
+      if (!picks.every((p) => (p.x - n.x).abs() + (p.y - n.y).abs() >= 2)) {
+        continue;
+      }
+      final gain = closures.gainOver(covered, n.id);
+      final reached = coveredCount + gain;
+      // Undershooting the step goal counts double: a set that ends short of
+      // the target is worth less than one slightly over it.
+      final miss = reached >= goal ? reached - goal : 2 * (goal - reached);
+      if (best == null ||
+          miss < bestMiss ||
+          (miss == bestMiss && _prefer(n, best, closures, centrality))) {
+        best = n;
+        bestMiss = miss;
+        bestGain = gain;
+      }
+    }
+    if (best == null) break;
+    picks.add(best);
+    closures.unionInto(covered, best.id);
+    coveredCount += bestGain;
+  }
+  return picks.map((n) => n.id).toSet();
 }
 
 /// Greedy maximum-coverage core set: repeatedly take the spread-legal candidate

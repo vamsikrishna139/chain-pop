@@ -166,6 +166,12 @@ class StorageService {
   static Future<void> saveDiversityLedgerBits(List<int> bits) =>
       StorageLocator.instance.saveDiversityLedgerBits(bits);
 
+  static int? genV2FromLevel(DifficultyMode mode) =>
+      StorageLocator.instance.genV2FromLevel(mode);
+
+  static Future<void> saveGenV2FromLevel(DifficultyMode mode, int levelId) =>
+      StorageLocator.instance.saveGenV2FromLevel(mode, levelId);
+
   static Future<void> setReviewHasEverTappedRate(bool value) =>
       StorageLocator.instance.setReviewHasEverTappedRate(value);
 

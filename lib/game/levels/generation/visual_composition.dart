@@ -143,11 +143,103 @@ class VisualCompositionResult {
   }) : passes = true;
 }
 
+/// S1: the largest empty axis-aligned rectangle of in-frame cells outside the
+/// play mask may cover at most this share of the frame.
+const double kGenV2MaxDarkRectFraction = 0.25;
+
+/// Area of the largest axis-aligned rectangle of non-play cells, as a share
+/// of the frame. Brute force; frames are at most 10x10.
+double genV2LargestDarkRectFraction(LevelData level) {
+  if (level.playCells == null || level.playCells!.isEmpty) return 0;
+  final play = <int>{};
+  for (final s in level.playCells!) {
+    final c = s.indexOf(',');
+    if (c < 0) continue;
+    play.add(gridCellKey(
+        int.parse(s.substring(0, c)), int.parse(s.substring(c + 1))));
+  }
+  return genV2DarkRectFractionOfMask(play, level.gridWidth, level.gridHeight);
+}
+
+/// Same measure on a raw mask of [gridCellKey]s.
+double genV2DarkRectFractionOfMask(Set<int> play, int w, int h) {
+  final heights = List<int>.filled(w, 0);
+  var best = 0;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      heights[x] = play.contains(gridCellKey(x, y)) ? 0 : heights[x] + 1;
+    }
+    for (var x0 = 0; x0 < w; x0++) {
+      var minH = 1 << 20;
+      for (var x1 = x0; x1 < w; x1++) {
+        minH = math.min(minH, heights[x1]);
+        if (minH == 0) break;
+        best = math.max(best, minH * (x1 - x0 + 1));
+      }
+    }
+  }
+  return best / (w * h);
+}
+
+/// S1 v2: the largest 4-connected region of in-frame non-play cells may cover
+/// at most this share of the frame. Catches diagonal and L-shaped voids that
+/// contain no large rectangle (a staircase leaves two big triangles).
+const double kGenV2MaxVoidRegionFraction = 0.25;
+
+/// Largest 4-connected region of non-play cells inside the frame, as a share
+/// of the frame.
+double genV2LargestVoidRegionFractionOfMask(Set<int> play, int w, int h) {
+  final seen = <int>{};
+  var best = 0;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      final k = gridCellKey(x, y);
+      if (play.contains(k) || !seen.add(k)) continue;
+      var size = 0;
+      final stack = <(int, int)>[(x, y)];
+      while (stack.isNotEmpty) {
+        final (cx, cy) = stack.removeLast();
+        size++;
+        for (final (nx, ny) in [(cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)]) {
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          final nk = gridCellKey(nx, ny);
+          if (play.contains(nk) || !seen.add(nk)) continue;
+          stack.add((nx, ny));
+        }
+      }
+      best = math.max(best, size);
+    }
+  }
+  return best / (w * h);
+}
+
+/// S1 combined emptiness score: <= 1.0 means the mask passes both the dark
+/// rectangle and the void-region limits; lower is fuller.
+double genV2MaskEmptinessScore(Set<int> play, int w, int h) => math.max(
+    genV2DarkRectFractionOfMask(play, w, h) / kGenV2MaxDarkRectFraction,
+    genV2LargestVoidRegionFractionOfMask(play, w, h) /
+        kGenV2MaxVoidRegionFraction);
+
+/// Same measure on a level's play cells.
+double genV2LargestVoidRegionFraction(LevelData level) {
+  if (level.playCells == null || level.playCells!.isEmpty) return 0;
+  final play = <int>{};
+  for (final s in level.playCells!) {
+    final c = s.indexOf(',');
+    if (c < 0) continue;
+    play.add(gridCellKey(
+        int.parse(s.substring(0, c)), int.parse(s.substring(c + 1))));
+  }
+  return genV2LargestVoidRegionFractionOfMask(
+      play, level.gridWidth, level.gridHeight);
+}
+
 /// Evaluates a layout for visually pleasing composition.
 VisualCompositionResult evaluateVisualComposition(
   LevelData level,
-  DifficultyTier tier,
-) {
+  DifficultyTier tier, {
+  bool genV2Scaled = false,
+}) {
   // Easy only — do not over-constrain small boards
   if (tier == DifficultyTier.easy) {
     return const VisualCompositionResult.pass();
@@ -329,7 +421,16 @@ VisualCompositionResult evaluateVisualComposition(
   final visited = <int>{};
   var componentCount = 0;
   // T2.4c, same reasoning as [allowedSingletons] above.
-  final allowedComponents = maskComponents + 2;
+  //
+  // Gen V2: the allowance scales by `nodes / 25` (V1's calibration size), the
+  // same rule `DifficultyProfile.scaledForGenV2` applies to absolute counts.
+  // A 32-node board on a 7x9 frame at V1's visual density has proportionally
+  // more clusters; without this 69% of V2 candidates failed (V1: 46%).
+  final allowedComponents = genV2Scaled
+      ? ((maskComponents + 2) *
+              math.max(1.0, level.nodes.length / 25))
+          .round()
+      : maskComponents + 2;
 
   for (final node in level.nodes) {
     final key = gridCellKey(node.x, node.y);
@@ -414,4 +515,84 @@ VisualCompositionResult evaluateVisualComposition(
     }
   }
   return VisualCompositionResult.pass(detail: detail, evaluated: true);
+}
+
+/// S1 carve-from-full: start from the whole frame and remove 1-4 rectangular
+/// "bites" from the boundary, keeping the shape 4-connected, at least
+/// [minCells] big and under the dark-rectangle limit. Mirrored left-right on
+/// a coin flip. Deterministic for a given [random]. Null when no valid carve
+/// is found in a handful of tries.
+Set<int>? genV2CarveMask({
+  required int gridWidth,
+  required int gridHeight,
+  required int minCells,
+  required int maxCells,
+  required math.Random random,
+}) {
+  final w = gridWidth, h = gridHeight;
+  for (var attempt = 0; attempt < 8; attempt++) {
+    final cells = <int>{
+      for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++) gridCellKey(x, y)
+    };
+    final minBites = 1 + random.nextInt(4);
+    for (var b = 0; b < 12; b++) {
+      // Keep biting until the shape is small enough for the node target
+      // (a near-full frame leaves half the tiles empty).
+      if (b >= minBites && cells.length <= maxCells) break;
+      final bw = 1 + random.nextInt(3);
+      final bh = 1 + random.nextInt(4);
+      // Anchor on the boundary: pick a side, then a position along it.
+      final side = random.nextInt(4);
+      final x0 = side == 0
+          ? 0
+          : side == 1
+              ? w - bw
+              : random.nextInt(w - bw + 1);
+      final y0 = side == 2
+          ? 0
+          : side == 3
+              ? h - bh
+              : random.nextInt(h - bh + 1);
+      for (var y = y0; y < y0 + bh; y++) {
+        for (var x = x0; x < x0 + bw; x++) {
+          cells.remove(gridCellKey(x, y));
+        }
+      }
+    }
+    var out = cells;
+    if (random.nextDouble() < 0.4) {
+      out = {
+        for (final k in cells) gridCellKey(w - 1 - (k & 0xffff), (k >> 16) & 0xffff)
+      };
+    }
+    if (out.length < minCells || out.length > maxCells) continue;
+    if (!_isFourConnected(out)) continue;
+    if (genV2DarkRectFractionOfMask(out, w, h) > kGenV2MaxDarkRectFraction) {
+      continue;
+    }
+    return out;
+  }
+  return null;
+}
+
+bool _isFourConnected(Set<int> cells) {
+  if (cells.isEmpty) return false;
+  final seen = <int>{cells.first};
+  final stack = <int>[cells.first];
+  while (stack.isNotEmpty) {
+    final k = stack.removeLast();
+    final x = k & 0xffff, y = (k >> 16) & 0xffff;
+    for (final n in [
+      gridCellKey(x + 1, y),
+      gridCellKey(x - 1, y),
+      gridCellKey(x, y + 1),
+      gridCellKey(x, y - 1),
+    ]) {
+      if (x - 1 < 0 && n == gridCellKey(x - 1, y)) continue;
+      if (y - 1 < 0 && n == gridCellKey(x, y - 1)) continue;
+      if (cells.contains(n) && seen.add(n)) stack.add(n);
+    }
+  }
+  return seen.length == cells.length;
 }

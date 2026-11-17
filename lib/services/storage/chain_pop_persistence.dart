@@ -137,6 +137,14 @@ abstract interface class ChainPopPersistence {
 
   Future<void> saveDiversityLedgerBits(List<int> bits);
 
+  /// Gen V2 cut-over for [mode]: campaign levels at or above this id generate
+  /// with generator V2 (docs/GEN_V2_PLAN.md). Written once, on the first launch
+  /// of a V2 build, so boards a player already reached never change. Null when
+  /// never written.
+  int? genV2FromLevel(DifficultyMode mode);
+
+  Future<void> saveGenV2FromLevel(DifficultyMode mode, int levelId);
+
   // ── Achievements (schema v3) ──────────────────────────────────────────────
 
   /// Reads one aggregate counter. Missing keys read as 0.

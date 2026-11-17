@@ -33,6 +33,21 @@ class _DailyChallengeBannerSlotState extends State<DailyChallengeBannerSlot>
   BannerAd? _banner;
   bool _loadScheduled = false;
   bool _loadFailed = false;
+
+  /// Height the slot holds while the ad loads. Starts from the size this
+  /// width resolved to earlier in the session (or [_kEstimatedBannerHeight]
+  /// on the first banner), then snaps to the real adaptive size.
+  ///
+  /// The slot must never be empty-then-tall: it sits under the game toolbar,
+  /// so growing pushes the toolbar up and makes the game re-fit the board a
+  /// moment after it appears — a visible zoom-out on tall, height-bound boards.
+  double? _reservedHeight;
+
+  /// Typical anchored adaptive banner height on a portrait phone (dp).
+  static const double _kEstimatedBannerHeight = 60;
+
+  /// Adaptive banner height per logical width, resolved once per session.
+  static final Map<int, double> _resolvedHeightByWidth = {};
   AnimationController? _fadeController;
   Animation<double>? _fadeAnimation;
 
@@ -60,6 +75,15 @@ class _DailyChallengeBannerSlotState extends State<DailyChallengeBannerSlot>
     if (!mounted || size == null) {
       if (mounted) setState(() => _loadFailed = true);
       return;
+    }
+    // Hold the banner's height from now on, before the ad itself arrives. An
+    // empty slot that grows on load pushes the toolbar up and makes the game
+    // re-fit the board a second after it appears (a visible zoom-out on tall
+    // boards, which are height-bound).
+    final reserve = size.height.toDouble();
+    _resolvedHeightByWidth[bounded] = reserve;
+    if (_reservedHeight != reserve) {
+      setState(() => _reservedHeight = reserve);
     }
 
     late final BannerAd advertisement;
@@ -134,15 +158,27 @@ class _DailyChallengeBannerSlotState extends State<DailyChallengeBannerSlot>
     final w = MediaQuery.sizeOf(context).width.truncate();
     if (!_loadScheduled && !_loadFailed && w > 0) {
       _loadScheduled = true;
+      _reservedHeight ??= _resolvedHeightByWidth[w.clamp(1, 1200)] ??
+          _kEstimatedBannerHeight;
       unawaited(_loadAnchoredBanner(w));
     }
 
     final ad = _banner;
     if (ad != null && !_loadFailed) {
+      // Never shrink below the space already reserved: a smaller creative
+      // (e.g. 320x50 in a 60 dp slot) is centred instead of moving the footer.
+      final h = ad.size.height.toDouble();
+      final slotH = h > (_reservedHeight ?? 0) ? h : _reservedHeight!;
       Widget slot = SizedBox(
         width: double.infinity,
-        height: ad.size.height.toDouble(),
-        child: AdWidget(ad: ad),
+        height: slotH,
+        child: Center(
+          child: SizedBox(
+            width: ad.size.width.toDouble(),
+            height: h,
+            child: AdWidget(ad: ad),
+          ),
+        ),
       );
       final anim = _fadeAnimation;
       if (anim != null) {
@@ -151,6 +187,10 @@ class _DailyChallengeBannerSlotState extends State<DailyChallengeBannerSlot>
       return slot;
     }
 
+    final reserved = _reservedHeight;
+    if (reserved != null && !_loadFailed) {
+      return SizedBox(width: double.infinity, height: reserved);
+    }
     return const SizedBox.shrink();
   }
 }

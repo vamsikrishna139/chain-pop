@@ -93,6 +93,19 @@ class RetrogradeConstructor {
   /// Number of portal pairs to place before node placement.
   final int portalPairCount;
 
+  /// Share of the removal order where blocking flips are offered. Gen V2
+  /// widens it (D2) so blocker chains cover more of the board.
+  final double crunchStartFrac;
+  final double crunchEndFrac;
+
+  /// Gen V2 (D1): per-level opening-width cap replacing the tier's flat ceiling.
+  final int? openingCapOverride;
+
+  /// Gen V2 (D1): let the opening compressor also re-order a free node to just
+  /// after a later ray target, which the plain flip rule (target id < own id)
+  /// can never do.
+  final bool reinsertOpeningMoves;
+
   /// The portals placed during construction.
   final List<PortalPair> placedPortals = [];
 
@@ -144,6 +157,10 @@ class RetrogradeConstructor {
     List<MotifReservation> reservations = const <MotifReservation>[],
     this.tier,
     this.portalPairCount = 0,
+    this.crunchStartFrac = 0.35,
+    this.crunchEndFrac = 0.65,
+    this.openingCapOverride,
+    this.reinsertOpeningMoves = false,
   })  : motifPlacements = motifPlacements.isNotEmpty
             ? motifPlacements
             : _placementsFromReservations(reservations),
@@ -309,7 +326,7 @@ class RetrogradeConstructor {
 
         var finalResult = reassigned;
         if (tier != null) {
-          final maxOpening = _maxOpeningByTier[tier];
+          final maxOpening = openingCapOverride ?? _maxOpeningByTier[tier];
           final minOpening = _minOpeningByTier[tier];
           if (maxOpening != null && minOpening != null) {
             finalResult = _enforceOpeningTarget(
@@ -331,7 +348,7 @@ class RetrogradeConstructor {
     scorer.crunchZoneBlockingPicked = 0;
     var finalBaseline = baseline;
     if (tier != null) {
-      final maxOpening = _maxOpeningByTier[tier];
+      final maxOpening = openingCapOverride ?? _maxOpeningByTier[tier];
       final minOpening = _minOpeningByTier[tier];
       if (maxOpening != null && minOpening != null) {
         finalBaseline = _enforceOpeningTarget(
@@ -671,8 +688,8 @@ class RetrogradeConstructor {
       return removalOrder;
     }
 
-    final crunchStart = (n * 0.35).floor().clamp(1, n - 1);
-    final crunchEnd = (n * 0.65).ceil().clamp(crunchStart, n - 1);
+    final crunchStart = (n * crunchStartFrac).floor().clamp(1, n - 1);
+    final crunchEnd = (n * crunchEndFrac).ceil().clamp(crunchStart, n - 1);
 
     final motifKeys = <int>{
       for (final m in motifPlacements)
@@ -930,8 +947,10 @@ class RetrogradeConstructor {
     required int minOpening,
   }) {
     var current = placements.toList();
-    for (var attempt = 0; attempt < 20; attempt++) {
-      final opening = _waveZeroWidth(current);
+    for (var attempt = 0;
+        attempt < 20;
+        attempt++) {
+      final opening = _openingNow(current);
       if (opening <= maxOpening && opening >= minOpening) break;
 
       final freeIndices = _rayFreeIndices(current);
@@ -939,8 +958,8 @@ class RetrogradeConstructor {
 
       var flippedAny = false;
       for (final i in freeIndices) {
-        if (_waveZeroWidth(current) <= maxOpening) break;
-        if (_waveZeroWidth(current) <= minOpening) break;
+        if (_openingNow(current) <= maxOpening) break;
+        if (_openingNow(current) <= minOpening) break;
 
         final node = current[i];
         final dirs = Direction.values.toList()..shuffle(random);
@@ -963,9 +982,57 @@ class RetrogradeConstructor {
           }
         }
       }
-      if (!flippedAny) break;
+      if (!flippedAny) {
+        if (reinsertOpeningMoves && _openingNow(current) > maxOpening) {
+          final moved = _reinsertFreeNode(current, maxOpening);
+          if (moved != null) {
+            current = moved;
+            continue;
+          }
+        }
+        break;
+      }
     }
     return current;
+  }
+
+  int _reinsertTries = 0;
+
+  /// Re-orders ONE ray-free node to just after a later node it can be pointed
+  /// at, if the whole removal order stays valid. Returns null when no move
+  /// works. Bounded tries keep construction latency flat.
+  List<RetrogradePlacement>? _reinsertFreeNode(
+    List<RetrogradePlacement> current,
+    int maxOpening,
+  ) {
+    var tries = 0;
+    final free = _rayFreeIndices(current)..sort((a, b) => a.compareTo(b));
+    for (final i in free) {
+      final node = current[i];
+      for (final dir in Direction.values) {
+        if (dir == node.direction) continue;
+        final j = _firstNodeIdOnRay(node.position, dir, current, selfId: i);
+        if (j == null || j <= i) continue;
+        if (++tries > 10 || ++_reinsertTries > 40) return null;
+        final next = current.toList();
+        final moved = next.removeAt(i);
+        // After the removal, old index j sits at j-1; insert right after it.
+        next.insert(
+            j, RetrogradePlacement(position: moved.position, direction: dir));
+        if (_validatesRemovalOrderIdSequence(next)) return next;
+      }
+    }
+    return null;
+  }
+
+  /// Opening width. Gen V2 uses the ray-free node count (equal to the first
+  /// wave when no portals are placed) because the wave profile is the
+  /// dominant construction cost; V1 keeps the exact original computation.
+  int _openingNow(List<RetrogradePlacement> placements) {
+    if (reinsertOpeningMoves && placedPortals.isEmpty) {
+      return _rayFreeIndices(placements).length;
+    }
+    return _waveZeroWidth(placements);
   }
 
   int _waveZeroWidth(List<RetrogradePlacement> placements) {
