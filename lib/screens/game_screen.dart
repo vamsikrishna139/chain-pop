@@ -553,11 +553,16 @@ class GameScreenState extends State<GameScreen>
         await Future<void>.delayed(Duration.zero);
         if (!mounted) return;
         try {
+          // Async: Gen V2 boards build on a worker isolate (hundreds of ms on
+          // Hard, ~1 s worst case on an emulator) instead of freezing the UI.
           final level = widget.campaignLevelBuilder?.call(
                 widget.level,
                 widget.difficulty,
               ) ??
-              LevelManager.getLevel(widget.level, mode: widget.difficulty);
+              await LevelManager.getLevelAsync(
+                widget.level,
+                mode: widget.difficulty,
+              );
           if (!mounted) return;
           _installResolvedLevel(level);
         } catch (e, st) {

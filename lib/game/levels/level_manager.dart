@@ -80,15 +80,30 @@ class LevelManager {
 
   /// First Daily date key (yyyymmdd) generated with V2. Earlier dates keep
   /// their V1 board, so a past Daily a player has stars for never changes.
-  /// Null = Daily stays on V1. **Set to the release date key when shipping.**
+  /// Null = Daily stays on V1.
   static int? genV2DailyFromKey = kGenV2DailyFromKeyDefault;
 
-  /// Release-date default for [genV2DailyFromKey]. A test build can move it
-  /// with `--dart-define=GEN_V2_DAILY_FROM=yyyymmdd` (device checklist item 7:
+  /// First Daily on Gen V2: **1 December 2026**. A deliberate choice, not a
+  /// placeholder.
+  ///
+  /// * A month boundary keeps each calendar month on one generator: the
+  ///   Daily calendar shows one month at a time, so November is all V1 and
+  ///   December all V2 — a player never sees the two styles mixed in a grid.
+  /// * It does not depend on release timing. Ship before Dec 1 and the switch
+  ///   happens on Dec 1; ship after and every player starts on V2.
+  /// * It is not "everyone plays the same board": the build that adds this
+  ///   also caps every Daily at one relay (v9 ships 1–3), so updated and
+  ///   older builds already differ on any date, November replays included.
+  ///   Stars and completed ticks are keyed by date and are unaffected.
+  static const int kGenV2DailyLaunchKey = 20261201;
+
+  /// [kGenV2DailyLaunchKey], unless a test build overrides it with
+  /// `--dart-define=GEN_V2_DAILY_FROM=yyyymmdd` (device checklist item 7:
   /// play a post-cut-over Daily without touching the device clock). Release
-  /// builds pass no define, so this stays 20261201.
-  static const int kGenV2DailyFromKeyDefault =
-      int.fromEnvironment('GEN_V2_DAILY_FROM', defaultValue: 20261201);
+  /// builds pass no define.
+  static const int kGenV2DailyFromKeyDefault = int.fromEnvironment(
+      'GEN_V2_DAILY_FROM',
+      defaultValue: kGenV2DailyLaunchKey);
 
   /// Where V2 starts for a mode, given what storage knows.
   ///
@@ -146,11 +161,90 @@ class LevelManager {
     final level = _generate(levelId, mode: mode);
     // A fallback board is not "the" level — let the next visit try again.
     if (_lastGenerationFellBack) return level;
+    _remember(cacheKey, level);
+    return level;
+  }
+
+  /// [getLevel] for UI code: Gen V2 boards are generated on a worker isolate.
+  ///
+  /// **Why.** V2 Hard generation measured p50 263 ms, p95 590 ms, max 1,175 ms
+  /// on the emulator — ~3.3× V1, with no wall-clock cap (by design: a work
+  /// budget keeps the board device-invariant). On the UI thread that froze the
+  /// screen at every level start, and a budget phone is several times slower.
+  ///
+  /// V2 is a pure function of (levelId, mode) — a fresh generator and a work
+  /// budget — so the worker builds exactly the board [getLevel] would. V1 stays
+  /// synchronous: it reads and writes the shared, persisted diversity ledger,
+  /// which a worker isolate cannot see, and it is time-capped at
+  /// [generationBudget].
+  ///
+  /// The cache lookup, the V1/V2 decision ([genV2FromLevel] is a static the
+  /// worker starts without), fallback reporting and the cache write all run on
+  /// the calling isolate. If the isolate cannot be spawned, generates in place.
+  static Future<LevelData> getLevelAsync(int levelId,
+      {DifficultyMode? mode}) async {
+    final cacheKey = _servedKey(levelId, mode);
+    final cached = _served.remove(cacheKey);
+    if (cached != null) {
+      _served[cacheKey] = cached;
+      return cached;
+    }
+    if (generationVersionFor(levelId, mode) < 2) {
+      return getLevel(levelId, mode: mode);
+    }
+
+    _BoardOutcome outcome;
+    try {
+      outcome = await Isolate.run(() => _generateV2(levelId, mode));
+    } catch (_) {
+      outcome = _generateV2(levelId, mode);
+    }
+
+    // Another caller may have served this level while the worker ran; keep
+    // the first board so a level never changes under the player.
+    final raced = _served.remove(cacheKey);
+    if (raced != null) {
+      _served[cacheKey] = raced;
+      return raced;
+    }
+    final failure = outcome.failure;
+    if (failure != null) {
+      _reportFallback('campaign', levelId, failure);
+      return outcome.level; // a fallback board is not cached
+    }
+    _remember(cacheKey, outcome.level);
+    return outcome.level;
+  }
+
+  static void _remember(String cacheKey, LevelData level) {
     _served[cacheKey] = level;
     while (_served.length > servedCacheCapacity) {
       _served.remove(_served.keys.first);
     }
-    return level;
+  }
+
+  /// The V2 board for (levelId, mode), plus why it is a fallback if it is.
+  /// Touches no mutable statics, so it is safe on a worker isolate.
+  static _BoardOutcome _generateV2(int levelId, DifficultyMode? mode) {
+    final result = LevelGenerator.neutral().generate(
+      levelId,
+      mode: mode,
+      workBudget: genV2WorkBudget,
+      generationVersion: 2,
+    );
+    final String failure;
+    if (result.isSuccess) {
+      final level = result.value;
+      final layoutMsg = LevelData.layoutValidationMessage(level);
+      if (layoutMsg == null) return (level: level, failure: null);
+      failure = 'invalid layout: $layoutMsg';
+    } else {
+      failure = _describe(result.error);
+    }
+    return (
+      level: fallbackLevel(levelId, mode: mode ?? DifficultyMode.easy),
+      failure: failure,
+    );
   }
 
   /// How many recently served campaign boards [getLevel] remembers. Covers any
@@ -175,34 +269,34 @@ class LevelManager {
 
   static LevelData _generate(int levelId, {DifficultyMode? mode}) {
     final version = generationVersionFor(levelId, mode);
-    // V2 is a pure function of (levelId, mode): a work budget, never the wall
-    // clock, and a fresh generator, never the shared one. The shared
-    // generator's diversity ledger is persisted and grows with play, so a V2
-    // board generated from it changed after every app restart. Measured on
-    // Hard L1-150: a fresh generator gives 90 distinct masks vs 95 with the
-    // ledger, and the same back-to-back repeat rate (4).
-    final result = version >= 2
-        ? LevelGenerator.neutral().generate(
-            levelId,
-            mode: mode,
-            workBudget: genV2WorkBudget,
-            generationVersion: 2,
-          )
-        : generator.generate(
-            levelId,
-            mode: mode,
-            timeBudget: generationBudget,
-          );
+    if (version >= 2) {
+      // V2 is a pure function of (levelId, mode): a work budget, never the
+      // wall clock, and a fresh generator, never the shared one. The shared
+      // generator's diversity ledger is persisted and grows with play, so a V2
+      // board generated from it changed after every app restart. Measured on
+      // Hard L1-150: a fresh generator gives 90 distinct masks vs 95 with the
+      // ledger, and the same back-to-back repeat rate (4). The same function
+      // runs on the worker isolate in [getLevelAsync].
+      final outcome = _generateV2(levelId, mode);
+      final failure = outcome.failure;
+      if (failure != null) {
+        _reportFallback('campaign', levelId, failure);
+        _lastGenerationFellBack = true;
+      }
+      return outcome.level;
+    }
+    final result = generator.generate(
+      levelId,
+      mode: mode,
+      timeBudget: generationBudget,
+    );
 
     final String failure;
     if (result.isSuccess) {
       final level = result.value;
       final layoutMsg = LevelData.layoutValidationMessage(level);
       if (layoutMsg == null) {
-        if (version < 2) {
-          onDiversityLedgerChanged
-              ?.call(generator.diversityLedger.serialize());
-        }
+        onDiversityLedgerChanged?.call(generator.diversityLedger.serialize());
         return level;
       }
       failure = 'invalid layout: $layoutMsg';
@@ -395,4 +489,5 @@ class LevelManager {
   }
 }
 
-typedef _DailyOutcome = ({LevelData level, String? failure});
+typedef _BoardOutcome = ({LevelData level, String? failure});
+typedef _DailyOutcome = _BoardOutcome;
