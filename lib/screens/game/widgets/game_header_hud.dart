@@ -131,15 +131,13 @@ class GameHeaderHud extends StatelessWidget {
                               border: Border.all(
                                   color: accent.withValues(alpha: 0.3)),
                             ),
-                            child: Text(
-                              directiveText.toUpperCase(),
-                              maxLines: 2,
+                            child: _DirectivePillText(
+                              text: directiveText.toUpperCase(),
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
                                 color: accent,
                               ),
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
@@ -309,6 +307,36 @@ class GameHeaderHud extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The directive pill's label.
+///
+/// A one-word label (FLAWLESS, INTEGRITY) must never wrap: with no space to
+/// break at, Flutter splits the word itself ("FLAW / LESS" at 320 px). It
+/// scales down to fit instead. Longer phrases (the Daily's incident
+/// objective) still wrap onto two lines at their spaces.
+class _DirectivePillText extends StatelessWidget {
+  const _DirectivePillText({required this.text, required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!text.trim().contains(' ')) {
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(text, maxLines: 1, softWrap: false, style: style),
+      );
+    }
+    return Text(
+      text,
+      maxLines: 2,
+      style: style,
+      overflow: TextOverflow.ellipsis,
     );
   }
 }

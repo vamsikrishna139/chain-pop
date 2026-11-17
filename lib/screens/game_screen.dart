@@ -23,6 +23,7 @@ import '../services/achievements/achievements_locator.dart';
 import '../services/achievements/game_event.dart';
 import '../services/ads/ad_service.dart';
 import '../services/ads/ads_locator.dart';
+import '../services/ads/daily_challenge_banner_slot.dart';
 import '../services/crash_reporting.dart';
 import '../services/ads/hint_ad_policy.dart';
 import '../services/ads/undo_ad_policy.dart';
@@ -1257,34 +1258,40 @@ class GameScreenState extends State<GameScreen>
                                 SubscriptionLocator.instanceOrNull?.isPremium ??
                                     _kNeverPremium,
                             builder: (context, isPremium, _) =>
-                                GameBottomToolbar(
-                              measureKey: _footerHudKey,
-                              accent: accent,
-                              // Premium users get hints without an ad, so no badge.
-                              showHintAdBadge:
-                                  _hardOrDailyFeatures && !isPremium,
-                              axisGuidesVisible: _engine.axisGuidesVisible,
-                              canUndo: _engine.canUndo,
-                              onHint: () =>
-                                  unawaited(_adCoordinator.handleHint()),
-                              onToggleGuides: () {
-                                if (_isPaused) return;
-                                _engine.toggleAxisGuides();
-                                setState(() {});
-                              },
-                              onZoomIn: widget.isTutorial
-                                  ? () {
-                                      if (_isPaused) return;
-                                      _engine.zoomInStep();
-                                    }
-                                  : null,
-                              onResetView: () {
-                                if (_isPaused) return;
-                                _engine.resetView();
-                              },
-                              onUndo: () =>
-                                  unawaited(_adCoordinator.handleUndo()),
-                              onRestart: _gameFlow.resetForRetry,
+                                ValueListenableBuilder<int>(
+                              valueListenable: DailyChallengeBannerSlot
+                                  .gameScreenBannerOccupancy,
+                              builder: (context, bannerSlots, _) =>
+                                  GameBottomToolbar(
+                                measureKey: _footerHudKey,
+                                hasBanner: !isPremium && bannerSlots > 0,
+                                accent: accent,
+                                // Premium users get hints without an ad, so no badge.
+                                showHintAdBadge:
+                                    _hardOrDailyFeatures && !isPremium,
+                                axisGuidesVisible: _engine.axisGuidesVisible,
+                                canUndo: _engine.canUndo,
+                                onHint: () =>
+                                    unawaited(_adCoordinator.handleHint()),
+                                onToggleGuides: () {
+                                  if (_isPaused) return;
+                                  _engine.toggleAxisGuides();
+                                  setState(() {});
+                                },
+                                onZoomIn: widget.isTutorial
+                                    ? () {
+                                        if (_isPaused) return;
+                                        _engine.zoomInStep();
+                                      }
+                                    : null,
+                                onResetView: () {
+                                  if (_isPaused) return;
+                                  _engine.resetView();
+                                },
+                                onUndo: () =>
+                                    unawaited(_adCoordinator.handleUndo()),
+                                onRestart: _gameFlow.resetForRetry,
+                              ),
                             ),
                           ),
                           ValueListenableBuilder<bool>(
