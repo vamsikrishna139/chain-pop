@@ -548,7 +548,16 @@ class GameScreenState extends State<GameScreen>
     _settings = _gameStorage.gameSettings;
     _audio = widget.audioHandleFactory?.call() ?? GameAudioController();
 
-    if (_needsDeferredCampaignGeneration()) {
+    // A level prefetched while the player was on the previous one opens on
+    // its first frame, with no "Building level…" flash.
+    final prefetched = _needsDeferredCampaignGeneration() &&
+            widget.campaignLevelBuilder == null
+        ? LevelManager.cachedLevel(widget.level, mode: widget.difficulty)
+        : null;
+    if (prefetched != null) {
+      _installResolvedLevel(prefetched);
+      _schedulePrefetchOfNextLevel();
+    } else if (_needsDeferredCampaignGeneration()) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         await Future<void>.delayed(Duration.zero);
@@ -566,6 +575,9 @@ class GameScreenState extends State<GameScreen>
               );
           if (!mounted) return;
           _installResolvedLevel(level);
+          if (widget.campaignLevelBuilder == null) {
+            _schedulePrefetchOfNextLevel();
+          }
         } catch (e, st) {
           recordNonFatal(e, st);
           if (!mounted) return;
@@ -603,6 +615,21 @@ class GameScreenState extends State<GameScreen>
         _pushFeedbackToGame();
       }
     }
+  }
+
+  Timer? _prefetchTimer;
+
+  /// Builds the next campaign level in the background while this one is
+  /// played, so Next opens it instantly. Waits a moment first so the worker
+  /// doesn't compete with this level's entry animation. Gen V2 only (see
+  /// [LevelManager.prefetchLevel]).
+  void _schedulePrefetchOfNextLevel() {
+    if (!_isCampaign) return;
+    _prefetchTimer?.cancel();
+    _prefetchTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      LevelManager.prefetchLevel(widget.level + 1, mode: widget.difficulty);
+    });
   }
 
   void _installResolvedLevel(LevelData level) {
@@ -672,6 +699,7 @@ class GameScreenState extends State<GameScreen>
     WidgetsBinding.instance.removeObserver(this);
     _goingNext = false;
     _autoplayTimer?.cancel();
+    _prefetchTimer?.cancel();
     _gameFlow.flushLifetimeGameplayDelta(clearTrackedAfter: true);
     _timers.disposeAll();
     unawaited(_audio.dispose());

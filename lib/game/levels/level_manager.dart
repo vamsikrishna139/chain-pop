@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
@@ -192,7 +193,56 @@ class LevelManager {
     if (generationVersionFor(levelId, mode) < 2) {
       return getLevel(levelId, mode: mode);
     }
+    // A prefetch for this level may already be running: wait for it rather
+    // than building the same board twice.
+    final pending = _inFlight[cacheKey];
+    if (pending != null) return pending;
+    final build = _buildV2(levelId, mode, cacheKey);
+    _inFlight[cacheKey] = build;
+    try {
+      return await build;
+    } finally {
+      _inFlight.remove(cacheKey);
+    }
+  }
 
+  /// The board already served or prefetched for (levelId, mode), or null.
+  /// Lets the game screen open a cached level on its first frame instead of
+  /// showing "Building level…" for a frame or two.
+  static LevelData? cachedLevel(int levelId, {DifficultyMode? mode}) {
+    final cacheKey = _servedKey(levelId, mode);
+    final cached = _served.remove(cacheKey);
+    if (cached != null) _served[cacheKey] = cached; // refresh LRU position
+    return cached;
+  }
+
+  /// Starts building campaign level [levelId] in the background so it opens
+  /// instantly, without "Building level…". Call it for the next level while
+  /// the player is on this one.
+  ///
+  /// Gen V2 only: a V2 board is a pure function of (levelId, mode), so
+  /// building it early gives the same board the player would get anyway. V1
+  /// boards are not prefetched — generating one records it in the shared
+  /// diversity ledger, which would change later boards for a level the player
+  /// may never open. Does nothing if the board is cached or already building.
+  static void prefetchLevel(int levelId, {DifficultyMode? mode}) {
+    if (generationVersionFor(levelId, mode) < 2) return;
+    final cacheKey = _servedKey(levelId, mode);
+    if (_served.containsKey(cacheKey) || _inFlight.containsKey(cacheKey)) {
+      return;
+    }
+    unawaited(getLevelAsync(levelId, mode: mode).then<void>(
+      (_) {},
+      onError: (Object e, StackTrace st) =>
+          debugPrint('LevelManager: prefetch of $levelId failed: $e\n$st'),
+    ));
+  }
+
+  /// Campaign boards being built on a worker isolate, by served-cache key.
+  static final Map<String, Future<LevelData>> _inFlight = {};
+
+  static Future<LevelData> _buildV2(
+      int levelId, DifficultyMode? mode, String cacheKey) async {
     _BoardOutcome outcome;
     try {
       outcome = await Isolate.run(() => _generateV2(levelId, mode));

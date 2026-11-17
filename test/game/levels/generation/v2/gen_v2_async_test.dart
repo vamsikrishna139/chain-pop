@@ -95,6 +95,40 @@ void main() {
     });
   });
 
+  group('prefetchLevel', () {
+    test('caches the same board getLevel builds; a later open joins it',
+        () async {
+      LevelManager.genV2FromLevel[DifficultyMode.hard] = 1;
+      expect(LevelManager.cachedLevel(21, mode: DifficultyMode.hard), isNull);
+
+      LevelManager.prefetchLevel(21, mode: DifficultyMode.hard);
+      // Opening the level while the prefetch runs waits for that same build.
+      final opened =
+          await LevelManager.getLevelAsync(21, mode: DifficultyMode.hard);
+      final cached = LevelManager.cachedLevel(21, mode: DifficultyMode.hard);
+      expect(identical(opened, cached), isTrue);
+      expect(boardFingerprint(opened), boardFingerprint(_v2Reference(21)));
+    });
+
+    test('two concurrent opens share one build', () async {
+      LevelManager.genV2FromLevel[DifficultyMode.hard] = 1;
+      final a = LevelManager.getLevelAsync(33, mode: DifficultyMode.hard);
+      final b = LevelManager.getLevelAsync(33, mode: DifficultyMode.hard);
+      expect(identical(await a, await b), isTrue);
+    });
+
+    test('never prefetches V1 boards (shared diversity ledger)', () async {
+      LevelManager.genV2FromLevel[DifficultyMode.hard] = 50;
+      final ledgerBefore =
+          LevelManager.generator.diversityLedger.serialize().toString();
+      LevelManager.prefetchLevel(10, mode: DifficultyMode.hard);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(LevelManager.cachedLevel(10, mode: DifficultyMode.hard), isNull);
+      expect(LevelManager.generator.diversityLedger.serialize().toString(),
+          ledgerBefore);
+    });
+  });
+
   group('resetLocalProgress', () {
     setUpAll(() async {
       final dir = await Directory.systemTemp.createTemp('chain_pop_reset_v2_');
