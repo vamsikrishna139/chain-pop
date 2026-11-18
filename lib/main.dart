@@ -9,6 +9,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'bootstrap/firebase_bootstrap.dart';
 import 'dev/autoplay_harness.dart';
+import 'game/levels/generation/difficulty_mode.dart';
+import 'game/levels/level_manager.dart';
 import 'navigation/app_route_observer.dart';
 import 'screens/main_menu_screen.dart';
 import 'screens/splash_screen.dart';
@@ -25,6 +27,7 @@ import 'services/crash_reporting.dart';
 import 'services/game_audio.dart';
 import 'services/game_audio_scope.dart';
 import 'services/notification_service.dart';
+import 'services/session_goals.dart';
 import 'services/storage_service.dart';
 import 'services/subscription/no_op_subscription_service.dart';
 import 'services/subscription/revenue_cat_subscription_service.dart';
@@ -62,10 +65,65 @@ Future<void> bootstrapChainPop() async {
   await Hive.initFlutter();
   await StorageService.init();
 
+  // Campaign novelty survives a restart (W2.4): seed the ledger before the
+  // first level is generated, then persist it after each one.
+  LevelManager.restoreDiversityLedger(StorageService.diversityLedgerBits);
+  LevelManager.onDiversityLedgerChanged =
+      (bits) => unawaited(StorageService.saveDiversityLedgerBits(bits));
+  // Gen V2 cut-over (docs/GEN_V2_PLAN.md): decided once per mode and stored,
+  // so levels a player already reached keep their V1 board.
+  for (final mode in DifficultyMode.values) {
+    final stored = StorageService.genV2FromLevel(mode);
+    final highest = StorageService.highestUnlocked(mode);
+    final from = LevelManager.resolveGenV2FromLevel(
+      stored: stored,
+      highestUnlocked: highest,
+      hasProgress: highest > 1 || StorageService.stars(mode, 1) > 0,
+    );
+    LevelManager.genV2FromLevel[mode] = from;
+    if (stored == null) {
+      unawaited(StorageService.saveGenV2FromLevel(mode, from));
+    }
+    // Rollback switch (LevelManager.kGenV2Enabled): a no-op in normal builds.
+    final storedUntil = StorageService.genV2UntilLevel(mode);
+    final until = LevelManager.resolveGenV2UntilLevel(
+      enabled: LevelManager.kGenV2Enabled,
+      stored: storedUntil,
+      from: from,
+      highestUnlocked: highest,
+    );
+    if (until != null) {
+      LevelManager.genV2UntilLevel[mode] = until;
+      if (storedUntil == null) {
+        unawaited(StorageService.saveGenV2UntilLevel(mode, until));
+      }
+    }
+  }
+  if (!LevelManager.kGenV2Enabled) LevelManager.genV2DailyFromKey = null;
+  // A fallback board is playable but means generation failed — make it loud
+  // in Crashlytics and countable in analytics instead of silent (W2.5).
+  LevelManager.onGenerationFallback = (kind, id, reason) {
+    recordNonFatal(
+      StateError('Level generation fell back ($kind $id): $reason'),
+      StackTrace.current,
+    );
+    unawaited(AnalyticsLocator.instance.logEvent(
+      'level_generation_fallback',
+      parameters: {
+        'kind': kind,
+        'id': id,
+        // Analytics caps parameter values at 100 characters.
+        'reason': reason.length > 100 ? reason.substring(0, 100) : reason,
+      },
+    ));
+  };
+
   // After storage: the tracker reads Hive on construction of its first
   // snapshot. Installs the Play Games sink on Android and kicks off sign-in
   // without blocking; everywhere else this is a local-only tracker.
-  PlayGamesBootstrap.install();
+  PlayGamesBootstrap.install(
+    liveSync: PlayGamesBootstrap.liveSyncInThisBuild,
+  );
 
   await _bootstrapThirdPartySdks();
 }
@@ -199,6 +257,9 @@ class _ChainPopAppState extends State<ChainPopApp> with WidgetsBindingObserver {
       if (pausedAt != null &&
           DateTime.now().difference(pausedAt) >= _sessionGap) {
         unawaited(StorageService.incrementSessionCount());
+        // A real return starts a new play session, so the session goal starts
+        // over too (menu visits no longer reset it — see SessionGoals).
+        SessionGoals.resetSession();
       }
       // Pushes the "you have not played in a while" reminder back out. Cheap,
       // fire-and-forget, never blocks the frame.

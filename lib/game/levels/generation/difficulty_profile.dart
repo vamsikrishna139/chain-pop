@@ -59,6 +59,25 @@ class TemporalArcSpec {
 /// the per-step bands (BF, first-legal, CUD, FSR, wave depth) and the
 /// FSR-vs-nodeCount cap, but does **not** reject a level for having an
 /// out-of-band [LevelMetrics.nodeCount].
+///
+/// **The bands describe board structure, before mechanics (W2.6 decision,
+/// 2026-10-30).** The generator checks them on the raw retrograde board;
+/// `enrichLevel` then adds locks and phase gates, which only ever make the
+/// shipped board *harder*. That is by design — the bands are the structural
+/// floor, the mechanic budget adds a known amount on top — so do not read a
+/// shipped board's metrics against these ranges and call it out of band, and
+/// do not move the check after enrichment without re-calibrating every band.
+/// Measured drift on boards with mechanics (median, p95 tail):
+///
+/// | tier   | first legal | wave depth | FSR          | avg BF |
+/// |--------|-------------|------------|--------------|--------|
+/// | Medium | −1 (p5 −3)  | 0 (p95 +3) | +0.04 (+0.26)| −0.90  |
+/// | Hard   | −1 (p5 −5)  | 0 (p95 +3) | 0.00 (+0.17) | −1.12  |
+/// | Expert (Daily) | −4 (p5 −6) | +2 (p95 +4) | +0.08 (+0.18) | −3.21 |
+///
+/// Easy has no mechanics, so no drift. CUD does not move: it is computed from
+/// ray dependencies and ignores locks and gates. Relay rotation is modelled by
+/// none of these metrics. Full report: `docs/playtests/enrichment_drift_w26.md`.
 class DifficultyProfile {
   final DifficultyTier tier;
   final MetricRange<int> nodeCount;
@@ -72,6 +91,14 @@ class DifficultyProfile {
   /// Optional temporal-arc targets; populated on Hard (Tier 2+ validation).
   final TemporalArcSpec? arcSpec;
 
+  /// Gen V2 only: replaces [hardExpertOpeningBand] for the wave-zero check.
+  /// Null on every V1 profile, so V1 behaviour is unchanged.
+  final MetricRange<int>? openingBandOverride;
+
+  /// Gen V2 only: replaces the node-banded [fsrCapForNodeCount]. Null on every
+  /// V1 profile.
+  final double? fsrCapOverride;
+
   const DifficultyProfile({
     required this.tier,
     required this.nodeCount,
@@ -82,7 +109,59 @@ class DifficultyProfile {
     required this.forcedSequenceRatio,
     required this.tempoShape,
     this.arcSpec,
+    this.openingBandOverride,
+    this.fsrCapOverride,
   });
+
+  /// Node count the V1 Hard/Expert bands were calibrated on (~97% of shipped
+  /// Hard boards carry 25 nodes).
+  static const int genV2ReferenceNodes = 25;
+
+  /// Flat Gen V2 FSR cap. V1 Hard ships 25-node boards *uncapped* with FSR
+  /// p50 0.57 / p90 0.72, and V2 candidates measure the same (p50 0.54,
+  /// p90 0.70) at 28-40 nodes — density does not make them more forced. The
+  /// node-banded cap (0.63 at 30, 0.49 at 40) was rejecting a third of V2
+  /// candidates for being exactly as forced as the boards V1 already ships.
+  static const double genV2FsrCap = 0.70;
+
+  /// Gen V2 evaluator profile for a board of [nodes] nodes.
+  ///
+  /// The opening and branching bands are *absolute counts*, calibrated at
+  /// [genV2ReferenceNodes]. On a 32-node board the same relative openness
+  /// (11 of 25 nodes free at the start) is 14 free nodes, so the upper bounds
+  /// scale by `nodes / 25`. Ratio and depth bands (FSR, CUD, wave depth) are
+  /// left as they are: a bigger board should be at least as deep.
+  DifficultyProfile scaledForGenV2(int nodes) {
+    final s = max(1.0, nodes / genV2ReferenceNodes);
+    final base = firstLegalMoveCount;
+    final opening = MetricRange<int>(base.min, (base.max * s).round());
+    return DifficultyProfile(
+      tier: tier,
+      nodeCount: nodeCount,
+      waveDepth: waveDepth,
+      averageBranchingFactor: MetricRange<double>(
+          averageBranchingFactor.min, averageBranchingFactor.max * s),
+      firstLegalMoveCount: opening,
+      criticalUnlockDepth: criticalUnlockDepth,
+      forcedSequenceRatio: forcedSequenceRatio,
+      tempoShape: tempoShape,
+      arcSpec: arcSpec,
+      openingBandOverride: (tier == DifficultyTier.hard ||
+              tier == DifficultyTier.expert)
+          ? MetricRange<int>(hardExpertOpeningBand.min,
+              (hardExpertOpeningBand.max * s).round())
+          : null,
+      fsrCapOverride: genV2FsrCap,
+    );
+  }
+
+  /// FSR cap this profile applies to [metrics].
+  double fsrCapFor(LevelMetrics metrics) =>
+      fsrCapOverride ?? fsrCapForNodeCount(metrics.nodeCount);
+
+  /// Instance form of [passesFsrCap] that honours [fsrCapOverride].
+  bool passesOwnFsrCap(LevelMetrics metrics) =>
+      metrics.forcedSequenceRatio <= fsrCapFor(metrics);
 
   /// Threshold above which the node-banded FSR cap begins to apply.
   /// Below this node count, FSR is uncapped (tier bands still apply).
@@ -256,15 +335,17 @@ class DifficultyProfile {
       return false;
     }
     if (!waveDepth.contains(metrics.waveDepth)) return false;
-    if (metrics.forcedSequenceRatio > fsrCapForNodeCount(metrics.nodeCount)) {
+    if (metrics.forcedSequenceRatio > fsrCapFor(metrics)) {
       return false;
     }
     if (tier == DifficultyTier.hard || tier == DifficultyTier.expert) {
       final w0 = metrics.waveZeroWidth;
-      if (!hardExpertOpeningBand.contains(w0)) return false;
+      if (!(openingBandOverride ?? hardExpertOpeningBand).contains(w0)) {
+        return false;
+      }
     }
 
-    // Temporary: Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
+    // TODO(temporary): Disable temporal arc enforcement until wave profile pacing is calibrated by human playtesting.
     // if ((tier == DifficultyTier.hard || tier == DifficultyTier.expert) &&
     //     metrics.tempoProfile.isNotEmpty &&
     //     !passesTemporalArc(metrics.tempoProfile)) {

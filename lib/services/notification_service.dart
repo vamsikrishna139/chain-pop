@@ -15,7 +15,7 @@ import 'package:timezone/timezone.dart' as tz;
 /// Two schedules, which is the shape almost every daily-puzzle game ships:
 ///
 ///  * **Daily reminder** — fires every day at [_reminderHour] local time and
-///    points at the day's Network Incident. Repeats via
+///    points at the day's Daily Incident. Repeats via
 ///    [DateTimeComponents.time] so a single schedule survives indefinitely.
 ///  * **Inactivity nudge** — a single shot [_idleNudgeDays] days after the last
 ///    time the player actually opened the game. Re-armed on every resume, so it
@@ -160,7 +160,7 @@ class NotificationService {
         channelId: 'daily_challenge',
         channelName: 'Daily Challenge',
         channelDescription:
-            'A once-a-day reminder that the new Network Incident is live.',
+            'A once-a-day reminder that the new Daily Incident is live.',
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       uiLocalNotificationDateInterpretation:
@@ -241,7 +241,7 @@ class NotificationService {
   static (String, String) _dailyCopy(DateTime day) {
     const pool = <(String, String)>[
       ('A new incident is live', "Today's board is open. Find the order."),
-      ('The grid reset', 'A fresh Network Incident just came online.'),
+      ('The grid reset', 'A fresh Daily Incident just came online.'),
       ("Today's incident is waiting", 'One board. One clean solve.'),
       ('New board on the grid', "Today's incident is ready when you are."),
       ('Incident available', 'Clear it before the day rolls over.'),

@@ -55,8 +55,9 @@ const double kRefScreenHLarge = 932;
 const double kRefTopReservedLarge = 206.0;
 const double kRefBottomReservedLarge = 102.0;
 
-const double kRefMargin = 24;
-const double kBandW = kRefScreenW - kRefMargin * 2;
+const double kRefMargin = kBoardVerticalMargin;
+const double kRefSideMargin = kBoardSideMargin;
+const double kBandW = kRefScreenW - kRefSideMargin * 2;
 const double kBandH =
     kRefScreenH - kRefTopReserved - kRefBottomReserved - kRefMargin;
 const double kBandArea = kBandW * kBandH;
@@ -80,6 +81,7 @@ class ReferenceDevice {
     required this.topReserved,
     required this.bottomReserved,
     this.margin = kRefMargin,
+    this.sideMargin = kRefSideMargin,
   });
 
   final String name;
@@ -88,8 +90,9 @@ class ReferenceDevice {
   final double topReserved;
   final double bottomReserved;
   final double margin;
+  final double sideMargin;
 
-  double get bandW => screenW - margin * 2;
+  double get bandW => screenW - sideMargin * 2;
   double get bandH => screenH - topReserved - bottomReserved - margin;
   double get bandArea => bandW * bandH;
 
@@ -601,7 +604,11 @@ BoardRow measure(
   required int sector,
   required String worldName,
 }) {
-  final m = LevelMetrics.compute(level, includeViablePath: true);
+  final m = LevelMetrics.compute(
+    level,
+    includeViablePath: true,
+    includeSearchEffort: true,
+  );
   final topo = LevelTopologyMetrics.compute(level);
 
   var minX = 1 << 30, minY = 1 << 30, maxX = -1, maxY = -1;

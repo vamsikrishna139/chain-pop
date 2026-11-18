@@ -37,6 +37,9 @@ final class GameAdCoordinator {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!_host.mounted) return;
       if (_host.gameStorage.hintRewardAdCoachSeen) return;
+      // The dialog opens over the first Hard/Daily board — don't let the
+      // countdown run while the player reads it.
+      _host.holdGameplayClock();
       await showDialog<void>(
         context: _host.context,
         builder: (ctx) => AlertDialog(
@@ -60,6 +63,7 @@ final class GameAdCoordinator {
       if (_host.mounted) {
         await _host.gameStorage.setHintRewardAdCoachSeen();
       }
+      _host.releaseGameplayClock();
     });
   }
 
@@ -82,6 +86,9 @@ final class GameAdCoordinator {
         showRewardedContinue: offer,
         rewardedAdReady:
             offer && _host.ads.isRewardedReady(AdPlacements.continueAfterLives),
+        rewardedReadyProbe: !offer
+            ? null
+            : () => _host.ads.isRewardedReady(AdPlacements.continueAfterLives),
         isPremium: SubscriptionLocator.isPremiumNow,
         onWatchAdContinue: !offer
             ? null
@@ -132,6 +139,9 @@ final class GameAdCoordinator {
         showRewardedContinue: offer,
         rewardedAdReady:
             offer && _host.ads.isRewardedReady(AdPlacements.continueAfterLives),
+        rewardedReadyProbe: !offer
+            ? null
+            : () => _host.ads.isRewardedReady(AdPlacements.continueAfterLives),
         isPremium: SubscriptionLocator.isPremiumNow,
         onWatchAdContinue: !offer
             ? null

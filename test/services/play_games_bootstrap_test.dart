@@ -55,6 +55,19 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
+  test('liveSync: false keeps achievements local (no Play Games sink)',
+      () async {
+    PlayGamesBootstrap.install(auth: auth, liveSync: false);
+    await settled();
+
+    controller.add(player);
+    await pumpEventQueue();
+
+    // Signed in or not, nothing can reach the real Play Games profile.
+    expect(PlayGamesBootstrap.sinkForTesting, isNull);
+    expect(AchievementsLocator.instance.progress(), isNotEmpty);
+  });
+
   test('sink starts unavailable, before auth has said anything', () {
     PlayGamesBootstrap.install(auth: auth);
 

@@ -198,9 +198,9 @@ int _popcount(int x) {
 /// Per-session ring buffer of recently-emitted fingerprints, plus a longer
 /// historical tail used for cross-session diversity (§4.5).
 ///
-/// Persistence is not wired in Phase 3 — [serialize] / [restore] let a Phase 5
-/// or beyond integration save/restore the historical list from user prefs
-/// without touching this class.
+/// Persisted across launches for the campaign generator (W2.4): bootstrap
+/// restores [serialize]d history via [restore], and `LevelManager` hands the
+/// new history to storage after each campaign level it serves.
 class DiversityLedger {
   /// Size of the rejection window (§4.5).
   final int windowSize;
@@ -316,7 +316,10 @@ class DiversityLedger {
   void restore(List<int> bits) {
     _historical
       ..clear()
-      ..addAll(bits.take(historicalCap));
+      // Keep the *newest* entries: [serialize] is oldest-first.
+      ..addAll(bits.length > historicalCap
+          ? bits.sublist(bits.length - historicalCap)
+          : bits);
     _recent
       ..clear()
       ..addAll(_historical.length > windowSize

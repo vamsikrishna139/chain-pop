@@ -11,6 +11,7 @@ import 'package:chain_pop/services/game_audio.dart';
 import 'package:chain_pop/services/game_audio_scope.dart';
 import 'package:chain_pop/services/storage_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hive/hive.dart';
 
@@ -60,6 +61,36 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
   }
+
+  group('MainMenuScreen system back', () {
+    testWidgets('first Back shows a hint, second Back within 2 s exits',
+        (tester) async {
+      final calls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          calls.add(call);
+          return null;
+        },
+      );
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+
+      await pumpMenu(tester);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.text('Press back again to exit'), findsOneWidget);
+      expect(find.byType(MainMenuScreen), findsOneWidget);
+      expect(calls.where((c) => c.method == 'SystemNavigator.pop'), isEmpty);
+
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(calls.where((c) => c.method == 'SystemNavigator.pop'),
+          hasLength(1));
+      await tester.pump(const Duration(seconds: 3));
+    });
+  });
 
   group('MainMenuScreen tutorial entry', () {
     testWidgets('shows Tutorial when onboarding is not completed',

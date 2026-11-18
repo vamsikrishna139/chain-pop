@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../game/levels/generation/difficulty_mode.dart';
@@ -10,111 +12,11 @@ IconData _continueIcon(bool isPremium) =>
 String _continueLabel({
   required bool isPremium,
   required bool rewardedAdReady,
+  bool gaveUp = false,
 }) {
   if (isPremium) return 'CONTINUE';
-  return rewardedAdReady ? 'WATCH AD TO CONTINUE' : 'AD LOADING…';
-}
-
-class TimeUpDialog extends StatelessWidget {
-  final DifficultyMode difficulty;
-  final VoidCallback onRetry;
-  final VoidCallback onMenu;
-  final bool showRewardedContinue;
-  final bool rewardedAdReady;
-  final Future<void> Function()? onWatchAdContinue;
-
-  /// Premium users continue without an ad, so the button drops the ad copy.
-  final bool isPremium;
-
-  const TimeUpDialog({
-    super.key,
-    required this.difficulty,
-    required this.onRetry,
-    required this.onMenu,
-    this.showRewardedContinue = false,
-    this.rewardedAdReady = false,
-    this.onWatchAdContinue,
-    this.isPremium = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = difficulty.color;
-    return AlertDialog(
-      backgroundColor: AppColors.surfaceDialog,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: accent.withValues(alpha: 0.3)),
-      ),
-      title: Column(
-        children: [
-          Icon(Icons.timer_off_rounded, color: accent, size: 48),
-          const SizedBox(height: 12),
-          const Text(
-            "TIME'S UP!",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 2,
-            ),
-          ),
-        ],
-      ),
-      content: Text(
-        'The clock ran out. Try again?',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
-      ),
-      actionsAlignment: MainAxisAlignment.center,
-      actions: [
-        TextButton(
-          onPressed: onMenu,
-          child: const Text('MENU', style: TextStyle(color: Colors.white38)),
-        ),
-        const SizedBox(width: 8),
-        ElevatedButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text(
-            'RETRY',
-            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: accent,
-            foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        if (showRewardedContinue && onWatchAdContinue != null) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed:
-                  rewardedAdReady ? () async => onWatchAdContinue!() : null,
-              icon: Icon(
-                _continueIcon(isPremium),
-                color: rewardedAdReady ? accent : Colors.white24,
-              ),
-              label: Text(
-                _continueLabel(
-                    isPremium: isPremium, rewardedAdReady: rewardedAdReady),
-                style: TextStyle(
-                  color: rewardedAdReady ? accent : Colors.white24,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
+  if (rewardedAdReady) return 'WATCH AD TO CONTINUE';
+  return gaveUp ? 'AD UNAVAILABLE' : 'AD LOADING…';
 }
 
 /// Confirms rewarded unlock before opening a past daily puzzle from the calendar.
@@ -196,12 +98,68 @@ class PastDailyUnlockDialog extends StatelessWidget {
   }
 }
 
+/// Time-out: retry, menu, or a rewarded continue with bonus seconds.
+class TimeUpDialog extends StatelessWidget {
+  final DifficultyMode difficulty;
+  final VoidCallback onRetry;
+  final VoidCallback onMenu;
+  final bool showRewardedContinue;
+
+  /// Readiness when the dialog opened. Superseded by [rewardedReadyProbe].
+  final bool rewardedAdReady;
+
+  /// Re-checked while the dialog is open so a rewarded ad that finishes
+  /// loading after the dialog appears still enables the button.
+  final bool Function()? rewardedReadyProbe;
+  final Future<void> Function()? onWatchAdContinue;
+
+  /// Premium users continue without an ad, so the button drops the ad copy.
+  final bool isPremium;
+
+  const TimeUpDialog({
+    super.key,
+    required this.difficulty,
+    required this.onRetry,
+    required this.onMenu,
+    this.showRewardedContinue = false,
+    this.rewardedAdReady = false,
+    this.rewardedReadyProbe,
+    this.onWatchAdContinue,
+    this.isPremium = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = difficulty.color;
+    return _LevelFailedDialog(
+      accent: accent,
+      borderColor: accent,
+      icon: Icon(Icons.timer_off_rounded, color: accent, size: 48),
+      title: "TIME'S UP!",
+      message: 'The clock ran out. Try again?',
+      onRetry: onRetry,
+      onMenu: onMenu,
+      showRewardedContinue: showRewardedContinue,
+      rewardedAdReady: rewardedAdReady,
+      rewardedReadyProbe: rewardedReadyProbe,
+      onWatchAdContinue: onWatchAdContinue,
+      isPremium: isPremium,
+    );
+  }
+}
+
+/// Out of lives: retry, menu, or a rewarded continue with one life back.
 class GameOverDialog extends StatelessWidget {
   final DifficultyMode difficulty;
   final VoidCallback onRetry;
   final VoidCallback onMenu;
   final bool showRewardedContinue;
+
+  /// Readiness when the dialog opened. Superseded by [rewardedReadyProbe].
   final bool rewardedAdReady;
+
+  /// Re-checked while the dialog is open (see [TimeUpDialog]).
+  final bool Function()? rewardedReadyProbe;
   final Future<void> Function()? onWatchAdContinue;
 
   /// Premium users continue without an ad, so the button drops the ad copy.
@@ -214,31 +172,81 @@ class GameOverDialog extends StatelessWidget {
     required this.onMenu,
     this.showRewardedContinue = false,
     this.rewardedAdReady = false,
+    this.rewardedReadyProbe,
     this.onWatchAdContinue,
     this.isPremium = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final accent = difficulty.color;
+    return _LevelFailedDialog(
+      accent: difficulty.color,
+      borderColor: Colors.redAccent,
+      icon: Icon(
+        Icons.favorite_rounded,
+        color: Colors.redAccent.withValues(alpha: 0.4),
+        size: 48,
+      ),
+      title: 'OUT OF LIVES',
+      message: 'You ran out of lives. Try again?',
+      onRetry: onRetry,
+      onMenu: onMenu,
+      showRewardedContinue: showRewardedContinue,
+      rewardedAdReady: rewardedAdReady,
+      rewardedReadyProbe: rewardedReadyProbe,
+      onWatchAdContinue: onWatchAdContinue,
+      isPremium: isPremium,
+    );
+  }
+}
+
+/// Shared body for [TimeUpDialog] and [GameOverDialog]: one stacked column of
+/// full-width actions (retry, rewarded continue, menu).
+class _LevelFailedDialog extends StatelessWidget {
+  final Color accent;
+  final Color borderColor;
+  final Widget icon;
+  final String title;
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onMenu;
+  final bool showRewardedContinue;
+  final bool rewardedAdReady;
+  final bool Function()? rewardedReadyProbe;
+  final Future<void> Function()? onWatchAdContinue;
+  final bool isPremium;
+
+  const _LevelFailedDialog({
+    required this.accent,
+    required this.borderColor,
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.onRetry,
+    required this.onMenu,
+    required this.showRewardedContinue,
+    required this.rewardedAdReady,
+    required this.rewardedReadyProbe,
+    required this.onWatchAdContinue,
+    required this.isPremium,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.surfaceDialog,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
+        side: BorderSide(color: borderColor.withValues(alpha: 0.3)),
       ),
       title: Column(
         children: [
-          Icon(
-            Icons.favorite_rounded,
-            color: Colors.redAccent.withValues(alpha: 0.4),
-            size: 48,
-          ),
+          icon,
           const SizedBox(height: 12),
-          const Text(
-            'OUT OF LIVES',
+          Text(
+            title,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 22,
               fontWeight: FontWeight.w900,
@@ -248,56 +256,136 @@ class GameOverDialog extends StatelessWidget {
         ],
       ),
       content: Text(
-        'You ran out of lives. Try again?',
+        message,
         textAlign: TextAlign.center,
         style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
       ),
-      actionsAlignment: MainAxisAlignment.center,
       actions: [
-        TextButton(
-          onPressed: onMenu,
-          child: const Text('MENU', style: TextStyle(color: Colors.white38)),
-        ),
-        const SizedBox(width: 8),
-        ElevatedButton.icon(
-          onPressed: onRetry,
-          icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text(
-            'RETRY',
-            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: accent,
-            foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        if (showRewardedContinue && onWatchAdContinue != null) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed:
-                  rewardedAdReady ? () async => onWatchAdContinue!() : null,
-              icon: Icon(
-                _continueIcon(isPremium),
-                color: rewardedAdReady ? accent : Colors.white24,
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text(
+                'RETRY',
+                style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
               ),
-              label: Text(
-                _continueLabel(
-                    isPremium: isPremium, rewardedAdReady: rewardedAdReady),
-                style: TextStyle(
-                  color: rewardedAdReady ? accent : Colors.white24,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accent,
+                foregroundColor: Colors.black,
+                minimumSize: const Size.fromHeight(46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
-          ),
-        ],
+            if (showRewardedContinue && onWatchAdContinue != null) ...[
+              const SizedBox(height: 10),
+              _RewardedContinueButton(
+                accent: accent,
+                isPremium: isPremium,
+                initiallyReady: rewardedAdReady,
+                readyProbe: rewardedReadyProbe,
+                onPressed: onWatchAdContinue!,
+              ),
+            ],
+            const SizedBox(height: 4),
+            TextButton(
+              onPressed: onMenu,
+              child:
+                  const Text('MENU', style: TextStyle(color: Colors.white54)),
+            ),
+          ],
+        ),
       ],
+    );
+  }
+}
+
+/// Rewarded-continue button that keeps polling ad readiness while visible.
+///
+/// The dialog used to snapshot `isRewardedReady` once at open, so an ad that
+/// finished loading a moment later left the button disabled on "AD LOADING…"
+/// for good. After [_giveUpAfter] with no ad it says so instead of spinning.
+class _RewardedContinueButton extends StatefulWidget {
+  final Color accent;
+  final bool isPremium;
+  final bool initiallyReady;
+  final bool Function()? readyProbe;
+  final Future<void> Function() onPressed;
+
+  const _RewardedContinueButton({
+    required this.accent,
+    required this.isPremium,
+    required this.initiallyReady,
+    required this.readyProbe,
+    required this.onPressed,
+  });
+
+  @override
+  State<_RewardedContinueButton> createState() =>
+      _RewardedContinueButtonState();
+}
+
+class _RewardedContinueButtonState extends State<_RewardedContinueButton> {
+  static const Duration _pollEvery = Duration(milliseconds: 500);
+  static const Duration _giveUpAfter = Duration(seconds: 12);
+
+  late bool _ready = widget.initiallyReady;
+  bool _gaveUp = false;
+  Timer? _poll;
+  final Stopwatch _waited = Stopwatch()..start();
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_ready && widget.readyProbe != null) {
+      _poll = Timer.periodic(_pollEvery, (t) {
+        if (!mounted) return t.cancel();
+        final now = widget.readyProbe!();
+        if (now) {
+          t.cancel();
+          setState(() => _ready = true);
+        } else if (!_gaveUp && _waited.elapsed >= _giveUpAfter) {
+          // Keep polling — a late fill still enables the button — but stop
+          // promising it is about to load.
+          setState(() => _gaveUp = true);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _ready ? widget.accent : Colors.white24;
+    return OutlinedButton.icon(
+      onPressed: _ready ? () async => widget.onPressed() : null,
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(46),
+        side: BorderSide(color: color.withValues(alpha: 0.6)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      icon: Icon(_continueIcon(widget.isPremium), color: color),
+      label: Text(
+        _continueLabel(
+          isPremium: widget.isPremium,
+          rewardedAdReady: _ready,
+          gaveUp: _gaveUp,
+        ),
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+        ),
+      ),
     );
   }
 }

@@ -20,7 +20,7 @@ const LevelSeed diamondMilestoneSeed = LevelSeed(
   mechanicOverride: MechanicBudgetOverride(portalPairCount: 0),
 );
 
-/// KNOWN GAP: this milestone does not currently feel like an "overload". It
+/// TODO(known-gap): this milestone does not currently feel like an "overload". It
 /// pins only the silhouette, so every slot inherits the ordinary Hard shape —
 /// 25 nodes, sometimes on a *smaller* 7x7 board than its neighbours. Measured
 /// across all ten slots: overload avg 25.0 nodes vs ordinary neighbours 25.0.

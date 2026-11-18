@@ -86,6 +86,7 @@ class AmbientBackgroundComponent extends PositionComponent
 
   /// Emits a ripple at [screenPos] (game/screen coordinates).
   void pulseAt(Vector2 screenPos, {double radius = 64}) {
+    if (!game.ambientMotion || game.reducedMotion) return;
     for (final p in _pulses) {
       if (p.age >= _pulseLife) {
         p.pos.setFrom(screenPos);
@@ -154,16 +155,25 @@ class AmbientBackgroundComponent extends PositionComponent
       }
     }
 
-    for (final p in _pulses) {
-      if (p.age < _pulseLife) p.age += dt;
+    if (game.ambientMotion) {
+      for (final p in _pulses) {
+        if (p.age < _pulseLife) p.age += dt;
+      }
+    } else {
+      for (final p in _pulses) {
+        p.age = _pulseLife;
+      }
     }
 
-    final glowTarget = _streakLevel >= 5 ? 1.0 : 0.0;
+    final glowTarget =
+        (game.ambientMotion && !game.reducedMotion && _streakLevel >= 5)
+            ? 1.0
+            : 0.0;
     final t = 1.0 - math.exp(-6.0 * dt);
     _streakGlow += (glowTarget - _streakGlow) * t;
 
     // Low-integrity scanline shimmer (occasional, one frame-burst at a time).
-    if (game.networkIntegrity < 60) {
+    if (game.ambientMotion && !game.reducedMotion && game.networkIntegrity < 60) {
       _scanlineTimer += dt;
       _scanlineAge += dt;
       if (_scanlineTimer >= _scanlineInterval) {
@@ -189,30 +199,34 @@ class AmbientBackgroundComponent extends PositionComponent
     canvas.drawPicture(_base!);
 
     for (final m in _motes) {
-      final twinkle = 0.6 + 0.4 * math.sin(_clock * 0.8 + m.phase);
+      final twinkle = game.ambientMotion
+          ? 0.6 + 0.4 * math.sin(_clock * 0.8 + m.phase)
+          : 0.7;
       _motePaint.color = theme.accent.withValues(alpha: 0.04 + 0.04 * twinkle);
       canvas.drawCircle(Offset(m.pos.x, m.pos.y), m.radius, _motePaint);
     }
 
-    for (final p in _pulses) {
-      if (p.age >= _pulseLife) continue;
-      final progress = p.age / _pulseLife;
-      _pulsePaint
-        ..color = theme.accent.withValues(alpha: (1.0 - progress) * 0.16)
-        ..strokeWidth = 2.0 * (1.0 - progress * 0.5);
-      canvas.drawCircle(
-        Offset(p.pos.x, p.pos.y),
-        p.maxRadius * Curves.easeOut.transform(progress),
-        _pulsePaint,
-      );
+    if (game.ambientMotion) {
+      for (final p in _pulses) {
+        if (p.age >= _pulseLife) continue;
+        final progress = p.age / _pulseLife;
+        _pulsePaint
+          ..color = theme.accent.withValues(alpha: (1.0 - progress) * 0.16)
+          ..strokeWidth = 2.0 * (1.0 - progress * 0.5);
+        canvas.drawCircle(
+          Offset(p.pos.x, p.pos.y),
+          p.maxRadius * Curves.easeOut.transform(progress),
+          _pulsePaint,
+        );
+      }
     }
 
-    if (_streakGlow > 0.02) {
+    if (game.ambientMotion && _streakGlow > 0.02) {
       _edgeGlowPaint.color = theme.accent.withValues(alpha: 0.10 * _streakGlow);
       canvas.drawRect(Rect.fromLTWH(-6, -6, w + 12, h + 12), _edgeGlowPaint);
     }
 
-    if (_scanlineAge < _scanlineLife) {
+    if (game.ambientMotion && _scanlineAge < _scanlineLife) {
       final fade = 1.0 - _scanlineAge / _scanlineLife;
       _scanlinePaint.color = Colors.white.withValues(alpha: 0.05 * fade);
       canvas.drawRect(Rect.fromLTWH(0, _scanlineY, w, 2), _scanlinePaint);
@@ -220,7 +234,10 @@ class AmbientBackgroundComponent extends PositionComponent
 
     if (game.networkIntegrity < 30) {
       // Slow red breathing at critically low integrity — atmosphere, not panic.
-      final breath = 0.5 + 0.5 * math.sin(_clock * (math.pi * 2 / 4.0));
+      // When ambient motion is disabled, hold a steady subtle glow without oscillating.
+      final breath = game.ambientMotion
+          ? 0.5 + 0.5 * math.sin(_clock * (math.pi * 2 / 4.0))
+          : 0.5;
       _integrityGlowPaint.color =
           const Color(0xFFFF5F6D).withValues(alpha: 0.05 * breath);
       canvas.drawRect(

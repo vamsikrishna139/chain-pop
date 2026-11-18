@@ -53,7 +53,8 @@ class LevelMetrics {
   final List<int> wavePeelingProfile;
 
   /// Bounded human-like solver effort (expansions + backtracks). Measured only;
-  /// not yet used for gating.
+  /// not yet used for gating. `-1` unless [LevelMetrics.compute] was asked for
+  /// it with `includeSearchEffort`.
   final int searchEffortScore;
 
   /// Ray-dependency topology: nodes with fan-in ≥ 2.
@@ -89,9 +90,16 @@ class LevelMetrics {
 
   /// Computes all metrics. Set [includeViablePath] = true to also run the
   /// bounded DFS — typically only worth it after cheaper gates have passed.
+  ///
+  /// [includeSearchEffort] runs [computeSearchEffort]. Off by default (W2.3):
+  /// nothing in the game reads the score, and the search is the most expensive
+  /// metric here — it was 99.8% of a 74.6 s generation before T2.0 capped it,
+  /// and capped it still runs on every candidate the generator scores. Reports
+  /// that print it opt in.
   static LevelMetrics compute(
     LevelData level, {
     bool includeViablePath = false,
+    bool includeSearchEffort = false,
     int viablePathBranchCap = 512,
     int viablePathExpansionCap = 6000,
   }) {
@@ -121,7 +129,9 @@ class LevelMetrics {
     final forcedSequenceRatio =
         calculateFSRFromProfile(wavePeelingProfile, level.nodes.length);
     final graph = DependencyGraph.fromLevel(level);
-    final effort = computeSearchEffort(level);
+    final effortScore = includeSearchEffort
+        ? computeSearchEffort(level).searchEffortScore
+        : -1;
 
     return LevelMetrics(
       nodeCount: level.nodes.length,
@@ -135,7 +145,7 @@ class LevelMetrics {
       viablePathCount: paths,
       viablePathCountCapped: capped,
       wavePeelingProfile: wavePeelingProfile,
-      searchEffortScore: effort.searchEffortScore,
+      searchEffortScore: effortScore,
       chokePointCount: graph.chokePointCount,
       maxAntichainWidth: graph.maxAntichainWidth,
       maxHubInDegree: graph.maxHubInDegree,

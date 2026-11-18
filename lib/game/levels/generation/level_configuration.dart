@@ -63,6 +63,17 @@ const double kDailyChallengeMinFillRatio = 0.55;
 const double kHardEffectiveFillMin = 0.45;
 const double kHardEffectiveFillMax = 0.60;
 
+/// Gen V2 Hard frame and node band (docs/GEN_V2_PLAN.md).
+const int kGenV2FrameWidth = 7;
+const int kGenV2FrameHeight = 9;
+const int kGenV2FrameHeightTall = 10;
+const int kGenV2MinNodes = 28;
+const int kGenV2MaxNodes = 40;
+
+/// Gen V2: the node target may use at most this share of the mask, so the
+/// constructor keeps room to manoeuvre (V1 Hard runs at ~0.76).
+const double kGenV2MaxNodesPerMaskCell = 0.88;
+
 /// Effective fill band for Daily / Expert boards.
 const double kDailyEffectiveFillMin = 0.50;
 const double kDailyEffectiveFillMax = 0.65;
@@ -110,6 +121,15 @@ class LevelConfiguration {
   /// Floor for scaled retry target counts; null = campaign default.
   final int? minimumTargetNodeCount;
 
+  /// Generator contract version (see `docs/GEN_V2_PLAN.md`). `1` reproduces
+  /// every shipped board exactly; `2` selects the Gen V2 dense portrait
+  /// frames for Hard/Expert. Easy and Medium are identical at both versions.
+  final int generationVersion;
+
+  /// True when this configuration takes the Gen V2 dense path.
+  bool get isGenV2Dense =>
+      generationVersion >= 2 && difficulty.mode == DifficultyMode.hard;
+
   const LevelConfiguration({
     required this.levelId,
     required this.gridWidth,
@@ -121,19 +141,28 @@ class LevelConfiguration {
     this.irregularMaskProbability,
     this.irregularLayoutExtraTries = 0,
     this.minimumTargetNodeCount,
+    this.generationVersion = 1,
   });
 
   /// Factory constructor that derives configuration from level ID.
   ///
   /// If [mode] is not specified, automatically derives the difficulty mode
   /// from the level ID (0-9: easy, 10-29: medium, 30+: hard).
-  factory LevelConfiguration.fromLevelId(int levelId, {DifficultyMode? mode}) {
+  factory LevelConfiguration.fromLevelId(
+    int levelId, {
+    DifficultyMode? mode,
+    int generationVersion = 1,
+  }) {
     final difficulty = DifficultyParameters.fromLevelId(levelId, mode: mode);
     final archetype = _selectArchetype(levelId, difficulty.mode);
-    final (gw, gh) =
-        _calculateGridDimensions(levelId, difficulty.mode, archetype);
-    final nodeCount =
-        _calculateNodeCount(levelId, gw, gh, difficulty, archetype);
+    final v2Dense =
+        generationVersion >= 2 && difficulty.mode == DifficultyMode.hard;
+    final (gw, gh) = v2Dense
+        ? genV2PortraitFrame(levelId, archetype)
+        : _calculateGridDimensions(levelId, difficulty.mode, archetype);
+    final nodeCount = v2Dense
+        ? genV2TargetNodeCount(levelId, gw, gh)
+        : _calculateNodeCount(levelId, gw, gh, difficulty, archetype);
     final bias = _archetypeDirectionBias(archetype, levelId);
 
     return LevelConfiguration(
@@ -144,7 +173,55 @@ class LevelConfiguration {
       difficulty: difficulty,
       archetype: archetype,
       directionBias: bias,
+      generationVersion: generationVersion,
     );
+  }
+
+  // ── Gen V2 (docs/GEN_V2_PLAN.md) ───────────────────────────────────────
+
+  /// Gen V2 Hard frame: 7 columns (the widest that keeps ≥44 px cells on a
+  /// 390 pt phone) by 9 or 10 rows, so the board's aspect matches the
+  /// portrait playfield band instead of letterboxing a square.
+  static (int, int) genV2PortraitFrame(int levelId, LevelArchetype archetype) {
+    var tall = Random(levelId * 7919 + 4242).nextDouble() < 0.35;
+    final pos = genV2WorldPosition(levelId);
+    if (pos != null) {
+      // P1 sawtooth: relief levels stay short, climax and Guardian go tall.
+      if (pos <= 3) tall = false;
+      if (pos >= 20) tall = true;
+    }
+    return (kGenV2FrameWidth, tall ? kGenV2FrameHeightTall : kGenV2FrameHeight);
+  }
+
+  /// P1: position 1..25 of a campaign level inside its 25-level world, or null
+  /// for non-campaign ids (Daily day keys), which keep their own pacing.
+  static int? genV2WorldPosition(int levelId) {
+    if (levelId < 1 || levelId >= 1000000) return null;
+    return (levelId - 1) % 25 + 1;
+  }
+
+  /// P1 fill offset: relief 1-3, ramp 4-14, build-up 15-19, climax 20-24,
+  /// Guardian 25. A pure function of the world position.
+  static double genV2SawtoothFillDelta(int levelId) {
+    final pos = genV2WorldPosition(levelId);
+    if (pos == null) return 0;
+    if (pos <= 3) return -0.10;
+    if (pos <= 14) return -0.06 + (pos - 4) / 10 * 0.06;
+    if (pos <= 19) return 0.03;
+    if (pos <= 24) return 0.08;
+    return 0.10;
+  }
+
+  /// Gen V2 Hard node target: [kHardEffectiveFillMin]..[kHardEffectiveFillMax]
+  /// of the frame, clamped to [kGenV2MinNodes]..[kGenV2MaxNodes].
+  static int genV2TargetNodeCount(int levelId, int gridWidth, int gridHeight) {
+    final r = Random(levelId * 104729 + 99);
+    final fill = kHardEffectiveFillMin +
+        r.nextDouble() * (kHardEffectiveFillMax - kHardEffectiveFillMin) +
+        genV2SawtoothFillDelta(levelId);
+    return (gridWidth * gridHeight * fill)
+        .round()
+        .clamp(kGenV2MinNodes, kGenV2MaxNodes);
   }
 
   /// Convenience factory with explicit difficulty mode.
@@ -159,15 +236,25 @@ class LevelConfiguration {
   /// Dense Strategy Phase 1D: structural params now derive from Hard (not
   /// Medium) so daily boards match the Expert evaluator's density expectations.
   /// The UI label (`DifficultyMode.medium`) and timer formula are unchanged.
-  factory LevelConfiguration.forDailyChallenge(int dayKey) {
-    final base =
-        LevelConfiguration.fromLevelId(dayKey, mode: DifficultyMode.hard);
-    final (gw, gh) = _clampGridDimensions(
-      min(base.gridWidth, kDailyChallengeMaxGridSpan),
-      min(base.gridHeight, kDailyChallengeMaxGridSpan),
-      DifficultyMode.hard,
-      isDaily: true,
+  factory LevelConfiguration.forDailyChallenge(
+    int dayKey, {
+    int generationVersion = 1,
+  }) {
+    final base = LevelConfiguration.fromLevelId(
+      dayKey,
+      mode: DifficultyMode.hard,
+      generationVersion: generationVersion,
     );
+    // Gen V2 keeps its portrait frame: the 8-span clamp exists to pack V1's
+    // square grids, and would cut a 7x10 frame back to 7x8.
+    final (gw, gh) = generationVersion >= 2
+        ? (base.gridWidth, base.gridHeight)
+        : _clampGridDimensions(
+            min(base.gridWidth, kDailyChallengeMaxGridSpan),
+            min(base.gridHeight, kDailyChallengeMaxGridSpan),
+            DifficultyMode.hard,
+            isDaily: true,
+          );
     final area = gw * gh;
     final cap = min(base.difficulty.maxNodes, area - 1);
     final minByFill = max(
@@ -190,6 +277,7 @@ class LevelConfiguration {
       irregularMaskProbability: kDailyChallengeIrregularProbability,
       irregularLayoutExtraTries: kDailyChallengeIrregularExtraTries,
       minimumTargetNodeCount: minByFill,
+      generationVersion: generationVersion,
     );
   }
 

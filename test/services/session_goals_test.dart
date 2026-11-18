@@ -65,7 +65,7 @@ void main() {
   });
 
   group('SessionGoals — core/flawless/nodes goals', () {
-    test('Restore 5 reactors accumulates cores across wins', () {
+    test('Restore 5 cores accumulates cores across wins', () {
       forceGoal(SessionGoalKind.restoreCores);
       expect(SessionGoals.recordCoresRestored(3), isFalse);
       expect(SessionGoals.progress, 3);

@@ -141,6 +141,20 @@ class LevelData {
     this.silhouetteId,
   });
 
+  /// This board with [nodes] replaced (and the rest kept). Rebuild boards with
+  /// this rather than the constructor: hand-built copies used to drop
+  /// [portalPairs] and [silhouetteId], which is how every shipped board lost
+  /// its portals in `enrichLevel` (audit P1-6b).
+  LevelData copyWith({List<NodeData>? nodes, int? levelId}) => LevelData(
+        levelId: levelId ?? this.levelId,
+        gridWidth: gridWidth,
+        gridHeight: gridHeight,
+        nodes: nodes ?? this.nodes,
+        playCells: playCells,
+        portalPairs: portalPairs,
+        silhouetteId: silhouetteId,
+      );
+
   /// Cores on the board.
   int get coreCount => nodes.where((n) => n.isCore).length;
 

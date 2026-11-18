@@ -56,19 +56,13 @@ class DailyChallenge {
   }
 
   /// Incident briefing title for daily play HUD.
-  static String incidentTitle(int dayKey) => 'NETWORK INCIDENT';
+  static String incidentTitle(int dayKey) => 'DAILY INCIDENT';
 
   /// Objective line shown on daily briefing / in-game HUD.
-  static String incidentObjective(int dayKey) => 'Restore the Cascade Reactor';
+  static String incidentObjective(int dayKey) => 'Restore all cores';
 
   /// Severity badge for daily incidents.
   static String incidentSeverity(int dayKey) => 'Critical';
-
-  /// Placeholder local cohort completion estimate (no backend v1).
-  static String incidentCompletionEstimate(int dayKey) {
-    final pct = 12 + (dayKey % 17);
-    return '$pct% cleared today';
-  }
 
   /// Win panel headline for resolved incidents.
   static String incidentResolvedTitle(int dayKey) =>

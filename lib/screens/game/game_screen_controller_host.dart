@@ -74,6 +74,11 @@ abstract class GameScreenControllerHost {
   int get autoAdvanceSec;
   set autoAdvanceSec(int value);
 
+  /// True once the player touched the win panel: the countdown stops and the
+  /// panel waits for an explicit Next / Menu / Retry.
+  bool get autoAdvanceHeld;
+  set autoAdvanceHeld(bool value);
+
   int? get timeLeftSec;
   set timeLeftSec(int? value);
 
@@ -124,4 +129,9 @@ abstract class GameScreenControllerHost {
   void resetGhostHintTimer();
   void resetForRetry();
   void goMenu();
+
+  /// Soft-holds the clock, stopwatch and engine while a modal covers the board
+  /// (pair with [releaseGameplayClock]).
+  void holdGameplayClock();
+  void releaseGameplayClock();
 }

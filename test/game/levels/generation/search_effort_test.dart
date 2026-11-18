@@ -40,7 +40,7 @@ void main() {
       expect(LevelSolver.isSolvable(level), isTrue);
     });
 
-    test('LevelMetrics.compute populates searchEffortScore', () {
+    test('LevelMetrics.compute populates searchEffortScore on request', () {
       final level = LevelData(
         levelId: 0,
         gridWidth: 6,
@@ -51,11 +51,15 @@ void main() {
         ],
       );
 
-      final metrics = LevelMetrics.compute(level);
+      final metrics = LevelMetrics.compute(level, includeSearchEffort: true);
       final effort = computeSearchEffort(level);
 
       expect(metrics.searchEffortScore, equals(effort.searchEffortScore));
       expect(metrics.searchEffortScore, greaterThan(0));
+
+      // Off by default: nothing in the game reads it, so the generator's
+      // scoring loop must not pay for it.
+      expect(LevelMetrics.compute(level).searchEffortScore, equals(-1));
     });
   });
 

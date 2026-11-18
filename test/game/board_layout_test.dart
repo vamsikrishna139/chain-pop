@@ -238,28 +238,30 @@ void main() {
       }
     });
 
-    test('reference arithmetic: 8x8 on 390x844 goes 34.2px -> 40.2px', () {
-      const bandW = 342.0;
+    test('reference arithmetic: 8x8 on 390x844 goes 34.2 -> 40.2 -> 44.8px',
+        () {
+      // Legacy single fill and the P1 per-axis fill on the old 24 px side
+      // margin (band 342 wide), then the shipped 0.98 fill on the 12 px side
+      // margin (band 366 wide) — the first layout to reach 44 pt on 8 columns.
+      const oldBandW = 390.0 - 24 * 2;
+      const newBandW = 390.0 - kBoardSideMargin * 2;
       const bandH = 538.0;
-      final before = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
-        bandW: bandW,
-        bandH: bandH,
-        bboxWidth: 8,
-        bboxHeight: 8,
-        gridWidth: 8,
-        gridHeight: 8,
-        targetFill: 0.80,
-      );
-      final after = BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
-        bandW: bandW,
-        bandH: bandH,
-        bboxWidth: 8,
-        bboxHeight: 8,
-        gridWidth: 8,
-        gridHeight: 8,
-      );
-      expect(before, closeTo(34.2, 0.1));
-      expect(after, closeTo(40.2, 0.1));
+      double fit(double bandW, {double? targetFill, double widthFill = 0.94}) =>
+          BoardLayoutMetrics.fitCellSizeForBoundsCappedToGrid(
+            bandW: bandW,
+            bandH: bandH,
+            bboxWidth: 8,
+            bboxHeight: 8,
+            gridWidth: 8,
+            gridHeight: 8,
+            targetFill: targetFill,
+            widthFill: widthFill,
+          );
+      expect(fit(oldBandW, targetFill: 0.80), closeTo(34.2, 0.1));
+      expect(fit(oldBandW), closeTo(40.2, 0.1));
+      expect(fit(newBandW, widthFill: kBoardWidthFill), closeTo(44.8, 0.1));
+      expect(fit(newBandW, widthFill: kBoardWidthFill),
+          greaterThanOrEqualTo(44.0));
     });
 
     test('targetFill still overrides both axes for single-fill callers', () {

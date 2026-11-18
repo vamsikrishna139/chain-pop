@@ -13,6 +13,7 @@ import 'retrograde_placement.dart';
 import 'sightline_table.dart';
 import 'difficulty_profile.dart';
 import 'metrics.dart';
+import 'progression_profile.dart';
 
 /// Constructs a fully solvable level from the **empty** board outward, in
 /// reverse extraction order (last-removed first).
@@ -92,8 +93,25 @@ class RetrogradeConstructor {
   /// Number of portal pairs to place before node placement.
   final int portalPairCount;
 
+  /// Share of the removal order where blocking flips are offered. Gen V2
+  /// widens it (D2) so blocker chains cover more of the board.
+  final double crunchStartFrac;
+  final double crunchEndFrac;
+
+  /// Gen V2 (D1): per-level opening-width cap replacing the tier's flat ceiling.
+  final int? openingCapOverride;
+
+  /// Gen V2 (D1): let the opening compressor also re-order a free node to just
+  /// after a later ray target, which the plain flip rule (target id < own id)
+  /// can never do.
+  final bool reinsertOpeningMoves;
+
   /// The portals placed during construction.
   final List<PortalPair> placedPortals = [];
+
+  /// [silhouette] minus portal cells: where nodes may actually go. A node on a
+  /// portal cell would hide the portal and block its own warp.
+  late Set<int> _placementMask;
 
   static const Map<DifficultyTier, int> _maxOpeningByTier = {
     DifficultyTier.easy: 10,
@@ -139,6 +157,10 @@ class RetrogradeConstructor {
     List<MotifReservation> reservations = const <MotifReservation>[],
     this.tier,
     this.portalPairCount = 0,
+    this.crunchStartFrac = 0.35,
+    this.crunchEndFrac = 0.65,
+    this.openingCapOverride,
+    this.reinsertOpeningMoves = false,
   })  : motifPlacements = motifPlacements.isNotEmpty
             ? motifPlacements
             : _placementsFromReservations(reservations),
@@ -172,6 +194,7 @@ class RetrogradeConstructor {
     if (reservations.length > targetNodeCount) return null;
 
     placedPortals.clear();
+    _placementMask = silhouette;
     if (portalPairCount > 0) {
       final availableCells = silhouette.where((c) {
         for (final m in motifPlacements) {
@@ -182,20 +205,47 @@ class RetrogradeConstructor {
         return true;
       }).toList();
 
+      // Runs whether or not portals are live, so the RNG stream — and every
+      // board built from it — is the same as Gen V1 with the switch off.
       availableCells.shuffle(random);
-      int portalsCreated = 0;
 
-      while (portalsCreated < portalPairCount && availableCells.length >= 2) {
-        final c1 = availableCells.removeLast();
-        final c2 = availableCells.removeLast();
-        placedPortals
-            .add(PortalPair(c1 % 1000, c1 ~/ 1000, c2 % 1000, c2 ~/ 1000));
-        portalsCreated++;
-      }
-
-      if (placedPortals.isNotEmpty) {
-        sightlines = SightlineTable.forGrid(gridWidth, gridHeight,
-            portals: placedPortals);
+      if (PortalRollout.enabled) {
+        final portalCells = <int>{};
+        while (placedPortals.length < portalPairCount &&
+            availableCells.length >= 2 &&
+            // Portal cells hold no node, so keep room for the full target.
+            silhouette.length - portalCells.length - 2 >= targetNodeCount) {
+          final c1 = availableCells.removeLast();
+          final c2 = availableCells.removeLast();
+          placedPortals.add(PortalPair(
+              gridCellX(c1), gridCellY(c1), gridCellX(c2), gridCellY(c2)));
+          portalCells
+            ..add(c1)
+            ..add(c2);
+        }
+        if (placedPortals.isNotEmpty) {
+          sightlines = SightlineTable.forGrid(gridWidth, gridHeight,
+              portals: placedPortals);
+          _placementMask = silhouette.difference(portalCells);
+        }
+      } else {
+        // Gen V1, byte-for-byte, until the Gen V2 flip. The base-1000 decode
+        // is wrong (audit P1-6a) but not inert: cells on row 0 decode
+        // correctly, so these half-portals steer construction, and the frozen
+        // corpus plus ~12% of Dailies depend on that. `enrichLevel` strips
+        // them before anything ships. Delete this branch at the flip.
+        var created = 0;
+        while (created < portalPairCount && availableCells.length >= 2) {
+          final c1 = availableCells.removeLast();
+          final c2 = availableCells.removeLast();
+          placedPortals
+              .add(PortalPair(c1 % 1000, c1 ~/ 1000, c2 % 1000, c2 ~/ 1000));
+          created++;
+        }
+        if (placedPortals.isNotEmpty) {
+          sightlines = SightlineTable.forGrid(gridWidth, gridHeight,
+              portals: placedPortals, legacyGenV1: true);
+        }
       }
     }
 
@@ -276,7 +326,7 @@ class RetrogradeConstructor {
 
         var finalResult = reassigned;
         if (tier != null) {
-          final maxOpening = _maxOpeningByTier[tier];
+          final maxOpening = openingCapOverride ?? _maxOpeningByTier[tier];
           final minOpening = _minOpeningByTier[tier];
           if (maxOpening != null && minOpening != null) {
             finalResult = _enforceOpeningTarget(
@@ -298,7 +348,7 @@ class RetrogradeConstructor {
     scorer.crunchZoneBlockingPicked = 0;
     var finalBaseline = baseline;
     if (tier != null) {
-      final maxOpening = _maxOpeningByTier[tier];
+      final maxOpening = openingCapOverride ?? _maxOpeningByTier[tier];
       final minOpening = _minOpeningByTier[tier];
       if (maxOpening != null && minOpening != null) {
         finalBaseline = _enforceOpeningTarget(
@@ -317,7 +367,7 @@ class RetrogradeConstructor {
     final frontier = FrontierSet(
       gridWidth: gridWidth,
       gridHeight: gridHeight,
-      silhouette: silhouette,
+      silhouette: _placementMask,
       eightConnected: eightConnected,
     );
     final blacklist = <int>{};
@@ -328,7 +378,7 @@ class RetrogradeConstructor {
       final state = ConstructionState(
         gridWidth: gridWidth,
         gridHeight: gridHeight,
-        silhouette: silhouette,
+        silhouette: _placementMask,
         placed: placed,
         frontier: frontier,
         sightlines: sightlines,
@@ -386,7 +436,7 @@ class RetrogradeConstructor {
     final frontier = FrontierSet(
       gridWidth: gridWidth,
       gridHeight: gridHeight,
-      silhouette: silhouette,
+      silhouette: _placementMask,
       eightConnected: eightConnected,
     );
     final blacklist = <int>{};
@@ -565,7 +615,7 @@ class RetrogradeConstructor {
       final state = ConstructionState(
         gridWidth: gridWidth,
         gridHeight: gridHeight,
-        silhouette: silhouette,
+        silhouette: _placementMask,
         placed: placed,
         frontier: frontier,
         sightlines: sightlines,
@@ -638,8 +688,8 @@ class RetrogradeConstructor {
       return removalOrder;
     }
 
-    final crunchStart = (n * 0.35).floor().clamp(1, n - 1);
-    final crunchEnd = (n * 0.65).ceil().clamp(crunchStart, n - 1);
+    final crunchStart = (n * crunchStartFrac).floor().clamp(1, n - 1);
+    final crunchEnd = (n * crunchEndFrac).ceil().clamp(crunchStart, n - 1);
 
     final motifKeys = <int>{
       for (final m in motifPlacements)
@@ -653,6 +703,9 @@ class RetrogradeConstructor {
 
     var flips = 0;
     var offered = 0;
+    // Only directions change below, never positions, so one map serves the
+    // whole pass.
+    final keyToId = _keyToId(result);
 
     for (var i = crunchStart; i <= crunchEnd; i++) {
       final node = result[i];
@@ -668,6 +721,7 @@ class RetrogradeConstructor {
           dir,
           result,
           selfId: i,
+          keyToId: keyToId,
         );
         if (targetId == null || targetId >= i) continue;
         if (!_directionClearAtRemovalStep(i, dir, result)) continue;
@@ -812,17 +866,22 @@ class RetrogradeConstructor {
     return tied[random.nextInt(tied.length)];
   }
 
+  /// Cell key → index in [order]. Callers that probe many rays on one order
+  /// build this once: rebuilding it per ray made the opening pass O(n³).
+  static Map<int, int> _keyToId(List<RetrogradePlacement> order) => <int, int>{
+        for (var i = 0; i < order.length; i++)
+          gridCellKey(order[i].position.x, order[i].position.y): i,
+      };
+
   /// First node hit when stepping from [from] along [dir]; null if ray exits.
   int? _firstNodeIdOnRay(
     Point<int> from,
     Direction dir,
     List<RetrogradePlacement> order, {
     required int selfId,
+    Map<int, int>? keyToId,
   }) {
-    final keyToId = <int, int>{
-      for (var i = 0; i < order.length; i++)
-        gridCellKey(order[i].position.x, order[i].position.y): i,
-    };
+    keyToId ??= _keyToId(order);
     var x = from.x;
     var y = from.y;
     while (true) {
@@ -898,22 +957,26 @@ class RetrogradeConstructor {
   }) {
     var current = placements.toList();
     for (var attempt = 0; attempt < 20; attempt++) {
-      final opening = _waveZeroWidth(current);
+      // [_openingNow] and the key map depend only on `current`, so both are
+      // recomputed when `current` changes rather than on every probe.
+      var opening = _openingNow(current);
       if (opening <= maxOpening && opening >= minOpening) break;
 
       final freeIndices = _rayFreeIndices(current);
       freeIndices.sort((a, b) => b.compareTo(a));
 
+      var keyToId = _keyToId(current);
       var flippedAny = false;
       for (final i in freeIndices) {
-        if (_waveZeroWidth(current) <= maxOpening) break;
-        if (_waveZeroWidth(current) <= minOpening) break;
+        if (opening <= maxOpening) break;
+        if (opening <= minOpening) break;
 
         final node = current[i];
         final dirs = Direction.values.toList()..shuffle(random);
         for (final dir in dirs) {
           if (dir == node.direction) continue;
-          final j = _firstNodeIdOnRay(node.position, dir, current, selfId: i);
+          final j = _firstNodeIdOnRay(node.position, dir, current,
+              selfId: i, keyToId: keyToId);
           if (j != null &&
               j < i &&
               _directionClearAtRemovalStep(i, dir, current)) {
@@ -924,15 +987,67 @@ class RetrogradeConstructor {
             );
             if (_validatesRemovalOrderIdSequence(next)) {
               current = next;
+              opening = _openingNow(current);
+              keyToId = _keyToId(current);
               flippedAny = true;
               break;
             }
           }
         }
       }
-      if (!flippedAny) break;
+      if (!flippedAny) {
+        if (reinsertOpeningMoves && _openingNow(current) > maxOpening) {
+          final moved = _reinsertFreeNode(current, maxOpening);
+          if (moved != null) {
+            current = moved;
+            continue;
+          }
+        }
+        break;
+      }
     }
     return current;
+  }
+
+  int _reinsertTries = 0;
+
+  /// Re-orders ONE ray-free node to just after a later node it can be pointed
+  /// at, if the whole removal order stays valid. Returns null when no move
+  /// works. Bounded tries keep construction latency flat.
+  List<RetrogradePlacement>? _reinsertFreeNode(
+    List<RetrogradePlacement> current,
+    int maxOpening,
+  ) {
+    var tries = 0;
+    final free = _rayFreeIndices(current)..sort((a, b) => a.compareTo(b));
+    final keyToId = _keyToId(current);
+    for (final i in free) {
+      final node = current[i];
+      for (final dir in Direction.values) {
+        if (dir == node.direction) continue;
+        final j = _firstNodeIdOnRay(node.position, dir, current,
+            selfId: i, keyToId: keyToId);
+        if (j == null || j <= i) continue;
+        if (++tries > 10 || ++_reinsertTries > 40) return null;
+        final next = current.toList();
+        final moved = next.removeAt(i);
+        // After the removal, old index j sits at j-1; insert right after it.
+        next.insert(
+            j, RetrogradePlacement(position: moved.position, direction: dir));
+        if (_validatesRemovalOrderIdSequence(next)) return next;
+      }
+    }
+    return null;
+  }
+
+  /// Opening width. Gen V2 uses the ray-free node count (equal to the first
+  /// wave when no portals are placed) because the wave profile is the
+  /// dominant construction cost; V1 keeps the exact original computation.
+  int _openingNow(List<RetrogradePlacement> placements) {
+    if (reinsertOpeningMoves && placedPortals.isEmpty) {
+      return _rayFreeIndices(placements).length;
+    }
+    return _waveZeroWidth(placements);
   }
 
   int _waveZeroWidth(List<RetrogradePlacement> placements) {
@@ -950,6 +1065,8 @@ class RetrogradeConstructor {
       gridWidth: gridWidth,
       gridHeight: gridHeight,
       nodes: nodes,
+      // Gen V1 validated on a portal-free probe; keep that while dark.
+      portalPairs: PortalRollout.enabled ? placedPortals : const [],
     );
     final profile = computeWavePeelingProfile(level);
     return profile.isEmpty ? 0 : profile.first;
@@ -957,12 +1074,14 @@ class RetrogradeConstructor {
 
   List<int> _rayFreeIndices(List<RetrogradePlacement> current) {
     final freeIndices = <int>[];
+    final keyToId = _keyToId(current);
     for (var i = 0; i < current.length; i++) {
       final target = _firstNodeIdOnRay(
         current[i].position,
         current[i].direction,
         current,
         selfId: i,
+        keyToId: keyToId,
       );
       if (target == null) freeIndices.add(i);
     }
@@ -985,6 +1104,8 @@ class RetrogradeConstructor {
       gridWidth: gridWidth,
       gridHeight: gridHeight,
       nodes: nodes,
+      // Gen V1 validated on a portal-free probe; keep that while dark.
+      portalPairs: PortalRollout.enabled ? placedPortals : const [],
     );
     final remaining = nodes.map((n) => n.clone()).toList();
     final byId = List<NodeData>.from(nodes)

@@ -1,5 +1,5 @@
 import 'dart:math';
-import 'dart:ui';
+import 'dart:typed_data';
 
 import 'difficulty_mode.dart';
 
@@ -171,14 +171,13 @@ Set<String> _vShape(int w, int h, Random? random, {Random? jitter}) {
   return cells;
 }
 
-/// Irregular pentagon rasterised from a [Path].
+/// Irregular pentagon, rasterised by sampling each cell centre.
 ///
 /// [jitter] (level-isolated RNG) slides the apex off-centre, moves the
 /// shoulder line up or down and widens or narrows the base, turning one fixed
 /// pentagon into a family of them. Draws nothing from the main [random]
 /// stream; the original wobble draw is preserved verbatim.
 Set<String> _pentagonCells(int w, int h, Random? random, {Random? jitter}) {
-  final path = Path();
   // Preserve the original main-stream draw so non-jittered output is unchanged.
   final wobble = (random?.nextDouble() ?? 0.5) * 0.08;
   final j = jitter;
@@ -192,17 +191,18 @@ Set<String> _pentagonCells(int w, int h, Random? random, {Random? jitter}) {
   final yTop = h * (0.18 + wobble * 0.5);
   final yMid = h * midY;
   final yBot = h * (0.92 - wobble * 0.5);
-  path.moveTo(w * apex, yTop);
-  path.lineTo(x1, yMid);
-  path.lineTo(w * (1 - baseIn), yBot);
-  path.lineTo(w * baseIn, yBot);
-  path.lineTo(x0, yMid);
-  path.close();
+  final pentagon = <(double, double)>[
+    (w * apex, yTop),
+    (x1, yMid),
+    (w * (1 - baseIn), yBot),
+    (w * baseIn, yBot),
+    (x0, yMid),
+  ];
 
   final cells = <String>{};
   for (var y = 0; y < h; y++) {
     for (var x = 0; x < w; x++) {
-      if (path.contains(Offset(x + 0.5, y + 0.5))) {
+      if (polygonContainsPoint(pentagon, x + 0.5, y + 0.5)) {
         cells.add('$x,$y');
       }
     }
@@ -583,4 +583,135 @@ Set<String> _xShape(int w, int h, Random? random, {Random? jitter}) {
   }
   if (cells.length < 9) return _cross(w, h, random, jitter: jitter);
   return cells;
+}
+
+
+/// Is (px, py) inside the closed polygon [vertices], decided exactly as
+/// `dart:ui` `Path.contains` decides it for a path built with `moveTo` /
+/// `lineTo` / `close` (default non-zero fill)?
+///
+/// `Path` only runs on the root isolate. Gen V2 boards are built on a worker
+/// isolate, and the pentagon mask used to throw there ("UI actions are only
+/// available on root isolate"), sending those levels back to the UI thread.
+///
+/// This is a port of Skia's `SkPath::contains` for line segments, including
+/// its float32 coordinates and arithmetic and its on-edge rules, because masks
+/// also shape V1 boards that are already live: a near-edge cell decided
+/// differently would move a shipped board. `layout_mask_isolate_test.dart`
+/// compares it with `Path` on a large sample of pentagons.
+bool polygonContainsPoint(
+    List<(double, double)> vertices, double px, double py) {
+  final n = vertices.length;
+  if (n < 3) return false;
+  final xs = [for (final v in vertices) _f32(v.$1)];
+  final ys = [for (final v in vertices) _f32(v.$2)];
+  final x = _f32(px);
+  final y = _f32(py);
+
+  // contains_inclusive(bounds).
+  var minX = xs[0], maxX = xs[0], minY = ys[0], maxY = ys[0];
+  for (var i = 1; i < n; i++) {
+    minX = min(minX, xs[i]);
+    maxX = max(maxX, xs[i]);
+    minY = min(minY, ys[i]);
+    maxY = max(maxY, ys[i]);
+  }
+  if (x < minX || x > maxX || y < minY || y > maxY) return false;
+
+  var w = 0;
+  var onCurve = 0;
+  for (var i = 0; i < n; i++) {
+    final k = (i + 1) % n;
+    final r = _windingLine(xs[i], ys[i], xs[k], ys[k], x, y);
+    w += r.$1;
+    onCurve += r.$2;
+  }
+  if (w != 0) return true;
+  if (onCurve <= 1) return onCurve == 1;
+  if (onCurve.isOdd) return true;
+
+  // Even number of on-curve hits under non-zero fill: Skia's tangent test.
+  final tangents = <(double, double)>[];
+  for (var i = 0; i < n; i++) {
+    final k = (i + 1) % n;
+    final t = _tangentLine(xs[i], ys[i], xs[k], ys[k], x, y);
+    if (t == null) continue;
+    if (_nearlyZero(_f32(_f32(t.$1 * t.$1) + _f32(t.$2 * t.$2)))) continue;
+    var cancelled = false;
+    for (var a = 0; a < tangents.length; a++) {
+      final test = tangents[a];
+      final cross = _f32(_f32(test.$1 * t.$2) - _f32(test.$2 * t.$1));
+      if (_nearlyZero(cross) &&
+          _sign(_f32(t.$1 * test.$1)) <= 0 &&
+          _sign(_f32(t.$2 * test.$2)) <= 0) {
+        // Skia's removeShuffle: the last element takes the removed slot.
+        final last = tangents.removeLast();
+        if (a < tangents.length) tangents[a] = last;
+        cancelled = true;
+        break;
+      }
+    }
+    if (!cancelled) tangents.add(t);
+  }
+  return tangents.isNotEmpty;
+}
+
+final Float32List _f32Buf = Float32List(1);
+
+/// Rounds to float32, the precision Skia stores and computes path points in.
+double _f32(double v) {
+  _f32Buf[0] = v;
+  return _f32Buf[0];
+}
+
+int _sign(double v) => v > 0 ? 1 : (v < 0 ? -1 : 0);
+
+bool _nearlyZero(double v) => v.abs() <= 1.0 / 4096;
+
+/// `between(a, b, c)`: b lies between a and c, inclusive.
+bool _between(double a, double b, double c) =>
+    _f32(_f32(a - b) * _f32(c - b)) <= 0;
+
+/// Skia `winding_line`: (winding contribution, on-curve hits).
+(int, int) _windingLine(
+    double x0, double y0p, double x1, double y1p, double x, double y) {
+  final dy = _f32(y1p - y0p);
+  var dir = 1;
+  var lo = y0p, hi = y1p;
+  if (lo > hi) {
+    final t = lo;
+    lo = hi;
+    hi = t;
+    dir = -1;
+  }
+  if (y < lo || y > hi) return (0, 0);
+  // checkOnCurve
+  final onCurve = y0p == y1p
+      ? _between(x0, x, x1) && x != x1
+      : x == x0 && y == y0p;
+  if (onCurve) return (0, 1);
+  if (y == hi) return (0, 0);
+  // The engine's compiler fuses this into one multiply-add: the first
+  // product is not rounded before the subtraction. A float32 product fits
+  // exactly in a double, and only the sign and zero-ness of `cross` are used.
+  final cross = _f32(x1 - x0) * _f32(y - y0p) - _f32(dy * _f32(x - x0));
+  if (cross == 0) {
+    final hit = (x != x1 || y != y1p) ? 1 : 0;
+    return (0, hit);
+  }
+  if (_sign(cross) == dir) return (0, 0);
+  return (dir, 0);
+}
+
+/// Skia `tangent_line`: the segment's direction if (x, y) lies on it.
+(double, double)? _tangentLine(
+    double x0, double y0, double x1, double y1, double x, double y) {
+  if (!_between(y0, y, y1)) return null;
+  if (!_between(x0, x, x1)) return null;
+  final dx = _f32(x1 - x0);
+  final dy = _f32(y1 - y0);
+  final a = _f32(_f32(x - x0) * dy);
+  final b = _f32(dx * _f32(y - y0));
+  if ((a - b).abs() > 1.0 / 4096) return null;
+  return (dx, dy);
 }

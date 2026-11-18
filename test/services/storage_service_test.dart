@@ -48,6 +48,29 @@ void main() {
       });
     });
 
+    test('diversity ledger bits round-trip and drop corrupt entries', () async {
+      expect(StorageService.diversityLedgerBits, isEmpty);
+      await StorageService.saveDiversityLedgerBits([7, 0x2a5f3, 12]);
+      expect(StorageService.diversityLedgerBits, equals([7, 0x2a5f3, 12]));
+
+      final box = Hive.box<dynamic>(HiveChainPopPersistence.boxName);
+      await box.put('diversity_ledger_bits', [5, -1, 'x', 1 << 26, 9]);
+      expect(StorageService.diversityLedgerBits, equals([5, 9]));
+
+      await StorageService.clearProgress();
+      expect(StorageService.diversityLedgerBits, isEmpty,
+          reason: 'Reset my data must forget the diversity history too');
+    });
+
+    test('portal intro flag persists and resets with progress', () async {
+      final storage = StorageService.backing;
+      expect(storage.portalIntroSeen, isFalse);
+      await storage.setPortalIntroSeen();
+      expect(storage.portalIntroSeen, isTrue);
+      await StorageService.clearProgress();
+      expect(storage.portalIntroSeen, isFalse);
+    });
+
     test('selectedDifficulty defaults to easy', () {
       expect(StorageService.selectedDifficulty, DifficultyMode.easy);
     });
@@ -125,32 +148,28 @@ void main() {
       expect(StorageService.selectedDifficulty, DifficultyMode.hard);
     });
 
-    test('highestUnlockedLevel follows selected difficulty', () async {
-      await StorageService.setSelectedDifficulty(DifficultyMode.medium);
-      await StorageService.unlockLevel(DifficultyMode.medium, 12);
-      expect(StorageService.highestUnlockedLevel, 12);
-    });
-
-    test('unlockLevelLegacy uses selected difficulty', () async {
-      await StorageService.setSelectedDifficulty(DifficultyMode.easy);
-      await StorageService.unlockLevelLegacy(6);
-      expect(StorageService.highestUnlocked(DifficultyMode.easy), 6);
-      expect(StorageService.highestUnlocked(DifficultyMode.medium), 1);
-    });
-
     test('gameSettings defaults and saveGameSettings persists', () async {
       expect(StorageService.gameSettings.soundEnabled, isTrue);
       expect(StorageService.gameSettings.hapticsEnabled, isTrue);
       expect(StorageService.gameSettings.colorblindFriendly, isFalse);
+      expect(StorageService.gameSettings.ambientMotion, isTrue);
+      expect(StorageService.gameSettings.reducedMotion, isFalse);
+      expect(StorageService.rawReducedMotion, isNull);
+
       await StorageService.saveGameSettings(const GameSettings(
         soundEnabled: false,
         hapticsEnabled: false,
         colorblindFriendly: true,
+        ambientMotion: false,
+        reducedMotion: true,
       ));
       final s = StorageService.gameSettings;
       expect(s.soundEnabled, isFalse);
       expect(s.hapticsEnabled, isFalse);
       expect(s.colorblindFriendly, isTrue);
+      expect(s.ambientMotion, isFalse);
+      expect(s.reducedMotion, isTrue);
+      expect(StorageService.rawReducedMotion, isTrue);
     });
 
     test('tutorialCompleted defaults and clears with clearProgress', () async {

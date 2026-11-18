@@ -3,10 +3,35 @@ import '../../world_registry.dart';
 
 enum CampaignMechanic { phaseGate, multiRelay, portalPair }
 
+/// W2.7 rollout switch for portals. **Off until the Gen V2 sign-off.**
+///
+/// Portals have been budgeted from sector 6 for a long time, but until W2.7
+/// they never reached a player: the constructor decoded their cells wrongly
+/// and `enrichLevel` dropped them. This switch gates the fixed pipeline.
+///
+/// It is deliberately *not* implemented by zeroing the budget. With a portal
+/// budget the constructor shuffles its RNG to pick portal cells, and that
+/// shuffle still runs with the switch off — so every board downstream keeps
+/// the same random stream as Gen V1. Only the portals themselves are skipped.
+///
+/// A mutable static rather than a const so tests can exercise both sides.
+/// Worker isolates (the Daily) read the default, so flip the default — never
+/// set it at runtime in the app.
+abstract final class PortalRollout {
+  static bool enabled = false;
+}
+
 /// Clamp mechanics behind Phase feature flags until they are ready.
+///
+/// [CampaignMechanic.multiRelay] is **off**: the two-relay softlock predicate
+/// in `level_enrichment.dart` is unsound (`relay_softlock_property_test`'s
+/// two-relay case finds boards it passes that still dead-end), and Hard
+/// sector 7+ (L751+) plus every Daily (sector 8) budgeted two relays — so the
+/// unsound path was reachable in shipped boards. With the flag off
+/// `clampRelay` caps every board at one relay, whose safety argument is sound.
+/// Re-enable only once the two-relay predicate is fixed.
 const Set<CampaignMechanic> _kEnabledMechanics = {
   CampaignMechanic.phaseGate,
-  CampaignMechanic.multiRelay,
   CampaignMechanic.portalPair
 };
 

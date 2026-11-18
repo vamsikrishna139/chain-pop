@@ -17,6 +17,11 @@ abstract interface class ChainPopPersistence {
 
   Future<void> setHintRewardAdCoachSeen();
 
+  /// One-time portal explainer (W2.7) has been shown.
+  bool get portalIntroSeen;
+
+  Future<void> setPortalIntroSeen();
+
   // ── Difficulty preference ─────────────────────────────────────────────────
 
   DifficultyMode get selectedDifficulty;
@@ -26,6 +31,10 @@ abstract interface class ChainPopPersistence {
   // ── Preferences ───────────────────────────────────────────────────────────
 
   GameSettings get gameSettings;
+
+  /// Null when reduced motion has never been explicitly toggled by the player,
+  /// allowing first-run defaulting to the platform's accessibility settings.
+  bool? get rawReducedMotion;
 
   Future<void> saveGameSettings(GameSettings settings);
 
@@ -119,6 +128,30 @@ abstract interface class ChainPopPersistence {
   bool get reviewHasEverTappedRate;
 
   Future<void> setReviewHasEverTappedRate(bool value);
+
+  // ── Level generation ──────────────────────────────────────────────────────
+
+  /// Campaign [DiversityLedger] history (`DiversityLedger.serialize`), oldest
+  /// first, so novelty survives an app restart. Empty when never saved.
+  List<int> get diversityLedgerBits;
+
+  Future<void> saveDiversityLedgerBits(List<int> bits);
+
+  /// Gen V2 cut-over for [mode]: campaign levels at or above this id generate
+  /// with generator V2 (docs/GEN_V2_PLAN.md). Written once, on the first launch
+  /// of a V2 build, so boards a player already reached never change. Null when
+  /// never written.
+  int? genV2FromLevel(DifficultyMode mode);
+
+  Future<void> saveGenV2FromLevel(DifficultyMode mode, int levelId);
+
+  /// Last campaign level in [mode] that keeps Gen V2 after a build turned V2
+  /// off (`GEN_V2_ENABLED=false`, see `LevelManager.kGenV2Enabled`). Written
+  /// once, so the levels a player had reached keep their V2 board and every
+  /// later level goes back to V1. Null when V2 was never turned off.
+  int? genV2UntilLevel(DifficultyMode mode);
+
+  Future<void> saveGenV2UntilLevel(DifficultyMode mode, int levelId);
 
   // ── Achievements (schema v3) ──────────────────────────────────────────────
 

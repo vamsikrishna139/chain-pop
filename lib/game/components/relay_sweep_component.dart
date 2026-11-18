@@ -1,10 +1,13 @@
 import 'package:flame/components.dart';
 import 'package:flutter/material.dart';
 
+import '../chain_pop_game.dart';
+
 /// One-shot horizontal sweep across the row a relay just rotated. Makes the
 /// relay's row-rotation read as a deliberate event instead of an instant snap.
 /// Board-local (added to the board), self-removing after [_duration].
-class RelaySweepComponent extends PositionComponent {
+class RelaySweepComponent extends PositionComponent
+    with HasGameReference<ChainPopGame> {
   final int gridWidth;
   final double cellSize;
   final Color color;
@@ -45,14 +48,17 @@ class RelaySweepComponent extends PositionComponent {
       );
     }
 
-    // Bright blurred bar travelling left→right across the row.
-    final sweepX = p * (size.x + cellSize) - cellSize * 0.5;
-    final bar = Rect.fromLTWH(sweepX, 0, cellSize * 0.9, size.y);
-    canvas.drawRect(
-      bar,
-      Paint()
-        ..color = color.withValues(alpha: (1.0 - p) * 0.5)
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, cellSize * 0.35),
-    );
+    // Bright blurred bar travelling left→right across the row (omitted under
+    // reduced motion so rapid lateral motion is avoided).
+    if (!isMounted || !game.reducedMotion) {
+      final sweepX = p * (size.x + cellSize) - cellSize * 0.5;
+      final bar = Rect.fromLTWH(sweepX, 0, cellSize * 0.9, size.y);
+      canvas.drawRect(
+        bar,
+        Paint()
+          ..color = color.withValues(alpha: (1.0 - p) * 0.5)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, cellSize * 0.35),
+      );
+    }
   }
 }
