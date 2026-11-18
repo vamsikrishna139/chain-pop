@@ -177,7 +177,7 @@ void main() {
     print('  taps-to-win      p50 ${_pct(taps, .5)}  min ${taps.reduce(min)}');
     print('  opening          p50 ${_pct(opening, .5)}'
         '  range ${opening.reduce(min)}-${opening.reduce(max)}');
-    // M1 depth metrics (GEN_V2_MASTER_PLAN §4): reported, not yet gated.
+    // M1 depth metrics (docs/GEN_V2_PLAN.md §5): reported, not yet gated.
     final coreFrac = [for (final r in rows) r.core.coreTapFraction];
     final tapsPerNode = [
       for (final r in rows) r.tapsToWin / max(1, r.nodes)
