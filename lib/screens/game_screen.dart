@@ -3,6 +3,7 @@ library;
 import 'dart:async';
 
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -555,9 +556,11 @@ class GameScreenState extends State<GameScreen>
         ? LevelManager.cachedLevel(widget.level, mode: widget.difficulty)
         : null;
     if (prefetched != null) {
+      _logLevelLoad('cached', 0);
       _installResolvedLevel(prefetched);
       _schedulePrefetchOfNextLevel();
     } else if (_needsDeferredCampaignGeneration()) {
+      final loadWatch = Stopwatch()..start();
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         await Future<void>.delayed(Duration.zero);
@@ -574,6 +577,7 @@ class GameScreenState extends State<GameScreen>
                 mode: widget.difficulty,
               );
           if (!mounted) return;
+          _logLevelLoad('built', loadWatch.elapsedMilliseconds);
           _installResolvedLevel(level);
           if (widget.campaignLevelBuilder == null) {
             _schedulePrefetchOfNextLevel();
@@ -615,6 +619,15 @@ class GameScreenState extends State<GameScreen>
         _pushFeedbackToGame();
       }
     }
+  }
+
+  /// How long "Building level…" was on screen, for device checks in debug
+  /// and profile builds (`adb logcat | grep LevelLoad`). Compiled out of
+  /// release builds.
+  void _logLevelLoad(String how, int ms) {
+    if (kReleaseMode) return;
+    debugPrint('LevelLoad: ${widget.difficulty.name} L${widget.level} '
+        '$how in $ms ms');
   }
 
   Timer? _prefetchTimer;
