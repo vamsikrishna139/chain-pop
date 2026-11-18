@@ -411,20 +411,23 @@ final class GameFlowController {
     }
   }
 
-  /// Final tutorial card → straight into the Easy campaign at its frontier.
+  /// Final tutorial card → straight into the campaign of the player's
+  /// selected mode, at its frontier.
+  ///
+  /// A new player's selected mode is Easy (the storage default), so this is
+  /// the Easy campaign for them. A Hard player replaying the tutorial goes
+  /// back to Hard: this used to switch the selected mode to Easy silently.
   void startCampaignFromTutorial() {
     if (!_host.mounted || _host.goingNext) return;
     _host.goingNext = true;
     cancelWinAdvanceTimers();
-    final frontier =
-        StorageLocator.instance.highestUnlocked(DifficultyMode.easy);
-    unawaited(
-        StorageLocator.instance.setSelectedDifficulty(DifficultyMode.easy));
+    final mode = StorageLocator.instance.selectedDifficulty;
+    final frontier = StorageLocator.instance.highestUnlocked(mode);
     Navigator.of(_host.context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => GameScreen(
           level: frontier,
-          difficulty: DifficultyMode.easy,
+          difficulty: mode,
           adService: _host.adServiceOverride,
           audioHandleFactory: _host.audioHandleFactory,
           progressStore: _host.progressStoreOverride,

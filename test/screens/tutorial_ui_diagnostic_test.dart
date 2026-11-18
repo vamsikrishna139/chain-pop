@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:chain_pop/game/levels/tutorial_levels.dart';
 import 'package:chain_pop/game/levels/generation/difficulty_mode.dart';
+import 'package:chain_pop/screens/game/widgets/win_panel.dart';
 import 'package:chain_pop/screens/game_screen.dart';
 import 'package:chain_pop/services/ads/no_op_ad_service.dart';
 import 'package:chain_pop/services/game_audio.dart';
+import 'package:chain_pop/services/storage/storage_locator.dart';
 import 'package:chain_pop/services/storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,4 +74,45 @@ void main() {
       });
     }
   }
+
+  testWidgets('START CAMPAIGN keeps a Hard player in Hard', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.runAsync(() =>
+        StorageLocator.instance.setSelectedDifficulty(DifficultyMode.hard));
+    addTearDown(() => tester.runAsync(() =>
+        StorageLocator.instance.setSelectedDifficulty(DifficultyMode.easy)));
+
+    final last = tutorialLevels.length - 1;
+    await tester.pumpWidget(buildStep(last));
+    await tester.pump(const Duration(milliseconds: 400));
+    final state = tester.state<GameScreenState>(find.byType(GameScreen));
+    await tester.runAsync(() => state.debugSimulateWinForTest());
+    await tester.pump(const Duration(seconds: 4));
+
+    // The panel animates in; invoke the action the button is wired to
+    // rather than depend on hit-testing a mid-animation layout.
+    final panel = tester.widget<WinPanel>(find.byType(WinPanel));
+    expect(panel.finalActionLabel, 'START CAMPAIGN');
+    panel.onFinalAction!();
+    // Route transition plus the first frames of the campaign level (which
+    // may show "Building level…" while its board generates).
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    final screens = tester
+        .widgetList<GameScreen>(find.byType(GameScreen))
+        .where((g) => !g.isTutorial)
+        .toList();
+    expect(screens, hasLength(1));
+    expect(screens.single.difficulty, DifficultyMode.hard);
+    expect(StorageLocator.instance.selectedDifficulty, DifficultyMode.hard,
+        reason: 'the tutorial must not switch the selected mode');
+    // Let the campaign board's async build settle before teardown.
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1500)));
+    await tester.pump(const Duration(milliseconds: 100));
+  });
 }
