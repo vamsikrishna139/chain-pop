@@ -70,6 +70,13 @@ The served-level cache is keyed by version, so V1 and V2 boards never mix.
   (`Isolate.run`); the cache lookup, the V1/V2 decision, fallback reporting
   and the cache write stay on the main isolate. V1 stays synchronous (shared
   ledger). If an isolate cannot be spawned the board builds in place.
+* **Nothing on the V2 path may touch `dart:ui` engine objects** (`Path`,
+  `Picture`, `Paragraph`, …): they throw off the root isolate, and the
+  in-place fallback above hides that by quietly building on the UI thread.
+  Until 2026-11-18 the pentagon mask did exactly that (`Path.contains`); it
+  now uses `polygonContainsPoint`, a float32-exact port of
+  `SkPath::contains`. `layout_mask_isolate_test.dart` sweeps V2 on a worker
+  isolate.
 * `prefetchLevel` builds the next V2 level 800 ms after a level opens, so
   **Next** opens on the first frame. Concurrent requests for one level share
   one build. V1 is never prefetched.
@@ -158,7 +165,55 @@ above already makes reversible within one release cycle.
 
 ## 7. Device evidence
 
-See the PR description for the run log: cheap-phone emulator (2 vCPU, 2 GB,
-720×1600, CPU demoted to the host's efficiency cores), Pixel 8a, the upgrade
-v9 → v10 path, fresh install, reset/delete, December and November Dailies,
-offline footer and the main-menu back button.
+2026-11-18, profile builds of `new_enhances` at 96b36ae (sample ad units).
+"First" = the first board built after a cold start.
+
+**Pixel 8a** (on-device generation, worker isolate, same call as the app):
+
+| Run | p50 | p95 | max |
+|---|---|---|---|
+| Hard V2 L1–150 | 140 ms | 305 ms | 553 ms |
+| Daily V2, 60 dates from 2026-12-01 | 201 ms | 289 ms | 532 ms |
+
+0 worker-isolate failures. In the app, the first Hard level after a cold
+start opened in 120–331 ms.
+
+**Cheap-phone emulator** (2 vCPU, 2 GB, 720×1600; the host was at load
+40–110 from other work, so these are pessimistic and noisy): Hard V2
+benchmark p50 135 / p95 307 / max 1,367 ms. Cold opens of L202–210 took
+119–2,288 ms. The first build after a cold start took 2.9–13.7 s on that
+host and has not been reproduced on a real device; **re-measure on a real
+budget phone before widening the rollout.** One ANR, "stuck fence / GPU
+hang", came from the emulator's host-GPU passthrough under that load, not
+from app code.
+
+**Checks passed**
+
+* Hard L1–20 tour (autoplay) on the emulator: every board fits at 720 px
+  wide with no toolbar or banner overlap. Every **Next** opened from the
+  prefetch cache (`cached in 0 ms`, 36 of 36).
+* The same V2 board for a level on the emulator and the Pixel, and after a
+  restart.
+* Upgrade v9 → v10 keeps progress and stars. Levels the player could already
+  reach stay V1; V2 starts at the frontier.
+* Fresh install: Hard L1 is a 7-wide V2 board.
+* Reset Game Data and Delete my data: Hard L1 is V2 without a restart.
+* Rollback build (`GEN_V2_ENABLED=false`): played V2 levels keep their board.
+  After a reset L1 is V1. A later V2-enabled build keeps that player on V1
+  until the next reset, which brings V2 back.
+* Daily: with `GEN_V2_DAILY_FROM=20261115` Nov 18 is a 7×9 V2 board; the
+  default build serves the V1 board for the same date. The calendar renders.
+  Ticks and stars after completing a V2 Daily were checked by tests only.
+* Offline: no banner and no reserved gap; the toolbar sits at the bottom.
+* Main-menu Back: "Press back again to exit", then exit within 2 s.
+
+**Found while testing**
+
+* Fixed: the pentagon mask threw on the worker isolate, so those levels
+  silently built on the UI thread (§4).
+* **Needs a product call:** V1 boards (Easy, Medium, and Hard below the
+  cut-over) can change on replay after an app restart. This comes from
+  W2.4 in this PR (5454e59), which persists the diversity ledger. Before
+  that, the ledger restarted empty, so a level replayed first after launch
+  got the same board every time. Stars are kept per level id, so no progress
+  is lost; only the board looks different. V2 boards are not affected.
