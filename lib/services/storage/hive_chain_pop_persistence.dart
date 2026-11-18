@@ -56,6 +56,7 @@ final class HiveChainPopPersistence implements ChainPopStorage {
 
   static const String _diversityLedgerKey = 'diversity_ledger_bits';
   static const String _genV2FromPrefix = 'gen_v2_from_';
+  static const String _genV2UntilPrefix = 'gen_v2_until_';
 
   static const String _portalIntroSeenKey = 'portal_intro_seen';
 
@@ -532,6 +533,17 @@ final class HiveChainPopPersistence implements ChainPopStorage {
   @override
   Future<void> saveGenV2FromLevel(DifficultyMode mode, int levelId) async {
     await _box.put('$_genV2FromPrefix${mode.key}', levelId);
+  }
+
+  @override
+  int? genV2UntilLevel(DifficultyMode mode) {
+    final raw = _box.get('$_genV2UntilPrefix${mode.key}');
+    return raw is int && raw >= 0 ? raw : null;
+  }
+
+  @override
+  Future<void> saveGenV2UntilLevel(DifficultyMode mode, int levelId) async {
+    await _box.put('$_genV2UntilPrefix${mode.key}', levelId);
   }
 
   // ── Achievements ──────────────────────────────────────────────────────────

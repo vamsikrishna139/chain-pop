@@ -79,6 +79,23 @@ class LevelManager {
   /// level a player had already reached keeps the board they saw.
   static final Map<DifficultyMode, int> genV2FromLevel = {};
 
+  /// Rollback switch for Gen V2. Release builds pass no define, so V2 is on.
+  ///
+  /// A fix-forward build that must stop serving V2 passes
+  /// `--dart-define=GEN_V2_ENABLED=false`. That build does **not** take V2
+  /// away from boards a player may already have seen — swapping a board under
+  /// a player is the thing the cut-over exists to prevent. Instead, per mode,
+  /// it freezes V2 at the player's frontier ([resolveGenV2UntilLevel]) and
+  /// serves V1 beyond it, and it turns the V2 Daily off. A player who never
+  /// reached a V2 level ends up all-V1. See docs/GEN_V2_PLAN.md §Rollback.
+  static const bool kGenV2Enabled =
+      bool.fromEnvironment('GEN_V2_ENABLED', defaultValue: true);
+
+  /// Last level per mode that keeps V2 once [kGenV2Enabled] was turned off.
+  /// No entry = no upper bound. Set at startup from
+  /// [resolveGenV2UntilLevel] and persisted.
+  static final Map<DifficultyMode, int> genV2UntilLevel = {};
+
   /// First Daily date key (yyyymmdd) generated with V2. Earlier dates keep
   /// their V1 board, so a past Daily a player has stars for never changes.
   /// Null = Daily stays on V1.
@@ -123,10 +140,32 @@ class LevelManager {
     return highestUnlocked + 1;
   }
 
+  /// Upper bound of the V2 range for a mode, given what storage knows.
+  ///
+  /// * [stored] wins whenever present: once frozen, a later build that turns
+  ///   V2 back on does not flip the V1 levels the player played meanwhile.
+  /// * With V2 [enabled] and nothing stored there is no bound.
+  /// * With V2 off, V2 stays on every level up to the player's frontier
+  ///   ([highestUnlocked]) that was at or above [from]; a player whose
+  ///   frontier is still below [from] gets `from - 1`, an empty range.
+  static int? resolveGenV2UntilLevel({
+    required bool enabled,
+    required int? stored,
+    required int from,
+    required int highestUnlocked,
+  }) {
+    if (stored != null && stored >= 0) return stored;
+    if (enabled) return null;
+    return from - 1 > highestUnlocked ? from - 1 : highestUnlocked;
+  }
+
   /// Generator version for campaign level [levelId] in [mode].
   static int generationVersionFor(int levelId, DifficultyMode? mode) {
-    final from = genV2FromLevel[mode ?? DifficultyMode.easy];
-    return (from != null && levelId >= from) ? 2 : 1;
+    final m = mode ?? DifficultyMode.easy;
+    final from = genV2FromLevel[m];
+    if (from == null || levelId < from) return 1;
+    final until = genV2UntilLevel[m];
+    return (until == null || levelId <= until) ? 2 : 1;
   }
 
   /// Generator version for the Daily on [dayKey].

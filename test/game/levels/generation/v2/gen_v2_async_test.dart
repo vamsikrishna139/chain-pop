@@ -27,6 +27,7 @@ LevelData _v2Reference(int id) => LevelGenerator.neutral()
 void main() {
   tearDown(() {
     LevelManager.genV2FromLevel.clear();
+    LevelManager.genV2UntilLevel.clear();
     LevelManager.clearServedLevels();
     LevelManager.onGenerationFallback = null;
   });
@@ -141,6 +142,9 @@ void main() {
       for (final mode in DifficultyMode.values) {
         LevelManager.genV2FromLevel[mode] = 51;
         await StorageService.saveGenV2FromLevel(mode, 51);
+        // A stale rollback bound must not survive the wipe either.
+        LevelManager.genV2UntilLevel[mode] = 60;
+        await StorageService.saveGenV2UntilLevel(mode, 60);
       }
       expect(LevelManager.generationVersionFor(1, DifficultyMode.hard), 1);
       final v2L1 = boardFingerprint(_v2Reference(1));
@@ -153,6 +157,10 @@ void main() {
         expect(LevelManager.genV2FromLevel[mode], 1, reason: mode.name);
         expect(StorageLocator.instance.genV2FromLevel(mode), 1,
             reason: '${mode.name} stored cut-over');
+        expect(LevelManager.genV2UntilLevel[mode], isNull,
+            reason: '${mode.name} rollback bound');
+        expect(StorageLocator.instance.genV2UntilLevel(mode), isNull,
+            reason: '${mode.name} stored rollback bound');
       }
       final after = LevelManager.getLevel(1, mode: DifficultyMode.hard);
       expect(boardFingerprint(after), v2L1,

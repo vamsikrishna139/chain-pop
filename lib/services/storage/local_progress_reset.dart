@@ -20,6 +20,14 @@ Future<void> resetLocalProgress() async {
   for (final mode in DifficultyMode.values) {
     LevelManager.genV2FromLevel[mode] = 1;
     await storage.saveGenV2FromLevel(mode, 1);
+    // `clearProgress` erased any stored rollback bound too. With V2 on that
+    // leaves no bound; with V2 rolled back, a wiped player is all-V1.
+    if (LevelManager.kGenV2Enabled) {
+      LevelManager.genV2UntilLevel.remove(mode);
+    } else {
+      LevelManager.genV2UntilLevel[mode] = 0;
+      await storage.saveGenV2UntilLevel(mode, 0);
+    }
   }
   LevelManager.generator.diversityLedger.clear();
   LevelManager.clearServedLevels();

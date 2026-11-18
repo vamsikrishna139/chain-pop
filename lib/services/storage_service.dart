@@ -172,6 +172,12 @@ class StorageService {
   static Future<void> saveGenV2FromLevel(DifficultyMode mode, int levelId) =>
       StorageLocator.instance.saveGenV2FromLevel(mode, levelId);
 
+  static int? genV2UntilLevel(DifficultyMode mode) =>
+      StorageLocator.instance.genV2UntilLevel(mode);
+
+  static Future<void> saveGenV2UntilLevel(DifficultyMode mode, int levelId) =>
+      StorageLocator.instance.saveGenV2UntilLevel(mode, levelId);
+
   static Future<void> setReviewHasEverTappedRate(bool value) =>
       StorageLocator.instance.setReviewHasEverTappedRate(value);
 

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   tearDown(() {
     LevelManager.genV2FromLevel.clear();
+    LevelManager.genV2UntilLevel.clear();
     LevelManager.genV2DailyFromKey = LevelManager.kGenV2DailyFromKeyDefault;
     LevelManager.clearServedLevels();
   });
@@ -36,6 +37,55 @@ void main() {
           LevelManager.resolveGenV2FromLevel(
               stored: 12, highestUnlocked: 90, hasProgress: true),
           12);
+    });
+  });
+
+  group('rollback switch (GEN_V2_ENABLED=false)', () {
+    test('release builds ship with V2 on', () {
+      expect(LevelManager.kGenV2Enabled, isTrue);
+    });
+
+    test('V2 on and nothing stored: no upper bound', () {
+      expect(
+          LevelManager.resolveGenV2UntilLevel(
+              enabled: true, stored: null, from: 1, highestUnlocked: 30),
+          isNull);
+    });
+
+    test('V2 off freezes V2 at the frontier the player reached', () {
+      // Fresh-install V2 player at L30: L1-30 keep V2, L31+ go back to V1.
+      expect(
+          LevelManager.resolveGenV2UntilLevel(
+              enabled: false, stored: null, from: 1, highestUnlocked: 30),
+          30);
+      // Upgraded player (V2 from L41) who has not reached L41 yet: no V2.
+      expect(
+          LevelManager.resolveGenV2UntilLevel(
+              enabled: false, stored: null, from: 41, highestUnlocked: 40),
+          40);
+    });
+
+    test('a stored bound wins, even after V2 is turned back on', () {
+      expect(
+          LevelManager.resolveGenV2UntilLevel(
+              enabled: true, stored: 30, from: 1, highestUnlocked: 80),
+          30);
+      expect(
+          LevelManager.resolveGenV2UntilLevel(
+              enabled: false, stored: 0, from: 1, highestUnlocked: 80),
+          0);
+    });
+
+    test('generationVersionFor honours the bound', () {
+      LevelManager.genV2FromLevel[DifficultyMode.hard] = 10;
+      LevelManager.genV2UntilLevel[DifficultyMode.hard] = 20;
+      expect(LevelManager.generationVersionFor(9, DifficultyMode.hard), 1);
+      expect(LevelManager.generationVersionFor(10, DifficultyMode.hard), 2);
+      expect(LevelManager.generationVersionFor(20, DifficultyMode.hard), 2);
+      expect(LevelManager.generationVersionFor(21, DifficultyMode.hard), 1);
+      // An empty range (until < from) is V1 everywhere.
+      LevelManager.genV2UntilLevel[DifficultyMode.hard] = 9;
+      expect(LevelManager.generationVersionFor(10, DifficultyMode.hard), 1);
     });
   });
 

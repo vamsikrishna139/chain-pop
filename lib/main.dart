@@ -84,7 +84,22 @@ Future<void> bootstrapChainPop() async {
     if (stored == null) {
       unawaited(StorageService.saveGenV2FromLevel(mode, from));
     }
+    // Rollback switch (LevelManager.kGenV2Enabled): a no-op in normal builds.
+    final storedUntil = StorageService.genV2UntilLevel(mode);
+    final until = LevelManager.resolveGenV2UntilLevel(
+      enabled: LevelManager.kGenV2Enabled,
+      stored: storedUntil,
+      from: from,
+      highestUnlocked: highest,
+    );
+    if (until != null) {
+      LevelManager.genV2UntilLevel[mode] = until;
+      if (storedUntil == null) {
+        unawaited(StorageService.saveGenV2UntilLevel(mode, until));
+      }
+    }
   }
+  if (!LevelManager.kGenV2Enabled) LevelManager.genV2DailyFromKey = null;
   // A fallback board is playable but means generation failed — make it loud
   // in Crashlytics and countable in analytics instead of silent (W2.5).
   LevelManager.onGenerationFallback = (kind, id, reason) {

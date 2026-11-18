@@ -77,8 +77,7 @@ LevelDirective directiveFor(
   // P3 (Gen V2 levels only, so already-played levels keep their goal): every
   // directive appears once in each block of five levels, in a per-block
   // seeded order, so no single goal (SWIFT especially) dominates.
-  final v2From = LevelManager.genV2FromLevel[mode];
-  if (!isBoss && v2From != null && levelId >= v2From) {
+  if (!isBoss && LevelManager.generationVersionFor(levelId, mode) == 2) {
     final block = (levelId - 1) ~/ 5;
     final order = [...LevelDirective.values]
       ..shuffle(math.Random(block * 2654435761 + 17));

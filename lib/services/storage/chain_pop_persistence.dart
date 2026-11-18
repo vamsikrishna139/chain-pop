@@ -145,6 +145,14 @@ abstract interface class ChainPopPersistence {
 
   Future<void> saveGenV2FromLevel(DifficultyMode mode, int levelId);
 
+  /// Last campaign level in [mode] that keeps Gen V2 after a build turned V2
+  /// off (`GEN_V2_ENABLED=false`, see `LevelManager.kGenV2Enabled`). Written
+  /// once, so the levels a player had reached keep their V2 board and every
+  /// later level goes back to V1. Null when V2 was never turned off.
+  int? genV2UntilLevel(DifficultyMode mode);
+
+  Future<void> saveGenV2UntilLevel(DifficultyMode mode, int levelId);
+
   // ── Achievements (schema v3) ──────────────────────────────────────────────
 
   /// Reads one aggregate counter. Missing keys read as 0.
