@@ -154,6 +154,36 @@ int rayInterceptCount(
 }
 
 /// Count of other nodes sharing the same row or column as `(x, y)`.
+/// [rayInterceptCount] over a set of placed cell keys.
+int _rayInterceptCountKeys(
+  int x,
+  int y,
+  Direction dir,
+  Set<int> placed,
+  int gridWidth,
+  int gridHeight,
+) {
+  var count = 0;
+  while (true) {
+    switch (dir) {
+      case Direction.up:
+        y--;
+        break;
+      case Direction.down:
+        y++;
+        break;
+      case Direction.left:
+        x--;
+        break;
+      case Direction.right:
+        x++;
+        break;
+    }
+    if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return count;
+    if (placed.contains(gridCellKey(x, y))) count++;
+  }
+}
+
 int crossBlockCountAt(int x, int y, Iterable<Point<int>> others) {
   var count = 0;
   for (final o in others) {
@@ -249,13 +279,17 @@ class CandidateScorer {
         weights.mrvBonus * _mrvBonus(c) -
         isolationW * _isolationPenalty(c, state);
     if (occ != null) {
-      final placedPoints = _placedPoints(state);
       if (occ >= 0.35 && occ <= 0.65) {
         if (c.isBlockingRay) total += kBlockingDirectionBonus;
-        total += rayInterceptCount(
-              c.cell,
+        // Same count as [rayInterceptCount], read straight off the placed key
+        // set. That function rebuilds the set from a list of points on every
+        // call, and this runs per candidate per placement: copying the placed
+        // set here was most of Gen V2's generation time.
+        total += _rayInterceptCountKeys(
+              c.cell.x,
+              c.cell.y,
               c.direction,
-              placedPoints,
+              state.placed,
               state.gridWidth,
               state.gridHeight,
             ) *
@@ -306,7 +340,9 @@ class CandidateScorer {
   /// In retrograde terms: how many "fresh" cells the placement unlocks for
   /// the next step.
   double _unlockFanout(Candidate c, ConstructionState state) {
-    final placedAfter = <int>{...state.placed, c.cellKey};
+    // "placed plus c" without copying the placed set per candidate.
+    final placed = state.placed;
+    final self = c.cellKey;
     var count = 0;
     final x = c.cell.x;
     final y = c.cell.y;
@@ -318,10 +354,10 @@ class CandidateScorer {
       }
       final nkey = gridCellKey(nx, ny);
       if (!state.silhouette.contains(nkey)) continue;
-      if (placedAfter.contains(nkey)) continue;
+      if (nkey == self || placed.contains(nkey)) continue;
       if (state.frontier.contains(nkey)) continue;
       for (final d in Direction.values) {
-        if (state.sightlines.hasClearRay(nx, ny, d, placedAfter)) {
+        if (state.sightlines.hasClearRayWithExtra(nx, ny, d, placed, self)) {
           count++;
           break;
         }
@@ -334,13 +370,6 @@ class CandidateScorer {
   /// Returns 0 if all 4 directions are clear, up to 3 if only one is.
   double _mrvBonus(Candidate c) {
     return (4 - c.clearDirectionCount).toDouble();
-  }
-
-  List<Point<int>> _placedPoints(ConstructionState state) {
-    return [
-      for (final key in state.placed)
-        Point<int>(key & 0xffff, (key >> 16) & 0xffff),
-    ];
   }
 
   /// Cheap "small island" proxy: count empty silhouette cells in the

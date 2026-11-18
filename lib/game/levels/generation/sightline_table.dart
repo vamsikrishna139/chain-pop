@@ -116,6 +116,17 @@ class SightlineTable {
     return true;
   }
 
+  /// [hasClearRay] against `occupied ∪ {extra}`, without building that set.
+  bool hasClearRayWithExtra(
+      int x, int y, Direction dir, Set<int> occupied, int extra) {
+    final ray = _rays[(y * gridWidth + x) * 4 + dir.index];
+    if (identical(ray, _loopRay)) return false;
+    for (final c in ray) {
+      if (c == extra || occupied.contains(c)) return false;
+    }
+    return true;
+  }
+
   /// Number of cardinal directions whose ray from `(x,y)` is currently clear.
   int clearDirectionCount(int x, int y, Set<int> occupied) {
     var count = 0;

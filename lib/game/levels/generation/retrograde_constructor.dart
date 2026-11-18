@@ -703,6 +703,9 @@ class RetrogradeConstructor {
 
     var flips = 0;
     var offered = 0;
+    // Only directions change below, never positions, so one map serves the
+    // whole pass.
+    final keyToId = _keyToId(result);
 
     for (var i = crunchStart; i <= crunchEnd; i++) {
       final node = result[i];
@@ -718,6 +721,7 @@ class RetrogradeConstructor {
           dir,
           result,
           selfId: i,
+          keyToId: keyToId,
         );
         if (targetId == null || targetId >= i) continue;
         if (!_directionClearAtRemovalStep(i, dir, result)) continue;
@@ -862,17 +866,22 @@ class RetrogradeConstructor {
     return tied[random.nextInt(tied.length)];
   }
 
+  /// Cell key → index in [order]. Callers that probe many rays on one order
+  /// build this once: rebuilding it per ray made the opening pass O(n³).
+  static Map<int, int> _keyToId(List<RetrogradePlacement> order) => <int, int>{
+        for (var i = 0; i < order.length; i++)
+          gridCellKey(order[i].position.x, order[i].position.y): i,
+      };
+
   /// First node hit when stepping from [from] along [dir]; null if ray exits.
   int? _firstNodeIdOnRay(
     Point<int> from,
     Direction dir,
     List<RetrogradePlacement> order, {
     required int selfId,
+    Map<int, int>? keyToId,
   }) {
-    final keyToId = <int, int>{
-      for (var i = 0; i < order.length; i++)
-        gridCellKey(order[i].position.x, order[i].position.y): i,
-    };
+    keyToId ??= _keyToId(order);
     var x = from.x;
     var y = from.y;
     while (true) {
@@ -947,25 +956,27 @@ class RetrogradeConstructor {
     required int minOpening,
   }) {
     var current = placements.toList();
-    for (var attempt = 0;
-        attempt < 20;
-        attempt++) {
-      final opening = _openingNow(current);
+    for (var attempt = 0; attempt < 20; attempt++) {
+      // [_openingNow] and the key map depend only on `current`, so both are
+      // recomputed when `current` changes rather than on every probe.
+      var opening = _openingNow(current);
       if (opening <= maxOpening && opening >= minOpening) break;
 
       final freeIndices = _rayFreeIndices(current);
       freeIndices.sort((a, b) => b.compareTo(a));
 
+      var keyToId = _keyToId(current);
       var flippedAny = false;
       for (final i in freeIndices) {
-        if (_openingNow(current) <= maxOpening) break;
-        if (_openingNow(current) <= minOpening) break;
+        if (opening <= maxOpening) break;
+        if (opening <= minOpening) break;
 
         final node = current[i];
         final dirs = Direction.values.toList()..shuffle(random);
         for (final dir in dirs) {
           if (dir == node.direction) continue;
-          final j = _firstNodeIdOnRay(node.position, dir, current, selfId: i);
+          final j = _firstNodeIdOnRay(node.position, dir, current,
+              selfId: i, keyToId: keyToId);
           if (j != null &&
               j < i &&
               _directionClearAtRemovalStep(i, dir, current)) {
@@ -976,6 +987,8 @@ class RetrogradeConstructor {
             );
             if (_validatesRemovalOrderIdSequence(next)) {
               current = next;
+              opening = _openingNow(current);
+              keyToId = _keyToId(current);
               flippedAny = true;
               break;
             }
@@ -1007,11 +1020,13 @@ class RetrogradeConstructor {
   ) {
     var tries = 0;
     final free = _rayFreeIndices(current)..sort((a, b) => a.compareTo(b));
+    final keyToId = _keyToId(current);
     for (final i in free) {
       final node = current[i];
       for (final dir in Direction.values) {
         if (dir == node.direction) continue;
-        final j = _firstNodeIdOnRay(node.position, dir, current, selfId: i);
+        final j = _firstNodeIdOnRay(node.position, dir, current,
+            selfId: i, keyToId: keyToId);
         if (j == null || j <= i) continue;
         if (++tries > 10 || ++_reinsertTries > 40) return null;
         final next = current.toList();
@@ -1059,12 +1074,14 @@ class RetrogradeConstructor {
 
   List<int> _rayFreeIndices(List<RetrogradePlacement> current) {
     final freeIndices = <int>[];
+    final keyToId = _keyToId(current);
     for (var i = 0; i < current.length; i++) {
       final target = _firstNodeIdOnRay(
         current[i].position,
         current[i].direction,
         current,
         selfId: i,
+        keyToId: keyToId,
       );
       if (target == null) freeIndices.add(i);
     }
