@@ -393,7 +393,16 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
   void _setupBoard({bool preserveAnimatingNodes = false}) {
     final orphans = <(NodeComponent, Vector2)>[];
+    // A rebuild (inset refit, resize) replaces every NodeComponent. Carry a
+    // running hint pulse over, or a hint shown just before the rebuild is
+    // silently lost. That happens after a rewarded ad: the hint fires as the
+    // ad closes, then the returning layout refits the board.
+    final highlights = <int, double>{};
     if (_boardLaidOut) {
+      for (final c in board.children.whereType<NodeComponent>()) {
+        final elapsed = c.highlightElapsed;
+        if (elapsed != null) highlights[c.data.id] = elapsed;
+      }
       if (preserveAnimatingNodes) {
         for (final c in board.children.whereType<NodeComponent>()) {
           if (c.isPopping || c.isJamming) {
@@ -503,7 +512,10 @@ class ChainPopGame extends FlameGame with ScaleDetector, ScrollDetector {
 
     for (final nodeData in activeNodes) {
       if (skipActiveIds.contains(nodeData.id)) continue;
-      board.add(NodeComponent(data: nodeData, cellSize: cellSize));
+      final comp = NodeComponent(data: nodeData, cellSize: cellSize);
+      final elapsed = highlights[nodeData.id];
+      if (elapsed != null) comp.restoreHighlight(elapsed);
+      board.add(comp);
     }
 
     if (tutorialCoaching) {

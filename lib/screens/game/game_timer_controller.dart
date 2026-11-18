@@ -59,7 +59,12 @@ final class GameTimerController {
         }
         final showed = _host.engine.showHint();
         if (!showed) return;
-        if (_host.gateHintsWithAds) _host.hintAdPolicy.recordFreeHint();
+        if (_host.gateHintsWithAds) {
+          _host.hintAdPolicy.recordFreeHint();
+          // The auto-hint can spend the last free hint: refresh the toolbar
+          // so the HINT button shows its AD badge before the next tap.
+          _host.markDirty(() {});
+        }
         // Keep coaching until the player acts (a tap reschedules via
         // _handleNodeRemoved; a foul reschedules via _handleFoul).
         if (isEarlyTutorial) resetGhostHintTimer();

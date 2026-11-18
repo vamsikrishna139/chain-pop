@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../theme/app_colors.dart';
+import 'ad_badge.dart';
 
 class UndoRestartButton extends StatefulWidget {
   final Color accent;
   final bool canUndo;
+  final bool showAdBadge;
   final VoidCallback onUndo;
   final VoidCallback onRestart;
 
@@ -13,6 +15,7 @@ class UndoRestartButton extends StatefulWidget {
     super.key,
     required this.accent,
     required this.canUndo,
+    this.showAdBadge = false,
     required this.onUndo,
     required this.onRestart,
   });
@@ -128,6 +131,10 @@ class _UndoRestartButtonState extends State<UndoRestartButton>
                         color: hasUndo ? Colors.white70 : Colors.white24,
                       ),
                     ),
+                    if (widget.showAdBadge && hasUndo && v <= 0.2) ...[
+                      const SizedBox(width: 6),
+                      const AdBadge(color: Colors.white70),
+                    ],
                   ],
                 ),
               ],

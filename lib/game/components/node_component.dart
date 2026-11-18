@@ -221,6 +221,16 @@ class NodeComponent extends PositionComponent
     _highlightTimer = 0.0;
   }
 
+  /// Seconds of hint pulse already played, or null when not highlighted.
+  /// Lets [ChainPopGame] carry a running hint across a board rebuild.
+  double? get highlightElapsed => isHighlighted ? _highlightTimer : null;
+
+  /// Resumes a hint pulse [elapsed] seconds in (see [highlightElapsed]).
+  void restoreHighlight(double elapsed) {
+    isHighlighted = true;
+    _highlightTimer = elapsed;
+  }
+
   /// Brief scale dip when a 4-adjacent neighbor is extracted — makes chains
   /// feel physically connected.
   void nudge() {
