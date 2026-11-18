@@ -1307,9 +1307,14 @@ class GameScreenState extends State<GameScreen>
                                 measureKey: _footerHudKey,
                                 hasBanner: !isPremium && bannerSlots > 0,
                                 accent: accent,
-                                // Premium users get hints without an ad, so no badge.
-                                showHintAdBadge:
-                                    _hardOrDailyFeatures && !isPremium,
+                                // Badge whenever the next tap plays a rewarded
+                                // video (rewarded ads must be opt-in). Premium
+                                // users get hints and undos without an ad.
+                                showHintAdBadge: !isPremium &&
+                                    _gateHintsWithAds &&
+                                    _hintAdPolicy.needsRewardedForNextHint(),
+                                showUndoAdBadge: !isPremium &&
+                                    _undoAdPolicy.needsRewardedForNextUndo(),
                                 axisGuidesVisible: _engine.axisGuidesVisible,
                                 canUndo: _engine.canUndo,
                                 onHint: () =>

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'ad_badge.dart';
 import 'undo_restart_button.dart';
 import '../../../theme/app_colors.dart';
 
@@ -8,6 +9,7 @@ class GameBottomToolbar extends StatelessWidget {
   final Key? measureKey;
   final Color accent;
   final bool showHintAdBadge;
+  final bool showUndoAdBadge;
   final bool axisGuidesVisible;
   final bool canUndo;
   final VoidCallback onHint;
@@ -22,6 +24,7 @@ class GameBottomToolbar extends StatelessWidget {
     this.measureKey,
     required this.accent,
     this.showHintAdBadge = false,
+    this.showUndoAdBadge = false,
     required this.axisGuidesVisible,
     required this.canUndo,
     required this.onHint,
@@ -59,6 +62,7 @@ class GameBottomToolbar extends StatelessWidget {
                   UndoRestartButton(
                     accent: accent,
                     canUndo: canUndo,
+                    showAdBadge: showUndoAdBadge,
                     onUndo: onUndo,
                     onRestart: onRestart,
                   ),
@@ -95,26 +99,7 @@ class GameBottomToolbar extends StatelessWidget {
                             ),
                             if (showHintAdBadge) ...[
                               const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color:
-                                      Colors.amberAccent.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                      color: Colors.amberAccent
-                                          .withValues(alpha: 0.4)),
-                                ),
-                                child: Text(
-                                  'AD',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 8,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.amberAccent,
-                                  ),
-                                ),
-                              ),
+                              const AdBadge(color: Colors.amberAccent),
                             ],
                           ],
                         ),

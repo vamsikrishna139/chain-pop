@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../services/subscription/subscription_locator.dart';
 import '../../services/subscription/subscription_service.dart';
+import 'purchases_settings_section.dart' show restoreResultMessage;
 
 class PaywallSheet extends StatefulWidget {
   const PaywallSheet({super.key});
@@ -23,6 +24,10 @@ class _PaywallSheetState extends State<PaywallSheet> {
   bool _isLoading = false;
   String? _price;
 
+  /// Result of the last purchase or restore attempt, shown inside the sheet.
+  /// A SnackBar would render on the page behind this modal sheet.
+  String? _message;
+
   @override
   void initState() {
     super.initState();
@@ -41,7 +46,10 @@ class _PaywallSheetState extends State<PaywallSheet> {
   }
 
   Future<void> _purchase() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _message = null;
+    });
     final result = await SubscriptionLocator.instance.purchasePremium();
     if (mounted) {
       setState(() => _isLoading = false);
@@ -51,27 +59,26 @@ class _PaywallSheetState extends State<PaywallSheet> {
           const SnackBar(content: Text('Purchase successful! Ads removed.')),
         );
       } else if (result == PurchasePremiumResult.failed) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Purchase failed. Please try again.')),
-        );
+        setState(() => _message = 'Purchase failed. Please try again.');
       }
     }
   }
 
   Future<void> _restore() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _message = null;
+    });
     final result = await SubscriptionLocator.instance.restorePurchases();
     if (mounted) {
       setState(() => _isLoading = false);
       if (result == RestorePurchasesResult.restored) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Purchases restored successfully.')),
+          SnackBar(content: Text(restoreResultMessage(result))),
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No previous purchases found.')),
-        );
+        setState(() => _message = restoreResultMessage(result));
       }
     }
   }
@@ -120,6 +127,14 @@ class _PaywallSheetState extends State<PaywallSheet> {
                 onPressed: _restore,
                 child: const Text('Restore Purchases'),
               ),
+              if (_message != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _message!,
+                  key: const Key('paywall-message'),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ],
           ],
         ),
