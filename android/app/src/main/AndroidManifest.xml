@@ -8,6 +8,11 @@
          the reminders here are scheduled inexact on purpose. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+    <!-- screenOrientation="portrait" below implies a required
+         android.hardware.screen.portrait feature, which hides the app from
+         desktops, Chromebooks and XR devices that don't report it. The game
+         stays portrait-locked; this only stops Play filtering those devices. -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove"/>
     <uses-permission android:name="android.permission.READ_CONTACTS" tools:node="remove"/>
